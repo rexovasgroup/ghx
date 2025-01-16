@@ -199,6 +199,7 @@ func prSelectorForCurrentBranch(branchConfig git.BranchConfig, baseRepo ghrepo.I
 		}
 		return prNumber, prHeadRef, nil
 	}
+
 	var branchOwner string
 	if branchConfig.PushRemoteURL != nil {
 		// the branch merges from a remote specified by URL
@@ -225,8 +226,8 @@ func prSelectorForCurrentBranch(branchConfig git.BranchConfig, baseRepo ghrepo.I
 	if branchOwner != "" {
 		selector := prHeadRef
 		if branchConfig.Push != "" {
-			// If we have a resolved push revision ref, we defer to that
-			selector = strings.TrimPrefix(branchConfig.Push, branchConfig.PushRemoteName+"/")
+			// If we have a resolved @{push} revision ref, we defer to that
+			selector = strings.TrimPrefix(branchConfig.Push, branchConfig.PushRemoteName+"/") // SUS
 		} else if (branchConfig.RemotePushDefault == "upstream" || branchConfig.RemotePushDefault == "tracking") &&
 			strings.HasPrefix(branchConfig.MergeRef, "refs/heads/") {
 			selector = strings.TrimPrefix(branchConfig.MergeRef, "refs/heads/")
