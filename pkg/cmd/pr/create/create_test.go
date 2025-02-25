@@ -637,6 +637,9 @@ func Test_createRun(t *testing.T) {
 			},
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 0, "")
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/feature")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 				cs.Register(`git push --set-upstream origin HEAD:refs/heads/feature`, 0, "")
 			},
 			promptStubs: func(pm *prompter.PrompterMock) {
@@ -700,6 +703,9 @@ func Test_createRun(t *testing.T) {
 			},
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 0, "")
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/feature")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 				cs.Register(`git push --set-upstream origin HEAD:refs/heads/feature`, 0, "")
 			},
 			promptStubs: func(pm *prompter.PrompterMock) {
@@ -746,6 +752,9 @@ func Test_createRun(t *testing.T) {
 			},
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 0, "")
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/feature")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 				cs.Register(`git push --set-upstream origin HEAD:refs/heads/feature`, 0, "")
 			},
 			promptStubs: func(pm *prompter.PrompterMock) {
@@ -795,6 +804,9 @@ func Test_createRun(t *testing.T) {
 			},
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 0, "")
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/feature")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 				cs.Register("git remote rename origin upstream", 0, "")
 				cs.Register(`git remote add origin https://github.com/monalisa/REPO.git`, 0, "")
 				cs.Register(`git push --set-upstream origin HEAD:refs/heads/feature`, 0, "")
@@ -854,9 +866,12 @@ func Test_createRun(t *testing.T) {
 			},
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register("git show-ref --verify", 0, heredoc.Doc(`
-			deadbeef HEAD
-			deadb00f refs/remotes/upstream/feature
-			deadbeef refs/remotes/origin/feature`)) // determineTrackingBranch
+				deadbeef HEAD
+				deadb00f refs/remotes/upstream/feature
+				deadbeef refs/remotes/origin/feature`))
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/feature")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 			},
 			expectedOut:    "https://github.com/OWNER/REPO/pull/12\n",
 			expectedErrOut: "\nCreating pull request for monalisa:feature into master in OWNER/REPO\n\n",
@@ -894,6 +909,9 @@ func Test_createRun(t *testing.T) {
 			deadbeef HEAD
 			deadbeef refs/remotes/origin/my-feat2
 		`)) // determineTrackingBranch
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/my-feat2")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 			},
 			expectedOut:    "https://github.com/OWNER/REPO/pull/12\n",
 			expectedErrOut: "\nCreating pull request for my-feat2 into master in OWNER/REPO\n\n",
@@ -1075,6 +1093,9 @@ func Test_createRun(t *testing.T) {
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 0, "")
 				cs.Register(`git( .+)? log( .+)? origin/master\.\.\.feature`, 0, "")
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/feature")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 				cs.Register(`git push --set-upstream origin HEAD:refs/heads/feature`, 0, "")
 			},
 			promptStubs: func(pm *prompter.PrompterMock) {
@@ -1107,6 +1128,9 @@ func Test_createRun(t *testing.T) {
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 0, "")
 				cs.Register(`git( .+)? log( .+)? origin/master\.\.\.feature`, 0, "")
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "origin/feature")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 				cs.Register(`git push --set-upstream origin HEAD:refs/heads/feature`, 0, "")
 			},
 			promptStubs: func(pm *prompter.PrompterMock) {
@@ -1524,6 +1548,9 @@ func Test_createRun(t *testing.T) {
 					deadbeef HEAD
 					deadb00f refs/remotes/upstream/feature/feat2
 					deadbeef refs/remotes/origin/task1`)) // determineTrackingBranch
+				cs.Register("git rev-parse --abbrev-ref task1@{push}", 0, "origin/task1")
+				cs.Register("git config remote.pushDefault", 0, "")
+				cs.Register("git config push.default", 0, "")
 			},
 			expectedOut:    "https://github.com/OWNER/REPO/pull/12\n",
 			expectedErrOut: "\nCreating pull request for monalisa:task1 into feature/feat2 in OWNER/REPO\n\n",
@@ -1618,111 +1645,6 @@ func Test_createRun(t *testing.T) {
 				assert.Equal(t, tt.expectedErrOut, output.Stderr())
 				assert.Equal(t, tt.expectedBrowse, output.BrowsedURL)
 			}
-		})
-	}
-}
-
-func Test_tryDetermineTrackingRef(t *testing.T) {
-	tests := []struct {
-		name                string
-		cmdStubs            func(*run.CommandStubber)
-		headBranchConfig    git.BranchConfig
-		remotes             context.Remotes
-		expectedTrackingRef trackingRef
-		expectedFound       bool
-	}{
-		{
-			name: "empty",
-			cmdStubs: func(cs *run.CommandStubber) {
-				cs.Register(`git show-ref --verify -- HEAD`, 0, "abc HEAD")
-			},
-			headBranchConfig:    git.BranchConfig{},
-			expectedTrackingRef: trackingRef{},
-			expectedFound:       false,
-		},
-		{
-			name: "no match",
-			cmdStubs: func(cs *run.CommandStubber) {
-				cs.Register("git show-ref --verify -- HEAD refs/remotes/upstream/feature refs/remotes/origin/feature", 0, "abc HEAD\nbca refs/remotes/upstream/feature")
-			},
-			headBranchConfig: git.BranchConfig{},
-			remotes: context.Remotes{
-				&context.Remote{
-					Remote: &git.Remote{Name: "upstream"},
-					Repo:   ghrepo.New("octocat", "Spoon-Knife"),
-				},
-				&context.Remote{
-					Remote: &git.Remote{Name: "origin"},
-					Repo:   ghrepo.New("hubot", "Spoon-Knife"),
-				},
-			},
-			expectedTrackingRef: trackingRef{},
-			expectedFound:       false,
-		},
-		{
-			name: "match",
-			cmdStubs: func(cs *run.CommandStubber) {
-				cs.Register(`git show-ref --verify -- HEAD refs/remotes/upstream/feature refs/remotes/origin/feature$`, 0, heredoc.Doc(`
-		deadbeef HEAD
-		deadb00f refs/remotes/upstream/feature
-		deadbeef refs/remotes/origin/feature
-	`))
-			},
-			headBranchConfig: git.BranchConfig{},
-			remotes: context.Remotes{
-				&context.Remote{
-					Remote: &git.Remote{Name: "upstream"},
-					Repo:   ghrepo.New("octocat", "Spoon-Knife"),
-				},
-				&context.Remote{
-					Remote: &git.Remote{Name: "origin"},
-					Repo:   ghrepo.New("hubot", "Spoon-Knife"),
-				},
-			},
-			expectedTrackingRef: trackingRef{
-				remoteName: "origin",
-				branchName: "feature",
-			},
-			expectedFound: true,
-		},
-		{
-			name: "respect tracking config",
-			cmdStubs: func(cs *run.CommandStubber) {
-				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/great-feat refs/remotes/origin/feature$`, 0, heredoc.Doc(`
-		deadbeef HEAD
-		deadb00f refs/remotes/origin/feature
-	`))
-			},
-			headBranchConfig: git.BranchConfig{
-				RemoteName: "origin",
-				MergeRef:   "refs/heads/great-feat",
-			},
-			remotes: context.Remotes{
-				&context.Remote{
-					Remote: &git.Remote{Name: "origin"},
-					Repo:   ghrepo.New("hubot", "Spoon-Knife"),
-				},
-			},
-			expectedTrackingRef: trackingRef{},
-			expectedFound:       false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cs, cmdTeardown := run.Stub()
-			defer cmdTeardown(t)
-
-			tt.cmdStubs(cs)
-
-			gitClient := &git.Client{
-				GhPath:  "some/path/gh",
-				GitPath: "some/path/git",
-			}
-
-			ref, found := tryDetermineTrackingRef(gitClient, tt.remotes, "feature", tt.headBranchConfig)
-
-			assert.Equal(t, tt.expectedTrackingRef, ref)
-			assert.Equal(t, tt.expectedFound, found)
 		})
 	}
 }
