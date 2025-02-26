@@ -613,34 +613,44 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 		return nil, err
 	}
 
-	isPushEnabled := false
-	headBranch := opts.HeadBranch
-	headBranchLabel := opts.HeadBranch
-
-	if headBranch == "" {
-		headBranch, err = opts.Branch()
-		if err != nil {
-			return nil, fmt.Errorf("could not determine the current branch: %w", err)
-		}
-		headBranchLabel = headBranch
-		isPushEnabled = true
-	} else if idx := strings.IndexRune(headBranch, ':'); idx >= 0 {
-		headBranch = headBranch[idx+1:]
-	}
-
 	gitClient := opts.GitClient
 	if ucc, err := gitClient.UncommittedChangeCount(context.Background()); err == nil && ucc > 0 {
 		fmt.Fprintf(opts.IO.ErrOut, "Warning: %s\n", text.Pluralize(ucc, "uncommitted change"))
 	}
 
+	headBranch := opts.HeadBranch
+	headBranchLabel := opts.HeadBranch
+	isPushEnabled := true // Whether we will ask user where to push
 	var headRepo ghrepo.Interface
 	var headRemote *ghContext.Remote
+	var headBranchConfig git.BranchConfig
+	// If --head was provided, then we don't ever ask where to push.
+	if headBranch != "" {
+		isPushEnabled = false
+		// If the --head provided contains a colon, that means
+		// this is <remote>:<branch> syntax.
+		// TODO KW: write test for this syntax.
+		if idx := strings.IndexRune(headBranch, ':'); idx >= 0 {
+			headBranch = headBranch[idx+1:]
+		}
+		headBranchConfig, err = gitClient.ReadBranchConfig(context.Background(), headBranch)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// If --head is not specified, we'll try to determine the ref
+		// from the current branch. If we can't, we'll prompt the user later.
+		headBranch, err = opts.Branch()
+		if err != nil {
+			return nil, fmt.Errorf("could not determine the current branch: %w", err)
+		}
+		headBranchLabel = headBranch
 
-	headBranchConfig, err := gitClient.ReadBranchConfig(context.Background(), headBranch)
-	if err != nil {
-		return nil, err
-	}
-	if isPushEnabled {
+		headBranchConfig, err = gitClient.ReadBranchConfig(context.Background(), headBranch)
+		if err != nil {
+			return nil, err
+		}
+
 		// Suppressing these errors as we have other means of computing the PullRequestRefs when these fail.
 		parsedPushRevision, _ := opts.GitClient.ParsePushRevision(ctx, headBranch)
 
