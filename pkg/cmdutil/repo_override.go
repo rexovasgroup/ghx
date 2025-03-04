@@ -59,7 +59,7 @@ func EnableRepoOverride(cmd *cobra.Command, f *Factory) {
 			// If there was no flag set, then check the GH_REPO environment variable,
 			// which has lower precedence.
 			userProvidedRepo = os.Getenv("GH_REPO")
-			// If the envrionment variable was set, then set the value of the `repo` flag,
+			// If the environment variable was set, then set the value of the `repo` flag,
 			// this ensures that checks for `HasChanged` work correctly. It's a bit "spooky"
 			// action at a distance because the flag will not have been set by the user,
 			// but perhaps it makes sense?
