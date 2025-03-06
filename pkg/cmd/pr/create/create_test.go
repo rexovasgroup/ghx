@@ -1746,8 +1746,6 @@ func Test_generateCompareURL(t *testing.T) {
 					BranchName: "!$&'()+,;=@",
 				},
 				BaseBranch: "main/trunk",
-				//TODO check this
-				// HeadBranchLabel: "owner:!$&'()+,;=@",
 			},
 			want:    "https://github.com/OWNER-UPSTREAM/REPO/compare/main%2Ftrunk...OWNER:%21$&%27%28%29+%2C%3B=@?body=&expand=1",
 			wantErr: false,
