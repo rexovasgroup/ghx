@@ -649,6 +649,8 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 	// our local branch state.
 	// If it is, we can use it as the head repo for the PR
 	// and avoid prompting the user.
+	// Errors raised here should not cause command to fail,
+	// prompt user for head repo if an error is raised or no remote found.
 	if prRefs.HasHead() {
 		// Check if the head branch is up-to-date with the local branch
 		headRemote, err := remotes.FindByRepo(prRefs.HeadRepo.RepoOwner(), prRefs.HeadRepo.RepoName())
