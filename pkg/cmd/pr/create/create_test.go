@@ -1304,9 +1304,9 @@ func Test_createRun(t *testing.T) {
 			},
 			customPushDestination: true,
 			cmdStubs: func(cs *run.CommandStubber) {
-				cs.Register("git rev-parse --abbrev-ref feature@{push}", 0, "")
-				cs.Register("git config remote.pushDefault", 0, "")
-				cs.Register("git config push.default", 0, "")
+				cs.Register("git rev-parse --abbrev-ref feature@{push}", 1, "fatal: not a git repository (or any of the parent directories): .git")
+				cs.Register("git config remote.pushDefault", 1, "")
+				cs.Register("git config push.default", 1, "")
 			},
 			expectedOut: "https://github.com/OWNER/REPO/pull/12\n",
 		},
