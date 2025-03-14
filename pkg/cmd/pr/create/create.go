@@ -25,6 +25,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/cli/cli/v2/pkg/markdown"
+	o "github.com/cli/cli/v2/pkg/option"
 	"github.com/spf13/cobra"
 )
 
@@ -635,13 +636,57 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 		return nil, err
 	}
 
-	var isRemoteBranchOnCorrectSha = func(remote, branch string) bool {
-		refs, _ := gitClient.ShowRefs(ctx, []string{"HEAD", fmt.Sprintf("refs/remotes/%s/%s", remote, branch)})
-		if len(refs) < 2 {
-			return false
+	var findRepoWithBranchOnSameSHAAsCurrentBranch = func() (o.Option[ghrepo.Interface], error) {
+		refsToLookup := []string{"HEAD"}
+		for _, remote := range remotes {
+			refsToLookup = append(refsToLookup, fmt.Sprintf("refs/remotes/%s/%s", remote.Name, targetHeadBranch))
 		}
+		// MY KINGDOM FOR MAP AND FILTER
+		refs, _ := gitClient.ShowRefs(ctx, refsToLookup)
+		if len(refs) > 1 {
+			headRef := refs[0]
+			var refsWithSameShaAsHead []git.Ref
+			for _, r := range refs[1:] {
+				if r.Hash == headRef.Hash {
+					refsWithSameShaAsHead = append(refsWithSameShaAsHead, r)
+				}
+			}
 
-		return refs[0].Hash == refs[1].Hash
+			if len(refsWithSameShaAsHead) == 0 {
+				return o.None[ghrepo.Interface](), nil
+			}
+
+			chosenRef := refsWithSameShaAsHead[0]
+			chosenRefElements := strings.SplitN(chosenRef.Name, "/", 4)
+			// The only place this is called is tryDetermineTrackingRef, where we are reconstructing
+			// the same tracking ref we passed in. If it doesn't match the expected format, this is a
+			// programmer error we want to know about, so it's ok to panic.
+			if len(chosenRefElements) != 4 {
+				panic(fmt.Errorf("tracking ref should have four parts: %s", chosenRef.Name))
+			}
+			if chosenRefElements[0] != "refs" || chosenRefElements[1] != "remotes" {
+				panic(fmt.Errorf("tracking ref should start with refs/remotes/: %s", chosenRef.Name))
+			}
+
+			// Current behaviour
+			r, err := remotes.FindByName(chosenRefElements[2])
+			if err != nil {
+				return o.None[ghrepo.Interface](), fmt.Errorf("could not find remote TODO BETTER ERROR %q: %w", refsWithSameShaAsHead[0].Name, err)
+			}
+			return o.Some(r.Repo), nil
+
+			// Non-buggy behaviour
+			// if len(refsWithSameShaAsHead) == 1 {
+			// 	r, err := remotes.FindByName(refsWithSameShaAsHead[0].Name)
+			// 	if err != nil {
+			// 		return o.None[ghrepo.Interface](), fmt.Errorf("could not find remote TODO BETTER ERROR %q: %w", refsWithSameShaAsHead[0].Name, err)
+			// 	}
+			// 	return o.Some(r.Repo), nil
+			// }
+
+			// return o.None[ghrepo.Interface](), fmt.Errorf("ambiguous head ref TODO BETTER ERROR %q", targetHeadBranch)
+		}
+		return o.None[ghrepo.Interface](), nil
 	}
 
 	prRefs, err := shared.ParsePRRefs(
@@ -650,7 +695,7 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 		parsedPushRevision, pushDefault, remotePushDefault,
 		targetBaseRepo,
 		remotes,
-		isRemoteBranchOnCorrectSha,
+		findRepoWithBranchOnSameSHAAsCurrentBranch,
 	)
 	if err != nil {
 		return nil, err

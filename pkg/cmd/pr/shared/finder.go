@@ -18,6 +18,7 @@ import (
 	fd "github.com/cli/cli/v2/internal/featuredetection"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/cmdutil"
+	o "github.com/cli/cli/v2/pkg/option"
 	"github.com/cli/cli/v2/pkg/set"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/sync/errgroup"
@@ -327,7 +328,7 @@ func ParsePRRefs(
 	parsedPushRevision, pushDefault, remotePushDefault string,
 	baseRefRepo ghrepo.Interface,
 	rems remotes.Remotes,
-	isRemoteBranchOnCorrectSha func(remote string, branch string) bool,
+	findRepoWithBranchOnSameSHAAsCurrentBranch func() (o.Option[ghrepo.Interface], error),
 ) (PullRequestRefs, error) {
 	prRefs := PullRequestRefs{
 		BaseRepo: baseRefRepo,
@@ -384,13 +385,19 @@ func ParsePRRefs(
 		if r, err := ghrepo.FromURL(branchConfig.RemoteURL); err == nil {
 			prRefs.HeadRepo = r
 		}
+	} else if findRepoWithBranchOnSameSHAAsCurrentBranch != nil {
+		matchingRepo, err := findRepoWithBranchOnSameSHAAsCurrentBranch()
+		if err != nil {
+			return PullRequestRefs{}, err
+		}
+
+		if matchingRepo.IsSome() {
+			prRefs.HeadRepo = matchingRepo.Unwrap()
+		}
 	}
 
 	// The PR merges from a branch in the same repo as the base branch (usually the default branch)
 	if prRefs.HeadRepo == nil {
-		if isRemoteBranchOnCorrectSha != nil && !isRemoteBranchOnCorrectSha(baseRefRepo.RepoHost(), prRefs.BranchName) {
-			return PullRequestRefs{}, fmt.Errorf("TODO: the base repo isn't in the right place for this")
-		}
 		prRefs.HeadRepo = baseRefRepo
 	}
 
