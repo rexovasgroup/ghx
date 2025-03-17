@@ -37,9 +37,9 @@ type finder struct {
 	branchFn          func() (string, error)
 	remotesFn         func() (remotes.Remotes, error)
 	httpClient        func() (*http.Client, error)
-	pushDefault       func() (string, error)
+	pushDefault       func() (git.PushDefault, error)
 	remotePushDefault func() (string, error)
-	parsePushRevision func(string) (string, error)
+	parsePushRevision func(string) (git.RemoteTrackingRef, error)
 	branchConfig      func(string) (git.BranchConfig, error)
 	progress          progressIndicator
 
@@ -60,14 +60,14 @@ func NewFinder(factory *cmdutil.Factory) PRFinder {
 		branchFn:   factory.Branch,
 		remotesFn:  factory.Remotes,
 		httpClient: factory.HttpClient,
-		pushDefault: func() (string, error) {
+		pushDefault: func() (git.PushDefault, error) {
 			return factory.GitClient.PushDefault(context.Background())
 		},
 		remotePushDefault: func() (string, error) {
 			return factory.GitClient.RemotePushDefault(context.Background())
 		},
-		parsePushRevision: func(branch string) (string, error) {
-			return factory.GitClient.ParsePushRevision(context.Background(), branch)
+		parsePushRevision: func(branch string) (git.RemoteTrackingRef, error) {
+			return factory.GitClient.PushRevision(context.Background(), branch)
 		},
 		progress: factory.IOStreams,
 		branchConfig: func(s string) (git.BranchConfig, error) {
@@ -172,7 +172,10 @@ func (f *finder) Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface, err
 			}
 
 			// Suppressing these errors as we have other means of computing the PullRequestRefs when these fail.
-			parsedPushRevision, _ := f.parsePushRevision(f.branchName)
+			var parsedPushRevision string
+			if trackingRef, err := f.parsePushRevision(f.branchName); err == nil {
+				parsedPushRevision = trackingRef.String()
+			}
 
 			pushDefault, err := f.pushDefault()
 			if err != nil {
@@ -184,7 +187,7 @@ func (f *finder) Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface, err
 				return nil, nil, err
 			}
 
-			prRefs, err = ParsePRRefs(f.branchName, branchConfig, parsedPushRevision, pushDefault, remotePushDefault, f.baseRefRepo, rems)
+			prRefs, err = ParsePRRefs(f.branchName, branchConfig, parsedPushRevision, string(pushDefault), remotePushDefault, f.baseRefRepo, rems)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -327,12 +330,14 @@ func ParsePRRefs(currentBranchName string, branchConfig git.BranchConfig, parsed
 	}
 
 	// If @{push} resolves, then we have all the information we need to determine the head repo
-	// and branch name. It is of the form <remote>/<branch>.
-	if parsedPushRevision != "" {
+	// and branch name. It is of the form <remote>/<branch>. If there is an error, suppress it
+	// because it just means there was no @{push} ref.
+	trackingRef, _ := git.ParseRemoteTrackingRef(parsedPushRevision)
+	if trackingRef.Remote != "" {
 		for _, r := range rems {
 			// Find the remote who's name matches the push <remote> prefix
-			if strings.HasPrefix(parsedPushRevision, r.Name+"/") {
-				prRefs.BranchName = strings.TrimPrefix(parsedPushRevision, r.Name+"/")
+			if trackingRef.Remote == r.Name {
+				prRefs.BranchName = trackingRef.Branch
 				prRefs.HeadRepo = r.Repo
 				return prRefs, nil
 			}

@@ -118,7 +118,10 @@ func statusRun(opts *StatusOptions) error {
 				return err
 			}
 			// Suppressing these errors as we have other means of computing the PullRequestRefs when these fail.
-			parsedPushRevision, _ := opts.GitClient.ParsePushRevision(ctx, currentBranchName)
+			var parsedPushRevision string
+			if trackingRef, err := opts.GitClient.PushRevision(ctx, currentBranchName); err == nil {
+				parsedPushRevision = trackingRef.String()
+			}
 
 			remotePushDefault, err := opts.GitClient.RemotePushDefault(ctx)
 			if err != nil {
@@ -130,7 +133,7 @@ func statusRun(opts *StatusOptions) error {
 				return err
 			}
 
-			prRefs, err := shared.ParsePRRefs(currentBranchName, branchConfig, parsedPushRevision, pushDefault, remotePushDefault, baseRefRepo, remotes)
+			prRefs, err := shared.ParsePRRefs(currentBranchName, branchConfig, parsedPushRevision, string(pushDefault), remotePushDefault, baseRefRepo, remotes)
 			if err != nil {
 				return err
 			}

@@ -571,13 +571,13 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 	}
 
 	// Resolve base repo
-	repoContext, err := ghContext.ResolveRemotesToRepos(remotes, client, opts.RepoOverride)
+	resolvedRemotes, err := ghContext.ResolveRemotesToRepos(remotes, client, opts.RepoOverride)
 	if err != nil {
 		return nil, err
 	}
 
 	var targetBaseRepo *api.Repository
-	if br, err := repoContext.BaseRepo(opts.IO); err == nil {
+	if br, err := resolvedRemotes.BaseRepo(opts.IO); err == nil {
 		if r, ok := br.(*api.Repository); ok {
 			targetBaseRepo = r
 		} else {
@@ -629,13 +629,17 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 		return nil, err
 	}
 	// Suppressing these errors as we have other means of computing the PullRequestRefs when these fail.
-	parsedPushRevision, _ := gitClient.ParsePushRevision(ctx, targetHeadBranch)
+	var parsedPushRevision string
+	if trackingRef, err := gitClient.PushRevision(ctx, targetHeadBranch); err == nil {
+		parsedPushRevision = trackingRef.String()
+	}
+
 	pushDefault, err := gitClient.PushDefault(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	prRefs, err := shared.ParsePRRefs(targetHeadBranch, targetHeadBranchConfig, parsedPushRevision, pushDefault, remotePushDefault, targetBaseRepo, remotes)
+	prRefs, err := shared.ParsePRRefs(targetHeadBranch, targetHeadBranchConfig, parsedPushRevision, string(pushDefault), remotePushDefault, targetBaseRepo, remotes)
 	if err != nil {
 		return nil, err
 	}
@@ -685,7 +689,7 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 		isPushEnabled = true
 		// Since we could not determine a head ref, prompt the user for the head repository to push
 		// using a list of repositories obtained from the API
-		pushableRepos, err := repoContext.HeadRepos()
+		pushableRepos, err := resolvedRemotes.HeadRepos()
 		if err != nil {
 			return nil, err
 		}
@@ -763,7 +767,7 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 		HeadRemote:         headRemote,
 		isPushEnabled:      isPushEnabled,
 		forkHeadRepo:       forkHeadRepo,
-		RepoContext:        repoContext,
+		RepoContext:        resolvedRemotes,
 		Client:             client,
 		GitClient:          gitClient,
 	}, nil

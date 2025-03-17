@@ -100,8 +100,8 @@ func TestPRStatus(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -133,8 +133,8 @@ func TestPRStatus_reviewsAndChecks(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -166,8 +166,8 @@ func TestPRStatus_reviewsAndChecksWithStatesByCount(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommandWithDetector(http, "blueberries", true, "", &fd.EnabledDetectorMock{})
 	if err != nil {
@@ -198,8 +198,8 @@ func TestPRStatus_currentBranch_showTheMostRecentPR(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -234,8 +234,8 @@ func TestPRStatus_currentBranch_defaultBranch(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -276,8 +276,8 @@ func TestPRStatus_currentBranch_Closed(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -301,8 +301,8 @@ func TestPRStatus_currentBranch_Closed_defaultBranch(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -326,8 +326,8 @@ func TestPRStatus_currentBranch_Merged(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -351,8 +351,8 @@ func TestPRStatus_currentBranch_Merged_defaultBranch(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -376,8 +376,8 @@ func TestPRStatus_blankSlate(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref blueberries@{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
@@ -437,8 +437,8 @@ func TestPRStatus_detachedHead(t *testing.T) {
 	defer cleanup(t)
 	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
 	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --abbrev-ref @{push}`, 0, "")
-	rs.Register(`git config push.default`, 0, "")
+	rs.Register(`git rev-parse --symbolic-full-name @{push}`, 128, "")
+	rs.Register(`git config push.default`, 1, "")
 
 	output, err := runCommand(http, "", true, "")
 	if err != nil {
