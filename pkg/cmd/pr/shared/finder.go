@@ -44,7 +44,6 @@ type finder struct {
 	baseRepoFn      func() (ghrepo.Interface, error)
 	branchFn        func() (string, error)
 	httpClient      func() (*http.Client, error)
-	branchConfig    func(string) (git.BranchConfig, error)
 	remotesFn       func() (ghContext.Remotes, error)
 	gitConfigClient gitConfigClient
 	progress        progressIndicator
@@ -67,11 +66,7 @@ func NewFinder(factory *cmdutil.Factory) PRFinder {
 		httpClient:      factory.HttpClient,
 		gitConfigClient: factory.GitClient,
 		remotesFn:       factory.Remotes,
-		// TODO: remove branch config since it is on the gitConfigClient
-		branchConfig: func(s string) (git.BranchConfig, error) {
-			return factory.GitClient.ReadBranchConfig(context.Background(), s)
-		},
-		progress: factory.IOStreams,
+		progress:        factory.IOStreams,
 	}
 }
 
