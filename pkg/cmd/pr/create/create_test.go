@@ -606,7 +606,7 @@ func Test_createRun(t *testing.T) {
 		`),
 		},
 		{
-			name: "survey",
+			name: "select a specific branch to push to on prompt",
 			tty:  true,
 			setup: func(opts *CreateOptions, t *testing.T) func() {
 				opts.TitleProvided = true
@@ -636,7 +636,6 @@ func Test_createRun(t *testing.T) {
 			},
 			cmdStubs: func(cs *run.CommandStubber) {
 				cs.Register("git rev-parse --symbolic-full-name feature@{push}", 0, "refs/remotes/origin/feature")
-				// TODO: can we simplify the ref checking to only call git once?
 				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 1, "")
 				cs.Register("git show-ref --verify -- HEAD refs/remotes/origin/feature", 1, "")
 				cs.Register(`git push --set-upstream origin HEAD:refs/heads/feature`, 0, "")
@@ -645,6 +644,52 @@ func Test_createRun(t *testing.T) {
 				pm.SelectFunc = func(p, _ string, opts []string) (int, error) {
 					if p == "Where should we push the 'feature' branch?" {
 						return 0, nil
+					} else {
+						return -1, prompter.NoSuchPromptErr(p)
+					}
+				}
+			},
+			expectedOut:    "https://github.com/OWNER/REPO/pull/12\n",
+			expectedErrOut: "\nCreating pull request for feature into master in OWNER/REPO\n\n",
+		},
+		{
+			name: "skip pushing to branch on prompt",
+			tty:  true,
+			setup: func(opts *CreateOptions, t *testing.T) func() {
+				opts.TitleProvided = true
+				opts.BodyProvided = true
+				opts.Title = "my title"
+				opts.Body = "my body"
+				return func() {}
+			},
+			httpStubs: func(reg *httpmock.Registry, t *testing.T) {
+				reg.StubRepoResponse("OWNER", "REPO")
+				reg.Register(
+					httpmock.GraphQL(`query UserCurrent\b`),
+					httpmock.StringResponse(`{"data": {"viewer": {"login": "OWNER"} } }`))
+				reg.Register(
+					httpmock.GraphQL(`mutation PullRequestCreate\b`),
+					httpmock.GraphQLMutation(`
+							{ "data": { "createPullRequest": { "pullRequest": {
+								"URL": "https://github.com/OWNER/REPO/pull/12"
+							} } } }`, func(input map[string]interface{}) {
+						assert.Equal(t, "REPOID", input["repositoryId"].(string))
+						assert.Equal(t, "my title", input["title"].(string))
+						assert.Equal(t, "my body", input["body"].(string))
+						assert.Equal(t, "master", input["baseRefName"].(string))
+						assert.Equal(t, "feature", input["headRefName"].(string))
+						assert.Equal(t, false, input["draft"].(bool))
+					}))
+			},
+			cmdStubs: func(cs *run.CommandStubber) {
+				cs.Register("git rev-parse --symbolic-full-name feature@{push}", 0, "refs/remotes/origin/feature")
+				cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 1, "")
+				cs.Register("git show-ref --verify -- HEAD refs/remotes/origin/feature", 1, "")
+			},
+			promptStubs: func(pm *prompter.PrompterMock) {
+				pm.SelectFunc = func(p, _ string, opts []string) (int, error) {
+					if p == "Where should we push the 'feature' branch?" {
+						return prompter.IndexFor(opts, "Skip pushing the branch")
 					} else {
 						return -1, prompter.NoSuchPromptErr(p)
 					}
@@ -1639,6 +1684,156 @@ func Test_createRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRemoteGuessing(t *testing.T) {
+	// Given git config does not provide the necessary info to determine a remote
+	cs, cmdTeardown := run.Stub()
+	defer cmdTeardown(t)
+
+	cs.Register(`git status --porcelain`, 0, "")
+	cs.Register(`git config --get-regexp \^branch\\\..+\\\.\(remote\|merge\|pushremote\|gh-merge-base\)\$`, 0, "")
+	cs.Register(`git rev-parse --symbolic-full-name feature@{push}`, 1, "")
+	cs.Register("git config remote.pushDefault", 1, "")
+	cs.Register("git config push.default", 1, "")
+
+	// And Given there is a remote on a SHA that matches the current HEAD
+	cs.Register(`git show-ref --verify -- HEAD refs/remotes/upstream/feature refs/remotes/origin/feature`, 0, heredoc.Doc(`
+	deadbeef HEAD
+	deadb00f refs/remotes/upstream/feature
+	deadbeef refs/remotes/origin/feature`))
+
+	// When the command is run
+	reg := &httpmock.Registry{}
+	reg.StubRepoInfoResponse("OWNER", "REPO", "master")
+	defer reg.Verify(t)
+
+	reg.Register(
+		httpmock.GraphQL(`mutation PullRequestCreate\b`),
+		httpmock.GraphQLMutation(`
+				{ "data": { "createPullRequest": { "pullRequest": {
+					"URL": "https://github.com/OWNER/REPO/pull/12"
+				} } } }`, func(input map[string]interface{}) {
+			assert.Equal(t, "REPOID", input["repositoryId"].(string))
+			assert.Equal(t, "master", input["baseRefName"].(string))
+			assert.Equal(t, "OTHEROWNER:feature", input["headRefName"].(string))
+		}))
+
+	ios, _, stdout, _ := iostreams.Test()
+
+	opts := CreateOptions{
+		HttpClient: func() (*http.Client, error) {
+			return &http.Client{Transport: reg}, nil
+		},
+		Config: func() (gh.Config, error) {
+			return config.NewBlankConfig(), nil
+		},
+		Browser:  &browser.Stub{},
+		IO:       ios,
+		Prompter: &prompter.PrompterMock{},
+		GitClient: &git.Client{
+			GhPath:  "some/path/gh",
+			GitPath: "some/path/git",
+		},
+		Finder: shared.NewMockFinder("feature", nil, nil),
+		Remotes: func() (context.Remotes, error) {
+			return context.Remotes{
+				{
+					Remote: &git.Remote{
+						Name:     "upstream",
+						Resolved: "base",
+					},
+					Repo: ghrepo.New("OWNER", "REPO"),
+				},
+				{
+					Remote: &git.Remote{
+						Name: "origin",
+					},
+					Repo: ghrepo.New("OTHEROWNER", "REPO-FORK"),
+				},
+			}, nil
+		},
+		Branch: func() (string, error) {
+			return "feature", nil
+		},
+
+		TitleProvided: true,
+		BodyProvided:  true,
+		Title:         "my title",
+		Body:          "my body",
+	}
+
+	require.NoError(t, createRun(&opts))
+
+	// Then chosen remote is used for the PR head
+	assert.Equal(t, "https://github.com/OWNER/REPO/pull/12\n", stdout.String())
+}
+
+func TestNoRepoCanBeDetermined(t *testing.T) {
+	// Given no head repo can be determined from git config
+	cs, cmdTeardown := run.Stub()
+	defer cmdTeardown(t)
+
+	cs.Register(`git status --porcelain`, 0, "")
+	cs.Register(`git config --get-regexp \^branch\\\..+\\\.\(remote\|merge\|pushremote\|gh-merge-base\)\$`, 0, "")
+	cs.Register(`git rev-parse --symbolic-full-name feature@{push}`, 1, "")
+	cs.Register("git config remote.pushDefault", 1, "")
+	cs.Register("git config push.default", 1, "")
+
+	// And Given there is no remote on the correct SHA
+	cs.Register(`git show-ref --verify -- HEAD refs/remotes/origin/feature`, 0, heredoc.Doc(`
+	deadbeef HEAD
+	deadb00f refs/remotes/origin/feature`))
+
+	// When the command is run with no TTY
+	reg := &httpmock.Registry{}
+	reg.StubRepoInfoResponse("OWNER", "REPO", "master")
+	defer reg.Verify(t)
+
+	ios, _, _, stderr := iostreams.Test()
+
+	opts := CreateOptions{
+		HttpClient: func() (*http.Client, error) {
+			return &http.Client{Transport: reg}, nil
+		},
+		Config: func() (gh.Config, error) {
+			return config.NewBlankConfig(), nil
+		},
+		Browser:  &browser.Stub{},
+		IO:       ios,
+		Prompter: &prompter.PrompterMock{},
+		GitClient: &git.Client{
+			GhPath:  "some/path/gh",
+			GitPath: "some/path/git",
+		},
+		Finder: shared.NewMockFinder("feature", nil, nil),
+		Remotes: func() (context.Remotes, error) {
+			return context.Remotes{
+				{
+					Remote: &git.Remote{
+						Name:     "origin",
+						Resolved: "base",
+					},
+					Repo: ghrepo.New("OWNER", "REPO"),
+				},
+			}, nil
+		},
+		Branch: func() (string, error) {
+			return "feature", nil
+		},
+
+		TitleProvided: true,
+		BodyProvided:  true,
+		Title:         "my title",
+		Body:          "my body",
+	}
+
+	// When we run the command
+	err := createRun(&opts)
+
+	// Then create fails
+	require.Equal(t, cmdutil.SilentError, err)
+	assert.Equal(t, "aborted: you must first push the current branch to a remote, or use the --head flag\n", stderr.String())
 }
 
 func mustParseQualifiedHeadRef(ref string) shared.QualifiedHeadRef {

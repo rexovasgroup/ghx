@@ -722,7 +722,7 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 	}
 
 	// If the user didn't provide a head branch then we're gettin' real. We're going to interrogate git
-	// and we're going to create refs that are pushable
+	// and try to create refs that are pushable.
 	currentBranch, err := opts.Branch()
 	if err != nil {
 		return nil, fmt.Errorf("could not determine the current branch: %w", err)
@@ -865,7 +865,7 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 
 	// If we haven't got a repo by now, and we can't prompt then it's game over.
 	if !opts.IO.CanPrompt() {
-		fmt.Fprintf(opts.IO.ErrOut, "aborted: you must first push the current branch to a remote, or use the --head flag")
+		fmt.Fprintln(opts.IO.ErrOut, "aborted: you must first push the current branch to a remote, or use the --head flag")
 		return nil, cmdutil.SilentError
 	}
 
