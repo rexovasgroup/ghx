@@ -18,7 +18,15 @@ const (
 )
 
 type ProjectV2 struct {
-	ID           string `json:"id"`
+	ID    string `json:"id"`
+	Owner struct {
+		Organization struct {
+			Login string
+		} `graphql:"... on Organization"`
+		User struct {
+			Login string
+		} `graphql:"... on User"`
+	} `json:"owner"`
 	Title        string `json:"title"`
 	Number       int    `json:"number"`
 	ResourcePath string `json:"resourcePath"`

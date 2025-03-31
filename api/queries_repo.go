@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -776,6 +777,17 @@ func (m *RepoMetadataResult) projectV2TitleToID(projectTitle string) (string, bo
 	for _, p := range m.ProjectsV2 {
 		if strings.EqualFold(projectTitle, p.Title) {
 			return p.ID, true
+		}
+	}
+
+	if parts := strings.Split(projectTitle, "/"); len(parts) == 2 {
+		for _, p := range m.ProjectsV2 {
+			ownerMatches := strings.EqualFold(parts[0], p.Owner.Organization.Login) || strings.EqualFold(parts[0], p.Owner.User.Login)
+			numberMatches := strings.EqualFold(parts[1], strconv.Itoa(p.Number))
+
+			if ownerMatches && numberMatches {
+				return p.ID, true
+			}
 		}
 	}
 
