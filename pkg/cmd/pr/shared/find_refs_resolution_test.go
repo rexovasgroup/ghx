@@ -98,14 +98,14 @@ func TestPRFindRefs(t *testing.T) {
 		t.Parallel()
 
 		testCases := []struct {
-			behaviour        string
+			behavior         string
 			refs             PRFindRefs
 			baseBranchName   string
 			qualifiedHeadRef string
 			expectedMatch    bool
 		}{
 			{
-				behaviour: "when qualified head refs don't match, returns false",
+				behavior: "when qualified head refs don't match, returns false",
 				refs: PRFindRefs{
 					qualifiedHeadRef: mustParseQualifiedHeadRef("owner:feature-branch"),
 				},
@@ -114,7 +114,7 @@ func TestPRFindRefs(t *testing.T) {
 				expectedMatch:    false,
 			},
 			{
-				behaviour: "when base branches don't match, returns false",
+				behavior: "when base branches don't match, returns false",
 				refs: PRFindRefs{
 					qualifiedHeadRef: mustParseQualifiedHeadRef("feature-branch"),
 					baseBranchName:   o.Some("not-main"),
@@ -124,7 +124,7 @@ func TestPRFindRefs(t *testing.T) {
 				expectedMatch:    false,
 			},
 			{
-				behaviour: "when head refs match and there is no base branch, returns true",
+				behavior: "when head refs match and there is no base branch, returns true",
 				refs: PRFindRefs{
 					qualifiedHeadRef: mustParseQualifiedHeadRef("feature-branch"),
 					baseBranchName:   o.None[string](),
@@ -134,7 +134,7 @@ func TestPRFindRefs(t *testing.T) {
 				expectedMatch:    true,
 			},
 			{
-				behaviour: "when head refs match and base branches match, returns true",
+				behavior: "when head refs match and base branches match, returns true",
 				refs: PRFindRefs{
 					qualifiedHeadRef: mustParseQualifiedHeadRef("feature-branch"),
 					baseBranchName:   o.Some("main"),
@@ -146,7 +146,7 @@ func TestPRFindRefs(t *testing.T) {
 		}
 
 		for _, tc := range testCases {
-			t.Run(tc.behaviour, func(t *testing.T) {
+			t.Run(tc.behavior, func(t *testing.T) {
 				t.Parallel()
 
 				require.Equal(t, tc.expectedMatch, tc.refs.Matches(tc.baseBranchName, tc.qualifiedHeadRef))
