@@ -193,6 +193,11 @@ func TestNoneExpect(t *testing.T) {
 	t.Error("did not panic")
 }
 
+func TestSomeIfNonZero(t *testing.T) {
+	require.Equal(t, o.SomeIfNonZero(0), o.None[int]())
+	require.Equal(t, o.SomeIfNonZero("val"), o.Some("val"))
+}
+
 func TestMap(t *testing.T) {
 	require.Equal(t, o.Map(o.Some(2), double), o.Some(4))
 	require.True(t, o.Map(o.None[int](), double).IsNone())
