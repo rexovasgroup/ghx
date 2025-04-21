@@ -302,10 +302,19 @@ func NewCmdExtension(f *cmdutil.Factory) *cobra.Command {
 					%[1]sOWNER/REPO%[1]s format or as a full repository URL.
 					The URL format is useful when the repository is not hosted on <github.com>.
 
-					For remote repositories, the GitHub CLI first looks for the release artifacts assuming
-					that it's a binary extension i.e. prebuilt binaries provided as part of the release.
-					In the absence of a release, the repository itself is cloned assuming that it's a
-					script extension i.e. prebuilt executable or script exists on its root.
+					For remote repositories, the GitHub CLI attempts to install the extenion with the following logic:
+
+					- First, look for release assets in the repository's latest release. If found, the
+					extension is treated as a binary extension. It will be installed from either the
+					latest release or the release tag specified by the %[1]s--pin%[1]s flag.
+						- Note: Commit hashes provided in the %[1]s--pin%[1]s flag are currently not supported for
+						precompiled extensions because only releases contain precompiled binary assets.
+					- If no suitable release assets are found, the repository is treated as a script extension.
+					The extension repository is cloned, then the root of the repository is searched for
+					an executable file with the same name as the repository.
+					- If there are no release assets to identify the extension as a precompiled extension or
+					an executable file in the repository's root to identify the extension as a script extension,
+					the extension installation will fail.
 
 					The %[1]s--pin%[1]s flag may be used to specify a tag or commit for binary and script
 					extensions respectively, the latest version is used otherwise.
