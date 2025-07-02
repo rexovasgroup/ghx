@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
-	"strconv"
 	"time"
 
 	"github.com/MakeNowJust/heredoc"
@@ -108,9 +106,11 @@ func statusRun(opts *StatusOptions) error {
 				return err
 			}
 			// Determine if the branch is configured to merge to a special PR ref
-			prHeadRE := regexp.MustCompile(`^refs/pull/(\d+)/head$`)
-			if m := prHeadRE.FindStringSubmatch(branchConfig.MergeRef); m != nil {
-				currentPRNumber, _ = strconv.Atoi(m[1])
+			// Determine if the branch is configured to merge to a special PR ref
+			parsedPRNumber, ok := shared.PullRequestNumberFromRef(branchConfig.MergeRef)
+			if ok {
+				// If the branch is configured to merge to a special PR ref, use that
+				currentPRNumber = parsedPRNumber
 			}
 
 			if currentPRNumber == 0 {

@@ -74,6 +74,15 @@ func NewFinder(factory *cmdutil.Factory) PRFinder {
 
 var finderForRunCommandStyleTests PRFinder
 
+func PullRequestNumberFromRef(ref string) (int, bool) {
+	prHeadRE := regexp.MustCompile(`^refs/pull/(\d+)/head$`)
+	if m := prHeadRE.FindStringSubmatch(ref); m != nil {
+		prNumber, _ := strconv.Atoi(m[1])
+		return prNumber, true
+	}
+	return 0, false
+}
+
 // StubFinderForRunCommandStyleTests is the NewMockFinder substitute to be used ONLY in runCommand-style tests.
 func StubFinderForRunCommandStyleTests(t *testing.T, selector string, pr *api.PullRequest, repo ghrepo.Interface) *mockFinder {
 	// Create a new mock finder and override the "runCommandFinder" variable so that calls to
@@ -141,10 +150,10 @@ func (f *finder) Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface, err
 		}
 
 		// Determine if the branch is configured to merge to a special PR ref
-		prHeadRE := regexp.MustCompile(`^refs/pull/(\d+)/head$`)
-		if m := prHeadRE.FindStringSubmatch(branchConfig.MergeRef); m != nil {
-			prNumber, _ := strconv.Atoi(m[1])
-			f.prNumber = prNumber
+		parsedPRNumber, ok := PullRequestNumberFromRef(branchConfig.MergeRef)
+		if ok {
+			// If the branch is configured to merge to a special PR ref, use that
+			f.prNumber = parsedPRNumber
 		}
 
 		// Determine the PullRequestRefs from config
