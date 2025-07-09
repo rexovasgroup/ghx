@@ -48,7 +48,7 @@ func TestNewCmdVerify_Args(t *testing.T) {
 			args:         []string{"v1.2.3", "--hostname", "invalid.host"},
 			wantTag:      "v1.2.3",
 			wantHostname: "foo.ghe.com",
-			wantErr:      "An unsupported host was detected. Note that gh attestation does not currently support GHES",
+			wantErr:      "an unsupported host was detected. Note that gh release verify does not currently support GHES",
 		},
 	}
 	for _, tt := range tests {

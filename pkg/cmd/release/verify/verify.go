@@ -13,7 +13,6 @@ import (
 	"github.com/cli/cli/v2/internal/tableprinter"
 	"github.com/cli/cli/v2/pkg/cmd/attestation/api"
 	"github.com/cli/cli/v2/pkg/cmd/attestation/artifact"
-	att_auth "github.com/cli/cli/v2/pkg/cmd/attestation/auth"
 	att_io "github.com/cli/cli/v2/pkg/cmd/attestation/io"
 	"github.com/cli/cli/v2/pkg/cmd/attestation/verification"
 	"github.com/cli/cli/v2/pkg/cmd/release/shared"
@@ -78,9 +77,8 @@ func NewCmdVerify(f *cmdutil.Factory, runF func(config *VerifyConfig) error) *co
 				opts.Hostname, _ = ghauth.DefaultHost()
 			}
 
-			err := att_auth.IsHostSupported(opts.Hostname)
-			if err != nil {
-				return err
+			if ghauth.IsEnterprise(opts.Hostname) {
+				return fmt.Errorf("an unsupported host was detected. Note that gh release verify does not currently support GHES")
 			}
 
 			baseRepo, err := f.BaseRepo()

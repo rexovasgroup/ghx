@@ -54,7 +54,7 @@ func TestNewCmdVerifyAsset_Args(t *testing.T) {
 			wantTag:  "v1.2.3",
 			wantFile: test.NormalizeRelativePath("../../attestation/test/data/github_release_artifact.zip"),
 			wantHost: "foo.ghe.com", // expected fallback or previous valid host
-			wantErr:  "An unsupported host was detected. Note that gh attestation does not currently support GHES",
+			wantErr:  "an unsupported host was detected. Note that gh release verify-asset does not currently support GHES",
 		},
 	}
 	for _, tt := range tests {

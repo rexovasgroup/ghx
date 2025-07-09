@@ -8,7 +8,6 @@ import (
 
 	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 
-	att_auth "github.com/cli/cli/v2/pkg/cmd/attestation/auth"
 	"github.com/cli/cli/v2/pkg/iostreams"
 
 	"github.com/cli/cli/v2/internal/ghrepo"
@@ -86,9 +85,8 @@ func NewCmdVerifyAsset(f *cmdutil.Factory, runF func(*VerifyAssetConfig) error) 
 				opts.Hostname, _ = ghauth.DefaultHost()
 			}
 
-			err := att_auth.IsHostSupported(opts.Hostname)
-			if err != nil {
-				return err
+			if ghauth.IsEnterprise(opts.Hostname) {
+				return fmt.Errorf("an unsupported host was detected. Note that gh release verify-asset does not currently support GHES")
 			}
 
 			baseRepo, err := f.BaseRepo()
