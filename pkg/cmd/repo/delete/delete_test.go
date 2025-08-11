@@ -168,6 +168,49 @@ func Test_deleteRun(t *testing.T) {
 					httpmock.StatusStringResponse(307, "{}"))
 			},
 		},
+		{
+			name:    "deleting repo in cli org on github.com returns error",
+			opts:    &DeleteOptions{RepoArg: "cli/foo"},
+			wantErr: true,
+			errMsg:  "cannot delete cli/foo",
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Exclude(t,
+					httpmock.REST("DELETE", "repos/cli/foo"),
+				)
+			},
+		},
+		{
+			name: "when base repo is in cli org on github.com, error is returned",
+			opts: &DeleteOptions{
+				BaseRepo: func() (ghrepo.Interface, error) {
+					return ghrepo.NewWithHost("cli", "foo", "github.com"), nil
+				},
+				RepoArg: "",
+			},
+			wantErr: true,
+			errMsg:  "cannot delete cli/foo",
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Exclude(t,
+					httpmock.REST("DELETE", "repos/cli/foo"),
+				)
+			},
+		},
+		{
+			name: "deleting cli org repo on non-github.com hosts proceeds",
+			tty:  true,
+			opts: &DeleteOptions{
+				BaseRepo: func() (ghrepo.Interface, error) {
+					return ghrepo.NewWithHost("cli", "foo", "ghe.github.com"), nil
+				},
+				Confirmed: true,
+			},
+			wantStdout: "✓ Deleted repository cli/foo\n",
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("DELETE", "repos/cli/foo"),
+					httpmock.StatusStringResponse(204, "{}"))
+			},
+		},
 	}
 	for _, tt := range tests {
 		pm := &prompter.PrompterMock{}
@@ -176,8 +219,10 @@ func Test_deleteRun(t *testing.T) {
 		}
 		tt.opts.Prompter = pm
 
-		tt.opts.BaseRepo = func() (ghrepo.Interface, error) {
-			return ghrepo.New("OWNER", "REPO"), nil
+		if tt.opts.BaseRepo == nil {
+			tt.opts.BaseRepo = func() (ghrepo.Interface, error) {
+				return ghrepo.New("OWNER", "REPO"), nil
+			}
 		}
 
 		reg := &httpmock.Registry{}

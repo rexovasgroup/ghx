@@ -102,6 +102,10 @@ func deleteRun(opts *DeleteOptions) error {
 	}
 	fullName := ghrepo.FullName(toDelete)
 
+	if toDelete.RepoOwner() == "cli" && toDelete.RepoHost() == "github.com" {
+		return fmt.Errorf("cannot delete %s", fullName)
+	}
+
 	if !opts.Confirmed {
 		if err := opts.Prompter.ConfirmDeletion(fullName); err != nil {
 			return err
