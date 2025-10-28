@@ -89,11 +89,11 @@ const (
 )
 
 // doQueryWithProgressIndicator wraps API calls with a progress indicator.
-// The query name is used in the progress indicator label.
-func (c *Client) doQueryWithProgressIndicator(name string, query interface{}, variables map[string]interface{}) error {
-	c.io.StartProgressIndicatorWithLabel(fmt.Sprintf("Fetching %s", name))
+// The query name is used in the GraphQL query and the label is shown to the user.
+func (c *Client) doQueryWithProgressIndicator(queryName string, label string, query interface{}, variables map[string]interface{}) error {
+	c.io.StartProgressIndicatorWithLabel(fmt.Sprintf("Fetching %s", label))
 	defer c.io.StopProgressIndicator()
-	err := c.apiClient.Query(name, query, variables)
+	err := c.apiClient.Query(queryName, query, variables)
 	return handleError(err)
 }
 
@@ -531,26 +531,30 @@ func (c *Client) ProjectItems(o *Owner, number int32, limit int) (*Project, erro
 
 	var query pager[ProjectItem]
 	var queryName string
+	var label string
 	switch o.Type {
 	case UserOwner:
 		variables["login"] = githubv4.String(o.Login)
 		query = &userOwnerWithItems{} // must be a pointer to work with graphql queries
 		queryName = "UserProjectWithItems"
+		label = "project items"
 	case OrgOwner:
 		variables["login"] = githubv4.String(o.Login)
 		query = &orgOwnerWithItems{} // must be a pointer to work with graphql queries
 		queryName = "OrgProjectWithItems"
+		label = "project items"
 	case ViewerOwner:
 		query = &viewerOwnerWithItems{} // must be a pointer to work with graphql queries
 		queryName = "ViewerProjectWithItems"
+		label = "project items"
 	}
-	err := c.doQueryWithProgressIndicator(queryName, query, variables)
+	err := c.doQueryWithProgressIndicator(queryName, label, query, variables)
 	if err != nil {
 		return project, err
 	}
 	project = query.Project()
 
-	items, err := paginateAttributes(c, query, variables, queryName, "firstItems", "afterItems", limit, query.Nodes())
+	items, err := paginateAttributes(c, query, variables, queryName, label, "firstItems", "afterItems", limit, query.Nodes())
 	if err != nil {
 		return project, err
 	}
@@ -683,7 +687,7 @@ type projectAttribute interface {
 // nodes is the list of attributes that have already been fetched.
 //
 // the return value is a slice of the newly fetched attributes appended to nodes.
-func paginateAttributes[N projectAttribute](c *Client, p pager[N], variables map[string]any, queryName string, firstKey string, afterKey string, limit int, nodes []N) ([]N, error) {
+func paginateAttributes[N projectAttribute](c *Client, p pager[N], variables map[string]any, queryName string, label string, firstKey string, afterKey string, limit int, nodes []N) ([]N, error) {
 	hasNextPage := p.HasNextPage()
 	cursor := p.EndCursor()
 	for {
@@ -698,7 +702,7 @@ func paginateAttributes[N projectAttribute](c *Client, p pager[N], variables map
 
 		// set the cursor to the end of the last page
 		variables[afterKey] = (*githubv4.String)(&cursor)
-		err := c.doQueryWithProgressIndicator(queryName, p, variables)
+		err := c.doQueryWithProgressIndicator(queryName, label, p, variables)
 		if err != nil {
 			return nodes, err
 		}
@@ -842,26 +846,30 @@ func (c *Client) ProjectFields(o *Owner, number int32, limit int) (*Project, err
 
 	var query pager[ProjectField]
 	var queryName string
+	var label string
 	switch o.Type {
 	case UserOwner:
 		variables["login"] = githubv4.String(o.Login)
 		query = &userOwnerWithFields{} // must be a pointer to work with graphql queries
 		queryName = "UserProjectWithFields"
+		label = "project fields"
 	case OrgOwner:
 		variables["login"] = githubv4.String(o.Login)
 		query = &orgOwnerWithFields{} // must be a pointer to work with graphql queries
 		queryName = "OrgProjectWithFields"
+		label = "project fields"
 	case ViewerOwner:
 		query = &viewerOwnerWithFields{} // must be a pointer to work with graphql queries
 		queryName = "ViewerProjectWithFields"
+		label = "project fields"
 	}
-	err := c.doQueryWithProgressIndicator(queryName, query, variables)
+	err := c.doQueryWithProgressIndicator(queryName, label, query, variables)
 	if err != nil {
 		return project, err
 	}
 	project = query.Project()
 
-	fields, err := paginateAttributes(c, query, variables, queryName, "firstFields", "afterFields", limit, query.Nodes())
+	fields, err := paginateAttributes(c, query, variables, queryName, label, "firstFields", "afterFields", limit, query.Nodes())
 	if err != nil {
 		return project, err
 	}
@@ -969,7 +977,7 @@ const ViewerOwner OwnerType = "VIEWER"
 // ViewerLoginName returns the login name of the viewer.
 func (c *Client) ViewerLoginName() (string, error) {
 	var query viewerLogin
-	err := c.doQueryWithProgressIndicator("Viewer", &query, map[string]interface{}{})
+	err := c.doQueryWithProgressIndicator("Viewer", "viewer", &query, map[string]interface{}{})
 	if err != nil {
 		return "", err
 	}
@@ -980,7 +988,7 @@ func (c *Client) ViewerLoginName() (string, error) {
 func (c *Client) OwnerIDAndType(login string) (string, OwnerType, error) {
 	if login == "@me" || login == "" {
 		var query viewerLogin
-		err := c.doQueryWithProgressIndicator("ViewerOwner", &query, nil)
+		err := c.doQueryWithProgressIndicator("ViewerOwner", "owner", &query, nil)
 		if err != nil {
 			return "", "", err
 		}
@@ -1001,7 +1009,7 @@ func (c *Client) OwnerIDAndType(login string) (string, OwnerType, error) {
 		} `graphql:"organization(login: $login)"`
 	}
 
-	err := c.doQueryWithProgressIndicator("UserOrgOwner", &query, variables)
+	err := c.doQueryWithProgressIndicator("UserOrgOwner", "owner", &query, variables)
 	if err != nil {
 		// Due to the way the queries are structured, we don't know if a login belongs to a user
 		// or to an org, even though they are unique. To deal with this, we try both - if neither
@@ -1044,7 +1052,7 @@ func (c *Client) IssueOrPullRequestID(rawURL string) (string, error) {
 		"url": githubv4.URI{URL: uri},
 	}
 	var query issueOrPullRequest
-	err = c.doQueryWithProgressIndicator("GetIssueOrPullRequest", &query, variables)
+	err = c.doQueryWithProgressIndicator("GetIssueOrPullRequest", "issue or pull request", &query, variables)
 	if err != nil {
 		return "", err
 	}
@@ -1106,7 +1114,7 @@ func (c *Client) userOrgLogins() ([]loginTypes, error) {
 		"after": (*githubv4.String)(nil),
 	}
 
-	err := c.doQueryWithProgressIndicator("ViewerLoginAndOrgs", &v, variables)
+	err := c.doQueryWithProgressIndicator("ViewerLoginAndOrgs", "organizations", &v, variables)
 	if err != nil {
 		return l, err
 	}
@@ -1144,7 +1152,7 @@ func (c *Client) paginateOrgLogins(l []loginTypes, cursor string) ([]loginTypes,
 		"after": githubv4.String(cursor),
 	}
 
-	err := c.doQueryWithProgressIndicator("ViewerLoginAndOrgs", &v, variables)
+	err := c.doQueryWithProgressIndicator("ViewerLoginAndOrgs", "organizations", &v, variables)
 	if err != nil {
 		return l, err
 	}
@@ -1239,16 +1247,16 @@ func (c *Client) NewProject(canPrompt bool, o *Owner, number int32, fields bool)
 		if o.Type == UserOwner {
 			var query userOwner
 			variables["login"] = githubv4.String(o.Login)
-			err := c.doQueryWithProgressIndicator("UserProject", &query, variables)
+			err := c.doQueryWithProgressIndicator("UserProject", "project", &query, variables)
 			return &query.Owner.Project, err
 		} else if o.Type == OrgOwner {
 			variables["login"] = githubv4.String(o.Login)
 			var query orgOwner
-			err := c.doQueryWithProgressIndicator("OrgProject", &query, variables)
+			err := c.doQueryWithProgressIndicator("OrgProject", "project", &query, variables)
 			return &query.Owner.Project, err
 		} else if o.Type == ViewerOwner {
 			var query viewerOwner
-			err := c.doQueryWithProgressIndicator("ViewerProject", &query, variables)
+			err := c.doQueryWithProgressIndicator("ViewerProject", "project", &query, variables)
 			return &query.Owner.Project, err
 		}
 		return nil, errors.New("unknown owner type")
@@ -1323,7 +1331,7 @@ func (c *Client) Projects(login string, t OwnerType, limit int, fields bool) (Pr
 		// the cost.
 		if t == UserOwner {
 			var query userProjects
-			if err := c.doQueryWithProgressIndicator("UserProjects", &query, variables); err != nil {
+			if err := c.doQueryWithProgressIndicator("UserProjects", "user projects", &query, variables); err != nil {
 				return projects, err
 			}
 			projects.Nodes = append(projects.Nodes, query.Owner.Projects.Nodes...)
@@ -1332,7 +1340,7 @@ func (c *Client) Projects(login string, t OwnerType, limit int, fields bool) (Pr
 			projects.TotalCount = query.Owner.Projects.TotalCount
 		} else if t == OrgOwner {
 			var query orgProjects
-			if err := c.doQueryWithProgressIndicator("OrgProjects", &query, variables); err != nil {
+			if err := c.doQueryWithProgressIndicator("OrgProjects", "organization projects", &query, variables); err != nil {
 				return projects, err
 			}
 			projects.Nodes = append(projects.Nodes, query.Owner.Projects.Nodes...)
@@ -1341,7 +1349,7 @@ func (c *Client) Projects(login string, t OwnerType, limit int, fields bool) (Pr
 			projects.TotalCount = query.Owner.Projects.TotalCount
 		} else if t == ViewerOwner {
 			var query viewerProjects
-			if err := c.doQueryWithProgressIndicator("ViewerProjects", &query, variables); err != nil {
+			if err := c.doQueryWithProgressIndicator("ViewerProjects", "projects", &query, variables); err != nil {
 				return projects, err
 			}
 			projects.Nodes = append(projects.Nodes, query.Owner.Projects.Nodes...)
