@@ -1,0 +1,582 @@
+#!/bin/bash
+
+# Enable strict mode
+set -eo pipefail
+
+SCRIPT=$(basename "$0")
+ARCHITECTURES=("i386" "x86_64" "amd64" "arm64" "armhf")
+
+CLIENT="${CLIENT:-dnf4}"
+
+# Check if DEBUG is set to true or 1, enable debug print statements if so
+if [[ "$DEBUG" == "true" || "$DEBUG" == "1" ]]; then
+  set -x
+fi
+
+# Default artifacts directory
+ARTIFACTS_DIR="$(pwd)/rpm-repo-test"
+
+bold() {
+  echo -e "\033[1m$1\033[0m"
+}
+
+header() {
+  echo
+  echo "================================================================================"
+  bold "$1"
+  echo
+}
+
+# Function to prompt user to continue to the next step with explanations
+prompt_continue() {
+  echo
+  read -p "Press Enter to continue..."
+}
+
+# Function to start up Docker container for environment
+docker_setup() {
+  # If the rpm-gpg-playground container already exists, prompt the user whether to tear it down
+  if [ "$(docker ps -a -q -f name=rpm-gpg-playground)" ]; then
+    read -p "Do you want to teardown the existing container and recreate it? (y/n): " choice
+    if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+      docker_teardown
+    else
+      echo "Skip setup and using existing container."
+      docker exec -it rpm-gpg-playground bash
+      exit 0
+    fi
+  fi
+
+  echo "Setting up a new container."
+  docker run -it -d --name rpm-gpg-playground -v "$(pwd)/script/rpm-devel:/root/rpm-devel" -w "/root" fedora:43
+
+  # Set up MOTD to display on shell entry
+  docker exec rpm-gpg-playground bash -c "cat >> /root/.bashrc << EOF
+
+# Display MOTD
+cat << "MOTD"
+================================================================================
+  RPM Repository PGP Key Rotation Development Environment
+================================================================================
+
+Welcome to the rpm-gpg-playground container!
+
+Available commands:
+  $SCRIPT setup      - Create initial RPM repository and packages
+  $SCRIPT newkey     - Generate new signing key
+  $SCRIPT deprecate  - Deprecate old signing key
+  $SCRIPT teardown   - Clean up repository and configuration
+
+Run $SCRIPT without arguments for full help.
+
+================================================================================
+MOTD
+EOF"
+
+  docker exec -it rpm-gpg-playground bash
+}
+
+# Function to handle the setup process
+setup() {
+  header "Step 1: Installing prerequisites"
+
+  if ! command -v sudo &> /dev/null; then
+    # This is to make sure the script runs on both containers and VMs. 
+    # (should work with either dnf4 or dnf5 symlinks)
+    dnf install -y sudo
+  fi
+
+  if [ $CLIENT == "dnf4" ] && ! command -v dnf4 &> /dev/null; then 
+    sudo dnf install -y dnf4
+  fi
+
+  if [ $CLIENT == "dnf4" ]; then
+    sudo dnf4 install -y dnf-utils procps-ng busybox gpg rpm rpm-build rpm-sign createrepo_c tree
+  else
+    sudo dnf5 install -y dnf-utils procps-ng busybox gpg rpm rpm-build rpm-sign createrepo_c tree
+  fi
+
+  if [ ! -d "$ARTIFACTS_DIR" ]; then
+    echo "Directory does not exist. Creating $ARTIFACTS_DIR..."
+    mkdir -p "$ARTIFACTS_DIR"
+    echo "Directory $ARTIFACTS_DIR created."
+  else
+    echo "Directory $ARTIFACTS_DIR already exists."
+  fi
+
+  prompt_continue
+  header "Step 2: Creating a PGP key/cert that expires in 1 minute"
+
+  cd "$ARTIFACTS_DIR"
+  echo "%echo Generating an example PGP key
+Key-Type: RSA
+Key-Length: 4096
+Key-Usage: sign
+Name-Real: example-key-1
+Name-Email: example@example.com
+Expire-Date: seconds=$((1 * 60))
+%no-ask-passphrase
+%no-protection
+%commit" > example-pgp-key-1.batch
+
+  mkdir -m 700 -p "$ARTIFACTS_DIR/temp-gpg-home"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --no-tty --batch --gen-key example-pgp-key-1.batch
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+  #GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export --export-options export-minimal > pgp-key.gpg # Binary version
+
+  KEY1_FINGERPRINT="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --list-options show-only-fpr-mbox | cut -f1 -d' ' | head -n 1)"
+  echo -n "$KEY1_FINGERPRINT" > "$ARTIFACTS_DIR/key1-fingerprint"
+
+  echo "Generated PGP key with fingerprint: $KEY1_FINGERPRINT"
+
+  prompt_continue
+  header "Step 3: Creating the hello-world rpm files for supported architectures"
+
+  created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.1"))
+
+  for created_rpm in "${created_rpms[@]}"; do
+    # Here we mimic the same signing process as in our release workflow. That is
+    # we only sign the RPM with one key. With RPM v6 (available since Fedora 43)
+    # we can actually sign with multiple keys (in a backwards compatible way), but
+    # the problem is dnf/yum doesn't support that (i.e. `dnf install` or `dnf update`
+    # fail if the RPM file has multiple signatures in it).
+    #
+    # So, we keep signing the RPMs only with the eldest key.
+
+    GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" rpmsign --addsign -D "%_gpg_name $KEY1_FINGERPRINT" "$created_rpm"
+    # If we wanted to add an RPM v6 signature tag we would also do (note the --rpmv6 flag):
+    # GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" rpmsign --addsign --rpmv6 -D "%_gpg_name $KEY1_FINGERPRINT" "$created_rpm"
+
+    echo "RPM package created and signed: $created_rpm"
+
+    # Inspect the RPM package
+    # rpm -qiplv "$created_rpm"
+  done
+
+  prompt_continue
+  header "Step 4: Creating RPM repository using createrepo_c"
+
+  # This is to mimic the way we make our RPM repo in the release workflow.
+  mkdir -p "$ARTIFACTS_DIR/rpm-repo"
+  cp -a "${created_rpms[@]}" "$ARTIFACTS_DIR/rpm-repo/"
+  mkdir -p "$ARTIFACTS_DIR/temp-createrepo-1"
+  cp "${created_rpms[@]}" "$ARTIFACTS_DIR/temp-createrepo-1"
+  pushd "$ARTIFACTS_DIR/temp-createrepo-1" > /dev/null
+  # In our workflow we use createrepo_c v0. Here it's v1, hence --compatibility is needed to keep the same metadata format/compression.
+  createrepo_c --compatibility .
+  popd > /dev/null
+  cp -r "$ARTIFACTS_DIR/temp-createrepo-1/repodata" "$ARTIFACTS_DIR/rpm-repo/"
+
+  # Sign the repository
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --detach-sign --armor "$ARTIFACTS_DIR/rpm-repo/repodata/repomd.xml"
+
+  # Create repo configuration file for dnf.
+echo "[example-repo]
+name=Example Repo
+baseurl=http://127.0.0.1:8000/rpm-repo
+enabled=1
+gpgcheck=1
+gpgkey=http://127.0.0.1:8000/pgp-key.gpg
+
+# Test only fields:
+# We can enable GPG check for repository metadata; we don't have this in our provided .repo file so it's kept disabled to mimic the actual repo.
+repo_gpgcheck=0
+# (5 seconds). This is to make dnf/yum fetch new metadata when running 'dnf update' and eliminate the need to add '--refresh'. The default is 48 hours which is too much for the purpose of this PoC.
+metadata_expire=5
+" > "$ARTIFACTS_DIR/rpm-repo/example.repo"
+
+  echo "RPM repository created at $ARTIFACTS_DIR/rpm-repo"
+
+  prompt_continue
+  header "Step 5: Hosting repository with a simple HTTP server"
+
+  cd "$ARTIFACTS_DIR"
+  busybox httpd -p 8000 # runs in background by default
+  echo "HTTP server started at http://127.0.0.1:8000"
+
+  prompt_continue
+  header "Step 6: Adding RPM repo entry via dnf"
+
+  if [ $CLIENT == "dnf4" ]; then
+    sudo dnf4 install 'dnf-command(config-manager)'
+    sudo dnf4 config-manager --add-repo http://127.0.0.1:8000/rpm-repo/example.repo
+  else
+    sudo dnf5 install dnf5-plugins
+    sudo dnf5 config-manager addrepo --from-repofile=http://127.0.0.1:8000/rpm-repo/example.repo
+  fi
+
+  prompt_continue
+  header "Step 7: installing the packages via dnf"
+
+  echo "! Note that you're going to confirm the PGP key import prompt (fingerprint: $KEY1_FINGERPRINT)"
+  if [ $CLIENT == "dnf4" ]; then
+    sudo dnf4 install hello-world
+  else
+    sudo dnf5 install hello-world
+  fi
+
+  echo
+  bold "✅ Hello World installed successfully."
+  echo
+  echo "Run 'newkey' target next to rotate the signing key."
+  echo
+  echo "! Note that there should be no warnings about unverified packages in the logs above."
+}
+
+# Function to handle the signing key rotation process
+newkey() {
+  # Verify that the current key is not yet expired
+  header "Step 1: Verifying the current key is not yet expired"
+
+  KEY1_FINGERPRINT="$(cat "$ARTIFACTS_DIR/key1-fingerprint")"
+
+  expiry_date="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons --fingerprint $KEY1_FINGERPRINT | grep -E "^pub:" | cut -f7 -d:)"
+  current_date="$(date +%s)"
+  if [ "$expiry_date" -lt "$current_date" ]; then
+    echo
+    bold "⚠️ The key is already expired. Please 'teardown' and start over."
+    exit 1
+  else
+    echo "Confirmed that the current signing key is still valid."
+  fi
+
+  # Generate a new key and add it to the keyring
+  prompt_continue
+  header "Step 2: Generating a new PGP key (expires in 15 mins) and add it to the keyring"
+
+  # Get the list of existing keys
+  existing_keys_list="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons)"
+
+  cd "$ARTIFACTS_DIR"
+  echo "%echo Generating an example PGP key
+Key-Type: RSA
+Key-Length: 4096
+Key-Usage: sign
+Name-Real: example-key-2
+Name-Email: example@example.com
+Expire-Date: seconds=$((15 * 60))
+%no-ask-passphrase
+%no-protection
+%commit" > example-pgp-key-2.batch
+
+  mkdir -m 700 -p "$ARTIFACTS_DIR/temp-gpg-home"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --no-tty --batch --gen-key example-pgp-key-2.batch
+
+  new_keys_list="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons)"
+  added_key="$(comm -1 -3 <(echo "$existing_keys_list" | sort) <(echo "$new_keys_list" | sort))"
+  KEY2_FINGERPRINT="$(echo "$added_key" | grep -E "^fpr:" | cut -f10 -d: | head -n1)"
+  echo -n "$KEY2_FINGERPRINT" > "$ARTIFACTS_DIR/key2-fingerprint"
+
+  echo "Generated PGP key with fingerprint: $KEY2_FINGERPRINT"
+
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+  #GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export --export-options export-minimal > pgp-key.gpg # Binary version
+
+  echo "! Note that the hosted PGP keyring is now updated (includes both keys): http://127.0.0.1:8000/pgp-key.gpg"
+
+  prompt_continue
+  header "Step 3: Releasing new version of PRMs, signed with single key (old key is still valid)."
+
+  created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.2"))
+
+  for created_rpm in "${created_rpms[@]}"; do
+    # See above for why we only sign RPMs with one key.
+    GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" rpmsign --addsign -D "%_gpg_name $KEY1_FINGERPRINT" "$created_rpm"
+
+    # If we wanted to add an RPM v6 signature tag we would also do (note the --rpmv6 flag):
+    #  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" rpmsign --addsign --rpmv6 -D "%_gpg_name $KEY1_FINGERPRINT" "$created_rpm"
+    #  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" rpmsign --addsign --rpmv6 -D "%_gpg_name $KEY2_FINGERPRINT" "$created_rpm"
+
+    echo "RPM package created and signed (with the still-alive old key): $created_rpm"
+
+    # Inspect the RPM package
+    # rpm -qiplv "$created_rpm"
+  done
+
+  prompt_continue
+  header "Step 4: Updating RPM repository using createrepo_c"
+
+  # This is to mimic the way we make our RPM repo in the release workflow.
+  mkdir -p "$ARTIFACTS_DIR/rpm-repo"
+  cp -a "${created_rpms[@]}" "$ARTIFACTS_DIR/rpm-repo/"
+  mkdir -p "$ARTIFACTS_DIR/temp-createrepo-2"
+  cp "${created_rpms[@]}" "$ARTIFACTS_DIR/temp-createrepo-2"
+  pushd "$ARTIFACTS_DIR/temp-createrepo-2" > /dev/null
+  # In our workflow we use createrepo_c v0. Here it's v1, hence --compatibility is needed to keep the same metadata format/compression.
+  createrepo_c --compatibility .
+  popd > /dev/null
+  cp -r "$ARTIFACTS_DIR/temp-createrepo-2/repodata" "$ARTIFACTS_DIR/rpm-repo/"
+
+  # Sign the repository with the old key (still alive)
+  pushd "$ARTIFACTS_DIR/rpm-repo/repodata" > /dev/null
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --yes --detach-sign --armor --default-key "$KEY1_FINGERPRINT" --output - repomd.xml > repomd.xml.asc
+
+  # We can safely sign the repository (i.e. repodata/repomd.xml) with multiple keys,
+  # and yum and dnf will work with it. In our current flow we only sign the repo with
+  # one (and the only) key.
+  #
+  # However, our suggested "gh-cli.repo" file does not enable the repository metadata
+  # signature check, which means by default these signatures are just ignored, of course,
+  # unless a user has explicitly enabled "repo_gpgcheck=1" in the .repo file.
+  #
+  # Note that since it's a detached signature, all we need to do is to concatenate
+  # additional signatures to the same .asc file. This is a standard practice with
+  # ASCII armored files (i.e. .asc).
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --yes --detach-sign --armor --default-key "$KEY2_FINGERPRINT" --output - repomd.xml >> repomd.xml.asc
+  popd > /dev/null
+
+  echo
+  bold "✅ RPM repository has been updated and signed with both keys."
+
+  prompt_continue
+  header "Step 5: Upgrading hello-world on the local machine."
+
+  if [ $CLIENT == "dnf4" ]; then
+    sudo dnf4 update hello-world
+  else
+    sudo dnf5 update hello-world
+  fi
+
+  echo
+  bold "✅ Hello world upgraded successfully."
+  echo
+  echo "Run 'deprecate' target next to deprecate the old key."
+}
+
+deprecate() {
+  header "Step 1: Verifying the old/first key is expired"
+
+  KEY1_FINGERPRINT="$(cat "$ARTIFACTS_DIR/key1-fingerprint")"
+  KEY2_FINGERPRINT="$(cat "$ARTIFACTS_DIR/key2-fingerprint")"
+
+  expiry_date="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons --fingerprint $KEY1_FINGERPRINT | grep -E "^pub:" | cut -f7 -d:)"
+  current_date="$(date +%s)"
+
+  if [ "$expiry_date" -gt "$current_date" ]; then
+    SLEEP=$(( $expiry_date - $current_date + 2 ))
+    bold "Sleeping $SLEEP seconds to allow the old/first key to expire."
+    sleep $SLEEP
+  fi
+
+  prompt_continue
+  header "Step 2: Drop the old/expired key from the hosted keyring."
+
+  # We need to remove the old key from the keyring because after the expiry of the
+  # old key, dnf will fail to install the keyring with a message like this:
+  #
+  #   Transaction failed: Signature verification failed.
+  #   An error occurred importing key "http://127.0.0.1:8000/pgp-key.public": Failed to import public key "http://127.0.0.1:8000/pgp-key.public" to rpmdb: Certificate 1B2211757D885246:
+  #     The certificate is expired: The primary key is not live
+  #     Subkey 1B2211757D885246 is expired: The primary key is not live
+  #     Certificate does not have any usable signing keys
+  #   OpenPGP check for package "hello-world-0.0.3-1.x86_64" (/var/cache/libdnf5/example-repo-581184a2246451c1/packages/hello-world-0.0.3-1.x86_64.rpm) from repo "example-repo" has failed: Public key import failed.
+  #
+
+  cd "$ARTIFACTS_DIR"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --batch --yes --delete-secret-and-public-key "$KEY1_FINGERPRINT"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+
+  prompt_continue
+  header "Step 3: Releasing new version of PRMs, signed with single key (the new key)."
+
+  created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.3"))
+
+  for created_rpm in "${created_rpms[@]}"; do
+    # See above for why we only sign RPMs with one key.
+    GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" rpmsign --addsign -D "%_gpg_name $KEY2_FINGERPRINT" "$created_rpm"
+
+    # If we wanted to add an RPM v6 signature tag we would also do (note the --rpmv6 flag):
+    # GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" rpmsign --addsign --rpmv6 -D "%_gpg_name $KEY2_FINGERPRINT" "$created_rpm"
+
+    echo "RPM package created and signed (with the new key): $created_rpm"
+
+    # Inspect the RPM package
+    # rpm -qiplv "$created_rpm"
+  done
+
+  prompt_continue
+  header "Step 4: Updating RPM repository using createrepo_c"
+
+  # This is to mimic the way we make our RPM repo in the release workflow.
+  mkdir -p "$ARTIFACTS_DIR/rpm-repo"
+  cp -a "${created_rpms[@]}" "$ARTIFACTS_DIR/rpm-repo/"
+  mkdir -p "$ARTIFACTS_DIR/temp-createrepo-3"
+  cp "${created_rpms[@]}" "$ARTIFACTS_DIR/temp-createrepo-3"
+  pushd "$ARTIFACTS_DIR/temp-createrepo-3" > /dev/null
+  # In our workflow we use createrepo_c v0. Here it's v1, hence --compatibility is needed to keep the same metadata format/compression.
+  createrepo_c --compatibility .
+  popd > /dev/null
+  cp -r "$ARTIFACTS_DIR/temp-createrepo-3/repodata" "$ARTIFACTS_DIR/rpm-repo/"
+
+  # Sign the repository with the new key (old one is no longer valid)
+  pushd "$ARTIFACTS_DIR/rpm-repo/repodata" > /dev/null
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --yes --detach-sign --armor --default-key "$KEY2_FINGERPRINT" --output - repomd.xml > repomd.xml.asc
+  popd > /dev/null
+
+  echo
+  bold "✅ RPM repository has been updated and signed with the new key only."
+  echo
+  echo "! Note that the hosted keyring only contains the new key."
+
+  prompt_continue
+  header "Step 5: Upgrading hello-world on the local machine."
+
+  if [ $CLIENT == "dnf4" ]; then
+    sudo dnf4 update hello-world
+  else
+    sudo dnf5 update hello-world
+  fi
+
+  echo
+  bold "✅ Hello world upgraded successfully."
+}
+
+# Function to handle the teardown process
+teardown() {
+  # Kill the HTTP server if it's running
+  if pgrep -f "busybox httpd" > /dev/null; then
+    header "Stopping the HTTP server..."
+    sudo pkill -f "busybox httpd"
+    echo "Server stopped."
+  fi
+
+  # Check if the hello-world package is installed, and remove it safely
+  if sudo dnf list --installed "hello-world"; then
+    header "Removing the hello-world package..."
+    sudo dnf remove -y hello-world
+    echo "Package hello-world removed."
+  else
+    echo "Package hello-world is not installed, skipping removal."
+  fi
+
+  header "Removing any installed PGP keyring..."
+  sudo rpmkeys --delete $(sudo rpmkeys --list | grep -i example | cut -f1 -d' ') || echo "(No keys to delete)"
+
+  if [ -f /etc/yum.repos.d/example.repo ]; then
+    header "Removing repository from yum entries..."
+    sudo rm -rf /etc/yum.repos.d/example.repo
+    echo "Repository entry removed."
+  fi
+
+  # Kill gpg-agent
+  if pgrep "^gpg-agent" > /dev/null; then
+    header "Stopping the GPG agent..."
+    sudo pkill "^gpg-agent"
+    echo "GPG agent stopped."
+  fi
+
+  # Remove the artifacts directory
+  if [ -d "$ARTIFACTS_DIR" ]; then
+    header "Removing the artifacts directory: $ARTIFACTS_DIR"
+    rm -rf "$ARTIFACTS_DIR"
+    echo "Artifacts directory removed."
+  fi
+
+  # Remove built RPMs
+  if [ -d ~/rpmbuild/RPMS ]; then
+    header "Removing built RPMs: ~/rpmbuild/RPMS/*"
+    rm -rf ~/rpmbuild/RPMS/*
+    echo "Built RPMs removed."
+  fi
+
+  header "Cleaning yum cache..."
+  sudo dnf clean all
+
+  echo "Cleanup complete."
+}
+
+# Function to start up Docker container for environment
+docker_teardown() {
+  docker stop rpm-gpg-playground && docker rm rpm-gpg-playground
+}
+
+# Build hello world RPMs for given version.
+# Arguments: <output-directory> <version>
+build_rpms() {
+  outdir="$1"
+  version="$2"
+  created_rpms=()
+
+  for arch in "${ARCHITECTURES[@]}"; do
+    PACKAGE_DIR="$outdir/hello-world-$version-1.$arch"
+    mkdir -p "$PACKAGE_DIR"
+
+    cat << EOF > "$PACKAGE_DIR/hello-world"
+#!/bin/bash
+echo "hello world ($version on $arch)"
+EOF
+    chmod +x "$PACKAGE_DIR/hello-world"
+
+    echo "Summary: A simple program that prints hello
+Name: hello-world
+Version: $version
+Release: 1
+Epoch: 0
+URL: https://example.com
+License: MIT
+Packager: Example Team
+Requires: bash
+BuildRoot: "$PACKAGE_DIR"
+
+%description
+An example package containing a hello-world binary
+
+%install
+mkdir -p %{buildroot}/usr/bin/
+cp "$PACKAGE_DIR/hello-world" %{buildroot}/usr/bin/hello-world
+
+%files
+/usr/bin/hello-world
+" > "$PACKAGE_DIR/hello-world.spec"
+
+    # Build the rpm package
+    pushd "$PACKAGE_DIR" > /dev/null
+    rpmbuild --target "$arch" --quiet -bb hello-world.spec &> /dev/null
+    popd > /dev/null
+    cp ~/rpmbuild/RPMS/$arch/hello-world-$version-1.$arch.rpm "$outdir"
+
+    created_rpms+=("$outdir/hello-world-$version-1.$arch.rpm")
+  done
+
+  echo "${created_rpms[@]}"
+}
+
+# Check for the setup or teardown argument
+if [ "$1" == "docker_setup" ]; then
+  docker_setup
+elif [ "$1" == "setup" ]; then
+  setup
+elif [ "$1" == "newkey" ]; then
+  newkey
+elif [ "$1" == "deprecate" ]; then
+  deprecate
+elif [ "$1" == "teardown" ]; then
+  teardown
+elif [ "$1" == "docker_teardown" ]; then
+  docker_teardown
+else
+  echo "
+$(bold "RPM repository PGP key rotation development tool")
+
+Usage: $SCRIPT TARGET
+
+The following targets are typical order used to setup and exercise the GitHub CLI RPM packaging process:
+
+- $(bold docker_setup):     create Docker container for testing environment
+- $(bold setup):            create initial RPM repository, create and sign sample application package
+- $(bold newkey):           generate new signing key
+- $(bold deprecate):        deprecate old signing key, sign new sample application package
+- $(bold teardown):         clean up RPM repository and local configuration
+- $(bold docker_teardown):  stop and remove Docker container
+"
+  exit 1
+fi
