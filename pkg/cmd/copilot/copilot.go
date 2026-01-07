@@ -1,0 +1,227 @@
+package copilot
+
+import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+
+	"github.com/cli/cli/v2/internal/config"
+	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/cli/cli/v2/pkg/iostreams"
+	"github.com/spf13/cobra"
+)
+
+const copilotBinaryName = "copilot"
+
+func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:                "copilot [flags]",
+		Short:              "GitHub Copilot CLI",
+		Long:               "Run the GitHub Copilot CLI.",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCopilot(f.IOStreams, args)
+		},
+	}
+
+	cmdutil.DisableAuthCheck(cmd)
+
+	return cmd
+}
+
+func runCopilot(io *iostreams.IOStreams, args []string) error {
+	copilotPath, err := ensureCopilot(io)
+	if err != nil {
+		return err
+	}
+
+	externalCmd := exec.Command(copilotPath, args...)
+	externalCmd.Stdin = io.In
+	externalCmd.Stdout = io.Out
+	externalCmd.Stderr = io.ErrOut
+
+	if err := externalCmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		return err
+	}
+	return nil
+}
+
+func ensureCopilot(io *iostreams.IOStreams) (string, error) {
+	// First check if copilot is in PATH
+	if path, err := exec.LookPath(copilotBinaryName); err == nil {
+		return path, nil
+	}
+
+	// Check in gh's data directory
+	installDir := filepath.Join(config.DataDir(), "copilot")
+	binaryName := copilotBinaryName
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	localPath := filepath.Join(installDir, binaryName)
+
+	if _, err := os.Stat(localPath); err == nil {
+		return localPath, nil
+	}
+
+	// Download copilot
+	return downloadCopilot(io, installDir, localPath)
+}
+
+func downloadCopilot(io *iostreams.IOStreams, installDir, localPath string) (string, error) {
+	platform := runtime.GOOS
+	arch := runtime.GOARCH
+	if arch == "amd64" {
+		arch = "x64"
+	}
+
+	var url string
+	var isZip bool
+	if platform == "windows" {
+		url = fmt.Sprintf("https://github.com/github/copilot-cli/releases/latest/download/copilot-%s-%s.zip", platform, arch)
+		isZip = true
+	} else if platform == "linux" || platform == "darwin" {
+		url = fmt.Sprintf("https://github.com/github/copilot-cli/releases/latest/download/copilot-%s-%s.tar.gz", platform, arch)
+	} else {
+		return "", fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	fmt.Fprintf(io.ErrOut, "Downloading Copilot CLI from %s\n", url)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download failed with status: %s", resp.Status)
+	}
+
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create install directory: %w", err)
+	}
+
+	if isZip {
+		err = extractZip(resp.Body, installDir)
+	} else {
+		err = extractTarGz(resp.Body, installDir)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := os.Stat(localPath); err != nil {
+		return "", fmt.Errorf("copilot binary not found after extraction")
+	}
+
+	fmt.Fprintln(io.ErrOut, "Copilot CLI installed successfully")
+	return localPath, nil
+}
+
+func extractTarGz(r io.Reader, destDir string) error {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read tar: %w", err)
+		}
+
+		target := filepath.Join(destDir, header.Name)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory: %w", err)
+			}
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return fmt.Errorf("failed to create file: %w", err)
+			}
+			if _, err := io.Copy(out, tr); err != nil {
+				out.Close()
+				return fmt.Errorf("failed to write file: %w", err)
+			}
+			out.Close()
+		}
+	}
+	return nil
+}
+
+func extractZip(r io.Reader, destDir string) error {
+	// Create a temporary file to store the zip content
+	tmpFile, err := os.CreateTemp("", "copilot-*.zip")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if _, err := io.Copy(tmpFile, r); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+
+	zipReader, err := zip.OpenReader(tmpFile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to open zip: %w", err)
+	}
+	defer zipReader.Close()
+
+	for _, f := range zipReader.File {
+		target := filepath.Join(destDir, f.Name)
+
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return fmt.Errorf("failed to create parent directory: %w", err)
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open file in zip: %w", err)
+		}
+
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("failed to create file: %w", err)
+		}
+
+		if _, err := io.Copy(out, rc); err != nil {
+			out.Close()
+			rc.Close()
+			return fmt.Errorf("failed to write file: %w", err)
+		}
+		out.Close()
+		rc.Close()
+	}
+	return nil
+}
