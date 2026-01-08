@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
@@ -22,9 +23,15 @@ const copilotBinaryName = "copilot"
 
 func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:                "copilot [flags]",
-		Short:              "GitHub Copilot CLI",
-		Long:               "Run the GitHub Copilot CLI.",
+		Use:   "copilot [flags]",
+		Short: "Run the GitHub Copilot CLI",
+		Long: heredoc.Docf(`
+            Runs the GitHub Copilot CLI.
+
+            If already installed, it will use the version found in your PATH.
+
+            If not installed, it will be downloaded to %s.
+        `, filepath.Join(config.DataDir(), "copilot")),
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCopilot(f.IOStreams, args)
