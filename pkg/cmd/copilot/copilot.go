@@ -27,10 +27,20 @@ const copilotBinaryName = "copilot"
 // doesn't escape the destination directory.
 func sanitizeArchivePath(destDir, entryName string) (string, error) {
 	target := filepath.Join(destDir, entryName)
-	if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(destDir)+string(os.PathSeparator)) {
+
+	cleanDest := filepath.Clean(destDir)
+	cleanTarget := filepath.Clean(target)
+
+	rel, err := filepath.Rel(cleanDest, cleanTarget)
+	if err != nil {
 		return "", fmt.Errorf("illegal file path in archive: %s", entryName)
 	}
-	return target, nil
+
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("illegal file path in archive: %s", entryName)
+	}
+
+	return cleanTarget, nil
 }
 
 func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
@@ -39,7 +49,6 @@ func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
 		Short: "Run the GitHub Copilot CLI",
 		Long: heredoc.Docf(`
             Runs the GitHub Copilot CLI.
-            
 
             If already installed, it will use the version found in your PATH.
 
@@ -113,7 +122,7 @@ func downloadCopilot(httpClient func() (*http.Client, error), ios *iostreams.IOS
 	}
 
 	if arch != "x64" && arch != "arm64" {
-		return "", fmt.Errorf("unsupported architecture: %s", arch)
+		return "", fmt.Errorf("unsupported architecture: %s (supported: x64, arm64)", arch)
 	}
 
 	var url string
@@ -125,7 +134,7 @@ func downloadCopilot(httpClient func() (*http.Client, error), ios *iostreams.IOS
 	case "linux", "darwin":
 		url = fmt.Sprintf("https://github.com/github/copilot-cli/releases/latest/download/copilot-%s-%s.tar.gz", platform, arch)
 	default:
-		return "", fmt.Errorf("unsupported platform: %s", platform)
+		return "", fmt.Errorf("unsupported platform: %s (supported: linux, darwin, windows)", platform)
 	}
 
 	fmt.Fprintf(ios.ErrOut, "Downloading Copilot CLI from %s\n", url)
@@ -240,6 +249,9 @@ func removeCopilotFromDir(io *iostreams.IOStreams, installDir string) error {
 	return nil
 }
 
+// extractZip reads a ZIP archive from r and extracts its contents into destDir.
+// It returns an error if the archive cannot be read, written to a temporary file,
+// or if any file or directory within the archive cannot be created or written.
 func extractZip(r io.Reader, destDir string) error {
 	// Create a temporary file to store the zip content
 	tmpFile, err := os.CreateTemp("", "copilot-*.zip")
@@ -282,10 +294,14 @@ func extractZip(r io.Reader, destDir string) error {
 		}
 
 		if err := extractZipFile(target, f.Mode(), rc); err != nil {
-			_ = rc.Close()
+			if cerr := rc.Close(); cerr != nil {
+				return fmt.Errorf("failed to close file in zip after error: %v; original error: %w", cerr, err)
+			}
 			return err
 		}
-		_ = rc.Close()
+		if err := rc.Close(); err != nil {
+			return fmt.Errorf("failed to close file in zip: %w", err)
+		}
 	}
 	return nil
 }
