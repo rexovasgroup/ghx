@@ -31,9 +31,14 @@ func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
             If already installed, it will use the version found in your PATH.
 
             If not installed, it will be downloaded to %s.
+
+            Use --remove to remove the downloaded Copilot CLI.
         `, filepath.Join(config.DataDir(), "copilot")),
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 && args[0] == "--remove" {
+				return removeCopilot(f.IOStreams)
+			}
 			return runCopilot(f.IOStreams, args)
 		},
 	}
@@ -180,6 +185,23 @@ func extractTarGz(r io.Reader, destDir string) error {
 			out.Close()
 		}
 	}
+	return nil
+}
+
+func removeCopilot(io *iostreams.IOStreams) error {
+	installDir := filepath.Join(config.DataDir(), "copilot")
+	return removeCopilotFromDir(io, installDir)
+}
+
+func removeCopilotFromDir(io *iostreams.IOStreams, installDir string) error {
+	if _, err := os.Stat(installDir); os.IsNotExist(err) {
+		fmt.Fprintln(io.ErrOut, "Copilot CLI is not installed")
+		return nil
+	}
+	if err := os.RemoveAll(installDir); err != nil {
+		return fmt.Errorf("failed to remove Copilot CLI: %w", err)
+	}
+	fmt.Fprintln(io.ErrOut, "Copilot CLI removed successfully")
 	return nil
 }
 
