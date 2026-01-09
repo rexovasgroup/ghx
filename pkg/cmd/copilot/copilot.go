@@ -205,7 +205,9 @@ func extractTarGz(r io.Reader, destDir string) error {
 				out.Close()
 				return fmt.Errorf("failed to write file: %w", err)
 			}
-			out.Close()
+			if err := out.Close(); err != nil {
+				return fmt.Errorf("failed to close file: %w", err)
+			}
 		}
 	}
 	return nil
@@ -280,7 +282,10 @@ func extractZip(r io.Reader, destDir string) error {
 			rc.Close()
 			return fmt.Errorf("failed to write file: %w", err)
 		}
-		out.Close()
+		if err := out.Close(); err != nil {
+			rc.Close()
+			return fmt.Errorf("failed to close file: %w", err)
+		}
 		rc.Close()
 	}
 	return nil
