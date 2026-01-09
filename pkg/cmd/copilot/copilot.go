@@ -197,18 +197,26 @@ func extractTarGz(r io.Reader, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
-			if err != nil {
-				return fmt.Errorf("failed to create file: %w", err)
-			}
-			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
-				return fmt.Errorf("failed to write file: %w", err)
-			}
-			if err := out.Close(); err != nil {
-				return fmt.Errorf("failed to close file: %w", err)
+			if err := extractTarFile(target, os.FileMode(header.Mode), tr); err != nil {
+				return err
 			}
 		}
+	}
+	return nil
+}
+
+func extractTarFile(target string, mode os.FileMode, tr io.Reader) (err error) {
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer func() {
+		if cerr := out.Close(); err == nil && cerr != nil {
+			err = fmt.Errorf("failed to close file: %w", cerr)
+		}
+	}()
+	if _, err := io.Copy(out, tr); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 	return nil
 }
@@ -271,22 +279,27 @@ func extractZip(r io.Reader, destDir string) error {
 			return fmt.Errorf("failed to open file in zip: %w", err)
 		}
 
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
-		if err != nil {
+		if err := extractZipFile(target, f.Mode(), rc); err != nil {
 			_ = rc.Close()
-			return fmt.Errorf("failed to create file: %w", err)
-		}
-
-		if _, err := io.Copy(out, rc); err != nil {
-			_ = out.Close()
-			_ = rc.Close()
-			return fmt.Errorf("failed to write file: %w", err)
-		}
-		if err := out.Close(); err != nil {
-			_ = rc.Close()
-			return fmt.Errorf("failed to close file: %w", err)
+			return err
 		}
 		_ = rc.Close()
+	}
+	return nil
+}
+
+func extractZipFile(target string, mode os.FileMode, rc io.Reader) (err error) {
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer func() {
+		if cerr := out.Close(); err == nil && cerr != nil {
+			err = fmt.Errorf("failed to close file: %w", cerr)
+		}
+	}()
+	if _, err := io.Copy(out, rc); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 	return nil
 }
