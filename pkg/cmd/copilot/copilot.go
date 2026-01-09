@@ -42,7 +42,7 @@ func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
 			if len(args) > 0 && args[0] == "--remove" {
 				return removeCopilot(f.IOStreams)
 			}
-			return runCopilot(f.IOStreams, args)
+			return runCopilot(f.HttpClient, f.IOStreams, args)
 		},
 	}
 
@@ -51,8 +51,8 @@ func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
 	return cmd
 }
 
-func runCopilot(io *iostreams.IOStreams, args []string) error {
-	copilotPath, err := ensureCopilot(io)
+func runCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStreams, args []string) error {
+	copilotPath, err := ensureCopilot(httpClient, io)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func runCopilot(io *iostreams.IOStreams, args []string) error {
 	return nil
 }
 
-func ensureCopilot(io *iostreams.IOStreams) (string, error) {
+func ensureCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStreams) (string, error) {
 	// First check if copilot is in PATH
 	if path, err := exec.LookPath(copilotBinaryName); err == nil {
 		return path, nil
@@ -90,10 +90,10 @@ func ensureCopilot(io *iostreams.IOStreams) (string, error) {
 	}
 
 	// Download copilot
-	return downloadCopilot(io, installDir, localPath)
+	return downloadCopilot(httpClient, io, installDir, localPath)
 }
 
-func downloadCopilot(io *iostreams.IOStreams, installDir, localPath string) (string, error) {
+func downloadCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStreams, installDir, localPath string) (string, error) {
 	platform := runtime.GOOS
 	arch := runtime.GOARCH
 	if arch == "amd64" {
@@ -118,7 +118,12 @@ func downloadCopilot(io *iostreams.IOStreams, installDir, localPath string) (str
 
 	fmt.Fprintf(io.ErrOut, "Downloading Copilot CLI from %s\n", url)
 
-	resp, err := http.Get(url)
+	client, err := httpClient()
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("failed to download: %w", err)
 	}
