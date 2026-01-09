@@ -105,7 +105,7 @@ func ensureCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStre
 	return downloadCopilot(httpClient, io, installDir, localPath)
 }
 
-func downloadCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStreams, installDir, localPath string) (string, error) {
+func downloadCopilot(httpClient func() (*http.Client, error), ios *iostreams.IOStreams, installDir, localPath string) (string, error) {
 	platform := runtime.GOOS
 	arch := runtime.GOARCH
 	if arch == "amd64" {
@@ -128,7 +128,7 @@ func downloadCopilot(httpClient func() (*http.Client, error), io *iostreams.IOSt
 		return "", fmt.Errorf("unsupported platform: %s", platform)
 	}
 
-	fmt.Fprintf(io.ErrOut, "Downloading Copilot CLI from %s\n", url)
+	fmt.Fprintf(ios.ErrOut, "Downloading Copilot CLI from %s\n", url)
 
 	client, err := httpClient()
 	if err != nil {
@@ -154,6 +154,8 @@ func downloadCopilot(httpClient func() (*http.Client, error), io *iostreams.IOSt
 	} else {
 		err = extractTarGz(resp.Body, installDir)
 	}
+	// Drain any remaining body content to ensure HTTP connection reuse
+	_, _ = io.Copy(io.Discard, resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -162,7 +164,7 @@ func downloadCopilot(httpClient func() (*http.Client, error), io *iostreams.IOSt
 		return "", fmt.Errorf("copilot binary not found after extraction")
 	}
 
-	fmt.Fprintln(io.ErrOut, "Copilot CLI installed successfully")
+	fmt.Fprintln(ios.ErrOut, "Copilot CLI installed successfully")
 	return localPath, nil
 }
 
