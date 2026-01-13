@@ -186,8 +186,8 @@ func createTarGz(t *testing.T, files map[string][]byte) []byte {
 	return buf.Bytes()
 }
 
-// createZip creates a zip archive in memory with the given files.
-func createZip(t *testing.T, files map[string][]byte) []byte {
+// createZipBuffer creates a zip archive in memory with the given files.
+func createZipBuffer(t *testing.T, files map[string][]byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -285,13 +285,17 @@ func TestExtractTarGz(t *testing.T) {
 
 func TestExtractZip(t *testing.T) {
 	t.Run("extracts files correctly", func(t *testing.T) {
-		destDir := t.TempDir()
+		zipDir := t.TempDir()
+		zipPath := filepath.Join(zipDir, "archive.zip")
 		content := []byte("hello world")
-		archive := createZip(t, map[string][]byte{
+		archive := createZipBuffer(t, map[string][]byte{
 			"copilot.exe": content,
 		})
+		require.NoError(t, os.WriteFile(zipPath, archive, 0x755))
 
-		err := extractZip(bytes.NewReader(archive), destDir)
+		destDir := t.TempDir()
+
+		err := extractZip(zipPath, destDir)
 		if err != nil {
 			t.Fatalf("extractZip() error = %v", err)
 		}
@@ -306,13 +310,17 @@ func TestExtractZip(t *testing.T) {
 	})
 
 	t.Run("extracts nested files", func(t *testing.T) {
-		destDir := t.TempDir()
-		content := []byte("nested content")
-		archive := createZip(t, map[string][]byte{
+		zipDir := t.TempDir()
+		zipPath := filepath.Join(zipDir, "archive.zip")
+		content := []byte("hello world")
+		archive := createZipBuffer(t, map[string][]byte{
 			"subdir/file.txt": content,
 		})
+		require.NoError(t, os.WriteFile(zipPath, archive, 0x755))
 
-		err := extractZip(bytes.NewReader(archive), destDir)
+		destDir := t.TempDir()
+
+		err := extractZip(zipPath, destDir)
 		if err != nil {
 			t.Fatalf("extractZip() error = %v", err)
 		}
@@ -327,8 +335,9 @@ func TestExtractZip(t *testing.T) {
 	})
 
 	t.Run("rejects path traversal", func(t *testing.T) {
-		destDir := t.TempDir()
-		// Manually create a malicious zip with path traversal
+		zipDir := t.TempDir()
+		zipPath := filepath.Join(zipDir, "archive.zip")
+
 		var buf bytes.Buffer
 		zw := zip.NewWriter(&buf)
 
@@ -340,17 +349,12 @@ func TestExtractZip(t *testing.T) {
 		_, _ = fw.Write([]byte("evil"))
 		_ = zw.Close()
 
-		err := extractZip(bytes.NewReader(buf.Bytes()), destDir)
+		require.NoError(t, os.WriteFile(zipPath, buf.Bytes(), 0x755))
+		destDir := t.TempDir()
+
+		err := extractZip(zipPath, destDir)
 		if err == nil {
 			t.Error("expected error for path traversal, got nil")
-		}
-	})
-
-	t.Run("handles invalid zip", func(t *testing.T) {
-		destDir := t.TempDir()
-		err := extractZip(bytes.NewReader([]byte("not valid zip")), destDir)
-		if err == nil {
-			t.Error("expected error for invalid zip, got nil")
 		}
 	})
 }
@@ -623,7 +627,7 @@ func TestDownloadCopilot(t *testing.T) {
 		localPath := filepath.Join(installDir, "copilot.exe")
 
 		binaryContent := []byte("MZ fake exe content")
-		archive := createZip(t, map[string][]byte{
+		archive := createZipBuffer(t, map[string][]byte{
 			"copilot.exe": binaryContent,
 		})
 

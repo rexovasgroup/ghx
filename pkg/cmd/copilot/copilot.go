@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -195,17 +194,27 @@ func downloadCopilot(httpClient *http.Client, ios *iostreams.IOStreams, installD
 		return "", fmt.Errorf("download failed with status: %s", resp.Status)
 	}
 
-	// Read entire body to calculate checksum before extraction
-	archiveData, err := io.ReadAll(resp.Body)
+	// Download to temp file while calculating checksum
+	tmpFile, err := os.CreateTemp("", "copilot-download-*")
 	if err != nil {
-		return "", fmt.Errorf("failed to read download: %w", err)
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(tmpFile, io.TeeReader(resp.Body, hasher)); err != nil {
+		return "", fmt.Errorf("failed to download: %w", err)
 	}
 
 	// Validate checksum
-	actualChecksum := sha256.Sum256(archiveData)
-	actualChecksumHex := hex.EncodeToString(actualChecksum[:])
+	actualChecksumHex := hex.EncodeToString(hasher.Sum(nil))
 	if actualChecksumHex != expectedChecksum {
 		return "", fmt.Errorf("checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksumHex)
+	}
+
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("failed to seek temp file: %w", err)
 	}
 
 	if err := os.MkdirAll(installDir, 0755); err != nil {
@@ -213,11 +222,10 @@ func downloadCopilot(httpClient *http.Client, ios *iostreams.IOStreams, installD
 	}
 
 	// Extract from the downloaded data
-	archiveReader := bytes.NewReader(archiveData)
 	if isZip {
-		err = extractZip(archiveReader, installDir)
+		err = extractZip(tmpFile.Name(), installDir)
 	} else {
-		err = extractTarGz(archiveReader, installDir)
+		err = extractTarGz(tmpFile, installDir)
 	}
 	if err != nil {
 		return "", err
@@ -265,6 +273,9 @@ func fetchExpectedChecksum(client *http.Client, checksumsURL, archiveName string
 	return "", fmt.Errorf("checksum not found for %s", archiveName)
 }
 
+// extractTarGz reads a TAR.GZ archive from r and extracts its contents into destDir.
+// It returns an error if the archive cannot be read,
+// or if any file or directory within the archive cannot be created or written.
 func extractTarGz(r io.Reader, destDir string) error {
 	gzr, err := gzip.NewReader(r)
 	if err != nil {
@@ -342,27 +353,14 @@ func removeCopilotFromDir(installDir string) error {
 	return nil
 }
 
-// extractZip reads a ZIP archive from r and extracts its contents into destDir.
-// It returns an error if the archive cannot be read, written to a temporary file,
+// extractZip reads a ZIP archive at path and extracts its contents into destDir.
+// It returns an error if the archive cannot be read,
 // or if any file or directory within the archive cannot be created or written.
-func extractZip(r io.Reader, destDir string) error {
-	// Create a temporary file to store the zip content
-	tmpFile, err := os.CreateTemp("", "copilot-*.zip")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
-
-	if _, err := io.Copy(tmpFile, r); err != nil {
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-
-	zipReader, err := zip.OpenReader(tmpFile.Name())
+func extractZip(path, destDir string) error {
+	zipReader, err := zip.OpenReader(path)
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer zipReader.Close()
 
 	for _, f := range zipReader.File {
 		absPath, err := safepaths.ParseAbsolute(destDir)
