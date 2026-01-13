@@ -135,7 +135,6 @@ func ensureCopilot(httpClient *http.Client, io *iostreams.IOStreams) (string, er
 		return localPath, nil
 	}
 
-	// Download copilot
 	return downloadCopilot(httpClient, io, installDir, localPath)
 }
 
@@ -169,13 +168,11 @@ func downloadCopilot(httpClient *http.Client, ios *iostreams.IOStreams, installD
 
 	fmt.Fprintf(ios.ErrOut, "Downloading Copilot CLI from %s\n", archiveURL)
 
-	// Download checksums file
 	expectedChecksum, err := fetchExpectedChecksum(httpClient, checksumsURL, archiveName)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch checksums: %w", err)
 	}
 
-	// Download the archive
 	resp, err := httpClient.Get(archiveURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download: %w", err)
