@@ -626,12 +626,7 @@ func TestDownloadCopilot(t *testing.T) {
 		httpClient := &http.Client{Transport: reg}
 
 		_, err := downloadCopilot(httpClient, ios, installDir, localPath)
-		if err == nil {
-			t.Fatal("expected error for missing binary, got nil")
-		}
-		if !bytes.Contains([]byte(err.Error()), []byte("not found after extraction")) {
-			t.Errorf("expected 'not found after extraction' error, got: %v", err)
-		}
+		assert.ErrorContains(t, err, "copilot binary unavailable")
 	})
 
 	t.Run("downloads and extracts zip on windows", func(t *testing.T) {
