@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/MakeNowJust/heredoc"
@@ -47,7 +48,20 @@ func sanitizeArchivePath(destDir, entryName string) (string, error) {
 	return cleanTarget, nil
 }
 
-func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
+type CopilotOptions struct {
+	IO         *iostreams.IOStreams
+	HttpClient func() (*http.Client, error)
+
+	Args   []string
+	Remove bool
+}
+
+func NewCmdCopilot(f *cmdutil.Factory, runF func(*CopilotOptions) error) *cobra.Command {
+	opts := &CopilotOptions{
+		IO:         f.IOStreams,
+		HttpClient: f.HttpClient,
+	}
+
 	cmd := &cobra.Command{
 		Use:   "copilot [flags]",
 		Short: "Run the GitHub Copilot CLI",
@@ -64,10 +78,21 @@ func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
         `, filepath.Join(config.DataDir(), "copilot")),
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 && args[0] == "--remove" {
-				return removeCopilot(f.IOStreams)
+			if len(args) > 1 && slices.Contains(args, "--remove") {
+				return fmt.Errorf("cannot use --remove with args")
 			}
-			return runCopilot(f.HttpClient, f.IOStreams, args)
+
+			if len(args) > 0 && args[0] == "--remove" {
+				// We do not captures args when --remove is provided.
+				opts.Remove = true
+			} else {
+				opts.Args = args
+			}
+
+			if runF != nil {
+				return runF(opts)
+			}
+			return runCopilot(opts)
 		},
 	}
 
@@ -76,16 +101,32 @@ func NewCmdCopilot(f *cmdutil.Factory) *cobra.Command {
 	return cmd
 }
 
-func runCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStreams, args []string) error {
-	copilotPath, err := ensureCopilot(httpClient, io)
+func runCopilot(opts *CopilotOptions) error {
+	if opts.Remove {
+		if err := removeCopilot(); err != nil {
+			return err
+		}
+
+		if opts.IO.IsStdoutTTY() {
+			fmt.Fprintln(opts.IO.ErrOut, "Copilot CLI removed successfully")
+		}
+		return nil
+	}
+
+	httpClient, err := opts.HttpClient()
 	if err != nil {
 		return err
 	}
 
-	externalCmd := exec.Command(copilotPath, args...)
-	externalCmd.Stdin = io.In
-	externalCmd.Stdout = io.Out
-	externalCmd.Stderr = io.ErrOut
+	copilotPath, err := ensureCopilot(httpClient, opts.IO)
+	if err != nil {
+		return err
+	}
+
+	externalCmd := exec.Command(copilotPath, opts.Args...)
+	externalCmd.Stdin = opts.IO.In
+	externalCmd.Stdout = opts.IO.Out
+	externalCmd.Stderr = opts.IO.ErrOut
 
 	if err := externalCmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -96,7 +137,7 @@ func runCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStreams
 	return nil
 }
 
-func ensureCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStreams) (string, error) {
+func ensureCopilot(httpClient *http.Client, io *iostreams.IOStreams) (string, error) {
 	// First check if copilot is in PATH
 	if path, err := exec.LookPath(copilotBinaryName); err == nil {
 		return path, nil
@@ -118,7 +159,7 @@ func ensureCopilot(httpClient func() (*http.Client, error), io *iostreams.IOStre
 	return downloadCopilot(httpClient, io, installDir, localPath)
 }
 
-func downloadCopilot(httpClient func() (*http.Client, error), ios *iostreams.IOStreams, installDir, localPath string) (string, error) {
+func downloadCopilot(httpClient *http.Client, ios *iostreams.IOStreams, installDir, localPath string) (string, error) {
 	platform := runtime.GOOS
 	arch := runtime.GOARCH
 	if arch == "amd64" {
@@ -148,19 +189,14 @@ func downloadCopilot(httpClient func() (*http.Client, error), ios *iostreams.IOS
 
 	fmt.Fprintf(ios.ErrOut, "Downloading Copilot CLI from %s\n", archiveURL)
 
-	client, err := httpClient()
-	if err != nil {
-		return "", err
-	}
-
 	// Download checksums file
-	expectedChecksum, err := fetchExpectedChecksum(client, checksumsURL, archiveName)
+	expectedChecksum, err := fetchExpectedChecksum(httpClient, checksumsURL, archiveName)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch checksums: %w", err)
 	}
 
 	// Download the archive
-	resp, err := client.Get(archiveURL)
+	resp, err := httpClient.Get(archiveURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download: %w", err)
 	}
@@ -199,7 +235,7 @@ func downloadCopilot(httpClient func() (*http.Client, error), ios *iostreams.IOS
 	}
 
 	if _, err := os.Stat(localPath); err != nil {
-		return "", fmt.Errorf("copilot binary not found after extraction")
+		return "", fmt.Errorf("copilot binary unavailable: %w", err)
 	}
 
 	fmt.Fprintln(ios.ErrOut, "Copilot CLI installed successfully")
@@ -218,11 +254,12 @@ func fetchExpectedChecksum(client *http.Client, checksumsURL, archiveName string
 		return "", fmt.Errorf("failed to download checksums: %s", resp.Status)
 	}
 
-	// Parse the checksums file (format: "<checksum>  <filename>" or "<checksum> <filename>")
+	// Parse the checksums file. Possible formats are:
+	// - "<checksum>  <filename>" (two whitespaces)
+	// - "<checksum> <filename>"
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
-		// Split on whitespace - format is typically "<hash>  <filename>" (two spaces) or "<hash> <filename>"
 		fields := strings.Fields(line)
 		if len(fields) >= 2 {
 			checksum := fields[0]
@@ -293,22 +330,21 @@ func extractFile(target string, mode os.FileMode, r io.Reader) (err error) {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 	return nil
+
 }
 
-func removeCopilot(io *iostreams.IOStreams) error {
+func removeCopilot() error {
 	installDir := filepath.Join(config.DataDir(), "copilot")
-	return removeCopilotFromDir(io, installDir)
+	return removeCopilotFromDir(installDir)
 }
 
-func removeCopilotFromDir(io *iostreams.IOStreams, installDir string) error {
+func removeCopilotFromDir(installDir string) error {
 	if _, err := os.Stat(installDir); os.IsNotExist(err) {
-		fmt.Fprintln(io.ErrOut, "Copilot CLI is not installed")
 		return nil
 	}
 	if err := os.RemoveAll(installDir); err != nil {
 		return fmt.Errorf("failed to remove Copilot CLI: %w", err)
 	}
-	fmt.Fprintln(io.ErrOut, "Copilot CLI removed successfully")
 	return nil
 }
 

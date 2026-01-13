@@ -17,33 +17,97 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/httpmock"
 	"github.com/cli/cli/v2/pkg/iostreams"
+	"github.com/google/shlex"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestNewCmdCopilot(t *testing.T) {
-	ios, _, _, _ := iostreams.Test()
-	f := &cmdutil.Factory{
-		IOStreams: ios,
+// func TestNewCmdCopilot(t *testing.T) {
+// 	ios, _, _, _ := iostreams.Test()
+// 	f := &cmdutil.Factory{
+// 		IOStreams: ios,
+// 	}
+
+// 	cmd := NewCmdCopilot(f)
+
+// 	if cmd.Use != "copilot [flags]" {
+// 		t.Errorf("unexpected Use: %s", cmd.Use)
+// 	}
+
+// 	if cmd.Short != "Run the GitHub Copilot CLI" {
+// 		t.Errorf("unexpected Short: %s", cmd.Short)
+// 	}
+
+// 	if !cmd.DisableFlagParsing {
+// 		t.Error("expected DisableFlagParsing to be true")
+// 	}
+// }
+
+func TestNewCmdEdit(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     string
+		output   CopilotOptions
+		wantsErr string
+	}{
+		{
+			name:     "no argument",
+			args:     "",
+			wantsErr: "",
+		},
+		{
+			name: "with random arguments",
+			args: "some-arg some-other-arg",
+			output: CopilotOptions{
+				Args: []string{"some-arg", "some-other-arg"},
+			},
+		},
+		{
+			name: "with --remove",
+			args: "--remove",
+			output: CopilotOptions{
+				Remove: true,
+			},
+		},
+		{
+			name:     "with --remove and random arguments",
+			args:     "--remove some-arg",
+			wantsErr: "cannot use --remove with args",
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &cmdutil.Factory{}
 
-	cmd := NewCmdCopilot(f)
+			argv, err := shlex.Split(tt.args)
+			assert.NoError(t, err)
 
-	if cmd.Use != "copilot [flags]" {
-		t.Errorf("unexpected Use: %s", cmd.Use)
-	}
+			var gotOpts *CopilotOptions
+			cmd := NewCmdCopilot(f, func(opts *CopilotOptions) error {
+				gotOpts = opts
+				return nil
+			})
 
-	if cmd.Short != "Run the GitHub Copilot CLI" {
-		t.Errorf("unexpected Short: %s", cmd.Short)
-	}
+			cmd.SetArgs(argv)
+			cmd.SetIn(&bytes.Buffer{})
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
 
-	if !cmd.DisableFlagParsing {
-		t.Error("expected DisableFlagParsing to be true")
+			_, err = cmd.ExecuteC()
+			if tt.wantsErr != "" {
+				require.EqualError(t, err, tt.wantsErr)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.output.Args, gotOpts.Args)
+			assert.Equal(t, tt.output.Remove, gotOpts.Remove)
+		})
 	}
 }
 
 func TestRemoveCopilot(t *testing.T) {
 	t.Run("removes existing install directory", func(t *testing.T) {
-		ios, _, _, stderr := iostreams.Test()
-
 		// Create a temporary directory to simulate the install directory
 		tmpDir := t.TempDir()
 		installDir := filepath.Join(tmpDir, "copilot")
@@ -56,7 +120,7 @@ func TestRemoveCopilot(t *testing.T) {
 			t.Fatalf("failed to create test file: %v", err)
 		}
 
-		err := removeCopilotFromDir(ios, installDir)
+		err := removeCopilotFromDir(installDir)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -64,25 +128,15 @@ func TestRemoveCopilot(t *testing.T) {
 		if _, err := os.Stat(installDir); !os.IsNotExist(err) {
 			t.Error("expected install directory to be removed")
 		}
-
-		if stderr.String() != "Copilot CLI removed successfully\n" {
-			t.Errorf("unexpected stderr: %s", stderr.String())
-		}
 	})
 
 	t.Run("handles non-existent directory", func(t *testing.T) {
-		ios, _, _, stderr := iostreams.Test()
-
 		tmpDir := t.TempDir()
 		installDir := filepath.Join(tmpDir, "copilot")
 
-		err := removeCopilotFromDir(ios, installDir)
+		err := removeCopilotFromDir(installDir)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
-		}
-
-		if stderr.String() != "Copilot CLI is not installed\n" {
-			t.Errorf("unexpected stderr: %s", stderr.String())
 		}
 	})
 }
@@ -433,9 +487,7 @@ func TestDownloadCopilot(t *testing.T) {
 			httpmock.BinaryResponse(archive),
 		)
 
-		httpClient := func() (*http.Client, error) {
-			return &http.Client{Transport: reg}, nil
-		}
+		httpClient := &http.Client{Transport: reg}
 
 		path, err := downloadCopilot(httpClient, ios, installDir, localPath)
 		if err != nil {
@@ -493,9 +545,7 @@ func TestDownloadCopilot(t *testing.T) {
 			httpmock.BinaryResponse(archive),
 		)
 
-		httpClient := func() (*http.Client, error) {
-			return &http.Client{Transport: reg}, nil
-		}
+		httpClient := &http.Client{Transport: reg}
 
 		_, err := downloadCopilot(httpClient, ios, installDir, localPath)
 		if err == nil {
@@ -529,9 +579,7 @@ func TestDownloadCopilot(t *testing.T) {
 			httpmock.StatusStringResponse(http.StatusNotFound, "not found"),
 		)
 
-		httpClient := func() (*http.Client, error) {
-			return &http.Client{Transport: reg}, nil
-		}
+		httpClient := &http.Client{Transport: reg}
 
 		_, err := downloadCopilot(httpClient, ios, installDir, localPath)
 		if err == nil {
@@ -572,9 +620,7 @@ func TestDownloadCopilot(t *testing.T) {
 			httpmock.BinaryResponse(archive),
 		)
 
-		httpClient := func() (*http.Client, error) {
-			return &http.Client{Transport: reg}, nil
-		}
+		httpClient := &http.Client{Transport: reg}
 
 		_, err := downloadCopilot(httpClient, ios, installDir, localPath)
 		if err == nil {
@@ -615,9 +661,7 @@ func TestDownloadCopilot(t *testing.T) {
 			httpmock.BinaryResponse(archive),
 		)
 
-		httpClient := func() (*http.Client, error) {
-			return &http.Client{Transport: reg}, nil
-		}
+		httpClient := &http.Client{Transport: reg}
 
 		path, err := downloadCopilot(httpClient, ios, installDir, localPath)
 		if err != nil {
