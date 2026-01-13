@@ -56,6 +56,10 @@ func NewCmdCopilot(f *cmdutil.Factory, runF func(*CopilotOptions) error) *cobra.
         `, copilotBinaryPath()),
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if slices.Contains(args, "--help") || slices.Contains(args, "-h") {
+				return cmd.Help()
+			}
+
 			if len(args) > 1 && slices.Contains(args, "--remove") {
 				return fmt.Errorf("cannot use --remove with args")
 			}
@@ -75,6 +79,10 @@ func NewCmdCopilot(f *cmdutil.Factory, runF func(*CopilotOptions) error) *cobra.
 	}
 
 	cmdutil.DisableAuthCheck(cmd)
+
+	// We add this flag, even though flag parsing is disabled for this command
+	// so the flag still appears in the help text.
+	cmd.Flags().Bool("remove", false, "Remove the downloaded Copilot CLI")
 
 	return cmd
 }

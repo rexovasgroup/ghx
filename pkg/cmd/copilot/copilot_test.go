@@ -45,37 +45,44 @@ import (
 
 func TestNewCmdCopilot(t *testing.T) {
 	tests := []struct {
-		name     string
-		args     string
-		output   CopilotOptions
-		wantsErr string
+		name          string
+		args          string
+		wantOpts      CopilotOptions
+		wantErrString string
+		wantHelp      bool
 	}{
 		{
 			name: "no argument",
 			args: "",
-			output: CopilotOptions{
+			wantOpts: CopilotOptions{
 				Args: []string{},
 			},
-			wantsErr: "",
+			wantErrString: "",
 		},
 		{
 			name: "with random arguments",
 			args: "some-arg some-other-arg",
-			output: CopilotOptions{
+			wantOpts: CopilotOptions{
 				Args: []string{"some-arg", "some-other-arg"},
 			},
 		},
 		{
 			name: "with --remove",
 			args: "--remove",
-			output: CopilotOptions{
+			wantOpts: CopilotOptions{
 				Remove: true,
 			},
 		},
 		{
-			name:     "with --remove and random arguments",
-			args:     "--remove some-arg",
-			wantsErr: "cannot use --remove with args",
+			name:          "with --remove and random arguments",
+			args:          "--remove some-arg",
+			wantErrString: "cannot use --remove with args",
+		},
+		{
+			name:          "with --help, shows help",
+			args:          "--help",
+			wantErrString: "",
+			wantHelp:      true,
 		},
 	}
 	for _, tt := range tests {
@@ -97,14 +104,19 @@ func TestNewCmdCopilot(t *testing.T) {
 			cmd.SetErr(&bytes.Buffer{})
 
 			_, err = cmd.ExecuteC()
-			if tt.wantsErr != "" {
-				require.EqualError(t, err, tt.wantsErr)
+			if tt.wantErrString != "" {
+				require.EqualError(t, err, tt.wantErrString)
+				return
+			}
+
+			if tt.wantHelp {
+				require.NoError(t, err)
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.output.Args, gotOpts.Args)
-			assert.Equal(t, tt.output.Remove, gotOpts.Remove)
+			assert.Equal(t, tt.wantOpts.Args, gotOpts.Args)
+			assert.Equal(t, tt.wantOpts.Remove, gotOpts.Remove)
 		})
 	}
 }
