@@ -143,9 +143,11 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 	cmd.AddCommand(sshKeyCmd.NewCmdSSHKey(f))
 	cmd.AddCommand(statusCmd.NewCmdStatus(f, nil))
 	cmd.AddCommand(codespaceCmd.NewCmdCodespace(f))
-	cmd.AddCommand(copilotCmd.NewCmdCopilot(f))
 	cmd.AddCommand(projectCmd.NewCmdProject(f))
 	cmd.AddCommand(previewCmd.NewCmdPreview(f))
+	
+	// Root commands with standalone functionality and no subcommands
+	cmd.AddCommand(copilotCmd.NewCmdCopilot(f, nil))
 
 	// below here at the commands that require the "intelligent" BaseRepo resolver
 	repoResolvingCmdFactory := *f
