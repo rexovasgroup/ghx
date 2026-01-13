@@ -20,33 +20,13 @@ import (
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/internal/config"
+	"github.com/cli/cli/v2/internal/safepaths"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/spf13/cobra"
 )
 
 const copilotBinaryName = "copilot"
-
-// sanitizeArchivePath validates that the archive entry path is safe and returns
-// the cleaned target path. It prevents Zip Slip attacks by ensuring the path
-// doesn't escape the destination directory.
-func sanitizeArchivePath(destDir, entryName string) (string, error) {
-	target := filepath.Join(destDir, entryName)
-
-	cleanDest := filepath.Clean(destDir)
-	cleanTarget := filepath.Clean(target)
-
-	rel, err := filepath.Rel(cleanDest, cleanTarget)
-	if err != nil {
-		return "", fmt.Errorf("illegal file path in archive: %s", entryName)
-	}
-
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("illegal file path in archive: %s", entryName)
-	}
-
-	return cleanTarget, nil
-}
 
 type CopilotOptions struct {
 	IO         *iostreams.IOStreams
@@ -293,10 +273,15 @@ func extractTarGz(r io.Reader, destDir string) error {
 			return fmt.Errorf("failed to read tar: %w", err)
 		}
 
-		target, err := sanitizeArchivePath(destDir, header.Name)
+		absPath, err := safepaths.ParseAbsolute(destDir)
 		if err != nil {
 			return err
 		}
+		absPath, err = absPath.Join(header.Name)
+		if err != nil {
+			return err
+		}
+		target := absPath.String()
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -371,10 +356,15 @@ func extractZip(r io.Reader, destDir string) error {
 	defer zipReader.Close()
 
 	for _, f := range zipReader.File {
-		target, err := sanitizeArchivePath(destDir, f.Name)
+		absPath, err := safepaths.ParseAbsolute(destDir)
 		if err != nil {
 			return err
 		}
+		absPath, err = absPath.Join(f.Name)
+		if err != nil {
+			return err
+		}
+		target := absPath.String()
 
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0755); err != nil {

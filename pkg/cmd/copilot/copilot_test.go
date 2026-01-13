@@ -144,55 +144,6 @@ func TestRemoveCopilot(t *testing.T) {
 	})
 }
 
-func TestSanitizeArchivePath(t *testing.T) {
-	tests := []struct {
-		name      string
-		destDir   string
-		entryName string
-		wantErr   bool
-	}{
-		{
-			name:      "valid simple path",
-			destDir:   "/tmp/dest",
-			entryName: "file.txt",
-			wantErr:   false,
-		},
-		{
-			name:      "valid nested path",
-			destDir:   "/tmp/dest",
-			entryName: "subdir/file.txt",
-			wantErr:   false,
-		},
-		{
-			name:      "path traversal attack",
-			destDir:   "/tmp/dest",
-			entryName: "../etc/passwd",
-			wantErr:   true,
-		},
-		{
-			name:      "nested path traversal attack",
-			destDir:   "/tmp/dest",
-			entryName: "subdir/../../etc/passwd",
-			wantErr:   true,
-		},
-		{
-			name:      "absolute path becomes relative",
-			destDir:   "/tmp/dest",
-			entryName: "/etc/passwd",
-			wantErr:   false, // filepath.Join makes "/tmp/dest" + "/etc/passwd" -> "/tmp/dest/etc/passwd"
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := sanitizeArchivePath(tt.destDir, tt.entryName)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("sanitizeArchivePath() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
 // createTarGz creates a tar.gz archive in memory with the given files.
 func createTarGz(t *testing.T, files map[string][]byte) []byte {
 	t.Helper()
@@ -360,6 +311,26 @@ func TestExtractZip(t *testing.T) {
 		}
 		if !bytes.Equal(extracted, content) {
 			t.Errorf("extracted content = %q, want %q", extracted, content)
+		}
+	})
+
+	t.Run("rejects path traversal", func(t *testing.T) {
+		destDir := t.TempDir()
+		// Manually create a malicious zip with path traversal
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+
+		fh := &zip.FileHeader{
+			Name:   "../evil.txt",
+			Method: zip.Store,
+		}
+		fw, _ := zw.CreateHeader(fh)
+		_, _ = fw.Write([]byte("evil"))
+		_ = zw.Close()
+
+		err := extractZip(bytes.NewReader(buf.Bytes()), destDir)
+		if err == nil {
+			t.Error("expected error for path traversal, got nil")
 		}
 	})
 
