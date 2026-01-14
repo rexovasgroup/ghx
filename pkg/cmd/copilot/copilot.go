@@ -53,6 +53,8 @@ func NewCmdCopilot(f *cmdutil.Factory, runF func(*CopilotOptions) error) *cobra.
 
             Use %[1]s--remove%[1]s to remove the downloaded Copilot CLI.
 
+			This command is supported on Linux, Darwin, and Windows.
+
             Learn more at https://gh.io/copilot-cli
         `, "`", copilotBinaryPath()),
 		DisableFlagParsing: true,
