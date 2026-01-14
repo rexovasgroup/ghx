@@ -155,6 +155,9 @@ func ensureCopilot(httpClient *http.Client, io *iostreams.IOStreams) (string, er
 	return downloadCopilot(httpClient, io, installDir, localPath)
 }
 
+
+// downloadCopilot downloads and installs the Copilot CLI to installDir.
+// It returns the path to the installed Copilot binary.
 func downloadCopilot(httpClient *http.Client, ios *iostreams.IOStreams, installDir, localPath string) (string, error) {
 	platform := runtime.GOOS
 	arch := runtime.GOARCH
