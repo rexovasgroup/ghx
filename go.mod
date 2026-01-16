@@ -2,7 +2,7 @@ module github.com/cli/cli/v2
 
 go 1.25.0
 
-toolchain go1.25.5
+toolchain go1.25.6
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
