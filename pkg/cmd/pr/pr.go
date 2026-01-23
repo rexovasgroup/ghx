@@ -65,7 +65,7 @@ func NewCmdPR(f *cmdutil.Factory) *cobra.Command {
 		cmdClose.NewCmdClose(f, nil),
 		cmdReopen.NewCmdReopen(f, nil),
 		cmdRevert.NewCmdRevert(f, nil),
-		cmdEdit.NewCmdEdit(f, nil),
+		cmdEdit.NewCmdEditVersioned(f, nil),
 		cmdLock.NewCmdLock(f, cmd.Name(), nil),
 		cmdLock.NewCmdUnlock(f, cmd.Name(), nil),
 	)
