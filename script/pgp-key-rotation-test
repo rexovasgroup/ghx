@@ -1,0 +1,445 @@
+#!/bin/bash
+
+# Enable strict mode
+set -eo pipefail
+
+SCRIPT=$(basename "$0")
+DEB_ARCHITECTURES=("i386" "amd64" "arm64" "armhf")
+RPM_ARCHITECTURES=("i386" "x86_64" "amd64" "arm64" "armhf")
+
+# Check if DEBUG is set to true or 1, enable debug print statements if so
+if [[ "$DEBUG" == "true" || "$DEBUG" == "1" ]]; then
+  set -x
+fi
+
+# Default artifacts directory
+ARTIFACTS_DIR="$(pwd)/repo-test"
+
+bold() {
+  echo -e "\033[1m$1\033[0m"
+}
+
+header() {
+  echo
+  echo "================================================================================"
+  bold "$1"
+}
+
+# Function to prompt user to continue to the next step with explanations
+prompt_continue() {
+  echo
+  read -p "Press Enter to continue..."
+}
+
+setup() {
+  header "> Installing prerequisites"
+  
+  if ! command -v sudo &> /dev/null; then
+    # This is to make sure the script runs on both containers and VMs.
+    apt-get update
+    apt-get install -y sudo
+  fi
+
+  sudo apt-get update
+  sudo apt-get install --no-upgrade -y curl busybox gpg tree reprepro rpm createrepo-c
+
+  if [ ! -d "$ARTIFACTS_DIR" ]; then
+    echo "Directory does not exist. Creating $ARTIFACTS_DIR..."
+    mkdir -p "$ARTIFACTS_DIR"
+    echo "Directory $ARTIFACTS_DIR created."
+  else
+    echo "Directory $ARTIFACTS_DIR already exists."
+  fi
+}
+
+server() {
+  mkdir -p "$ARTIFACTS_DIR"
+  cd "$ARTIFACTS_DIR"
+
+  # Serve apt and rpm repo directories over HTTP
+  busybox httpd -p 8085 # runs in background by default
+  echo "HTTP server started at http://localhost:8085"
+
+  header "> 1. Create a PGP key that expires in 1 minute (K1)"
+  prompt_continue
+
+  echo "%echo Generating an example PGP key
+Key-Type: RSA
+Key-Length: 4096
+Key-Usage: sign
+Name-Real: example-key-1
+Name-Email: example@example.com
+Expire-Date: seconds=$((1 * 15))
+%no-ask-passphrase
+%no-protection
+%commit" > example-pgp-key-1.batch
+
+  mkdir -m 700 -p "$ARTIFACTS_DIR/temp-gpg-home"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --no-tty --batch --gen-key example-pgp-key-1.batch
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+  #GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export --export-options export-minimal > pgp-key.gpg # Binary version
+
+  KEY1_FINGERPRINT="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --list-options show-only-fpr-mbox | cut -f1 -d' ' | head -n 1)"
+  echo -n "$KEY1_FINGERPRINT" > "$ARTIFACTS_DIR/key1-fingerprint"
+
+  echo "Generated PGP key with fingerprint: $KEY1_FINGERPRINT"
+  echo "https://localhost:8085/pgp-key.gpg"
+
+  header "> 2. Release hello-world v0 (signed with K1)"
+  prompt_continue
+
+  created_debs=($(build_debs "$ARTIFACTS_DIR" "0.0.0"))
+  created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.0"))
+  sign_rpms "$KEY1_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  mkdir -p "$ARTIFACTS_DIR/apt-repo" "$ARTIFACTS_DIR/rpm-repo"
+  
+  create_apt_repo "$ARTIFACTS_DIR/apt-repo" "0.0.0" "$KEY1_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_debs[@]}"
+  create_rpm_repo "$ARTIFACTS_DIR/rpm-repo" "0.0.0" "$KEY1_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  # Create repo configuration file for dnf/yum. We need to this only once.
+  echo "[example-repo]
+name=Example Repo
+baseurl=http://localhost:8085/rpm-repo
+enabled=1
+gpgcheck=1
+gpgkey=http://localhost:8085/pgp-key.gpg
+
+# Test only fields:
+# We can enable GPG check for repository metadata; we don't have this in our provided .repo file so it's kept disabled to mimic the actual repo.
+repo_gpgcheck=0
+# (5 seconds). This is to make dnf/yum fetch new metadata when running 'dnf update' and eliminate the need to add '--refresh'. The default is 48 hours which is too much for the purpose of this PoC.
+metadata_expire=5
+" > "$ARTIFACTS_DIR/rpm-repo/example.repo"
+
+  header "> 3. Add a new PGP key to the keyring that expires in 15 mins (K1 + K2)"
+  prompt_continue
+
+  existing_keys_list="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons)"
+
+  echo "%echo Generating an example PGP key
+Key-Type: RSA
+Key-Length: 4096
+Key-Usage: sign
+Name-Real: example-key-2
+Name-Email: example@example.com
+Expire-Date: seconds=$((15 * 60))
+%no-ask-passphrase
+%no-protection
+%commit" > example-pgp-key-2.batch
+
+  mkdir -m 700 -p "$ARTIFACTS_DIR/temp-gpg-home"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --no-tty --batch --gen-key example-pgp-key-2.batch
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+  #GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export --export-options export-minimal > pgp-key.gpg # Binary version
+
+  new_keys_list="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons)"
+  added_key="$(comm -1 -3 <(echo "$existing_keys_list" | sort) <(echo "$new_keys_list" | sort))"
+  KEY2_FINGERPRINT="$(echo "$added_key" | grep -E "^fpr:" | cut -f10 -d: | head -n1)"
+  echo -n "$KEY2_FINGERPRINT" > "$ARTIFACTS_DIR/key2-fingerprint"
+  echo "Generated PGP key with fingerprint: $KEY2_FINGERPRINT"
+  echo "https://localhost:8085/pgp-key.gpg"
+
+  header "> 4. Ship hello-world v1 (signed with K1, but not K2)"
+  prompt_continue
+
+  created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.1"))
+  created_debs=($(build_debs "$ARTIFACTS_DIR" "0.0.1"))
+  sign_rpms "$KEY1_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  create_apt_repo "$ARTIFACTS_DIR/apt-repo" "0.0.1" "$KEY1_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_debs[@]}"
+  create_rpm_repo "$ARTIFACTS_DIR/rpm-repo" "0.0.1" "$KEY1_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  header "> 5. Wait for K1 to expire"
+  prompt_continue
+
+  expiry_date="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons --fingerprint $KEY1_FINGERPRINT | grep -E "^pub:" | cut -f7 -d:)"
+  current_date="$(date +%s)"
+
+  if [ "$expiry_date" -gt "$current_date" ]; then
+    SLEEP=$(( $expiry_date - $current_date + 2 ))
+    bold "Sleeping $SLEEP seconds to allow the old/first key to expire."
+    sleep $SLEEP
+  fi
+
+  header "> 6. Drop K1 AND release hello-world v2 (signed with K2) at the same time"
+  prompt_continue
+
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --batch --yes --delete-secret-and-public-key "$KEY1_FINGERPRINT"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+
+  created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.2"))
+  created_debs=($(build_debs "$ARTIFACTS_DIR" "0.0.2"))
+  sign_rpms "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  create_apt_repo "$ARTIFACTS_DIR/apt-repo" "0.0.2" "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_debs[@]}"
+  create_rpm_repo "$ARTIFACTS_DIR/rpm-repo" "0.0.2" "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+}
+
+# args <key-fp> <gpg-home> <created_rpm>...
+sign_rpms() {
+  key_fp="$1"
+  gpg_home="$2"
+  shift 2
+  created_rpms=("$@")
+
+  for created_rpm in "${created_rpms[@]}"; do
+    # Here we mimic the same signing process as in our release workflow. That is
+    # we only sign the RPM with one key. With RPM v6 (available since Fedora 43)
+    # we can actually sign with multiple keys (in a backwards compatible way), but
+    # the problem is dnf/yum doesn't support that (i.e. `dnf install` or `dnf update`
+    # fail if the RPM file has multiple signatures in it).
+    #
+    # So, we keep signing the RPMs only with the eldest key.
+    GNUPGHOME="$gpg_home" rpmsign --addsign -D "%__gpg $(which gpg)" -D "%_gpg_name $key_fp" "$created_rpm"
+    # If we wanted to add an RPM v6 signature tag we would also do (note the --rpmv6 flag):
+    # GNUPGHOME="$gpg_home" rpmsign --addsign --rpmv6 -D "%__gpg $(which gpg)" -D "%_gpg_name $key_fp" "$created_rpm"
+
+    # Inspect the RPM package
+    # rpm -qiplv "$created_rpm"
+  done
+}
+
+# args <output-directory> <version> <key-fingerprint> <gpg-home> <created-debs>...
+create_apt_repo() {
+  outdir="$1"
+  version="$2"
+  key_fp="$3"
+  gpg_home="$4"
+  shift 4
+  created_debs=("$@")
+
+  builddir="$outdir/apt-repo-build-temp-$version"
+  mkdir -p "$builddir"
+
+  mkdir -p "$builddir/build/conf"
+  # make reprepro config
+  cat <<EOF > "$builddir/build/conf/distributions"
+Origin: Example Repository
+Label: Example
+Codename: stable
+Architectures: ${DEB_ARCHITECTURES[@]}
+Components: main
+Description: An example software repository
+SignWith: ${key_fp}
+EOF
+
+  pushd "$builddir/build" > /dev/null
+  for created_deb in "${created_debs[@]}"; do 
+    GNUPGHOME="$gpg_home" reprepro includedeb stable "$created_deb"
+  done
+  cp -a dists/ pool/ "$outdir"
+  popd > /dev/null
+
+  rm -rf "$builddir"
+}
+
+# args <output-directory> <version> <key-fingerprint> <gpg-home> <created-rpms>...
+create_rpm_repo() {
+  outdir="$1"
+  version="$2"
+  key_fp="$3"
+  gpg_home="$4"
+  shift 4
+  created_rpms=("$@")
+
+  builddir="$outdir/rpm-repo-build-temp-$version"
+  mkdir -p "$builddir"
+
+  # This is to mimic the way we make our RPM repo in the release workflow.
+  cp -a "${created_rpms[@]}" "$outdir"
+  mkdir -p "$builddir/temp-createrepo-1"
+  cp "${created_rpms[@]}" "$builddir/temp-createrepo-1"
+
+  pushd "$builddir/temp-createrepo-1" > /dev/null
+  # In our workflow we use createrepo_c v0.
+  # Note that when we install createrepo_c on newer RPM-based distros we get v1, but on Debian/Ubuntu,
+  # `apt install createrepo_c` installs `v0`.
+  #
+  # With v1 we need to provide the --compatibility flag to keep the same metadata format/compression.
+  #
+  # Since this script is meant to run on Debian/Ubuntu images, we can safely drop the --compatibility option.
+  createrepo_c .
+  popd > /dev/null
+  cp -r "$builddir/temp-createrepo-1/repodata" "$outdir"
+
+  # Sign the repository
+  GNUPGHOME="$gpg_home" gpg --yes --detach-sign --armor --default-key "$key_fp" "$outdir/repodata/repomd.xml"
+
+  rm -rf "$builddir"
+}
+
+# Build hello world DEBs for given version.
+# Arguments: <output-directory> <version>
+build_debs() {
+  outdir="$1"
+  version="$2"
+  created_debs=()
+
+  for arch in "${DEB_ARCHITECTURES[@]}"; do
+    PACKAGE_DIR="$outdir/deb-hello-world-$version-1.$arch"
+    mkdir -p "$PACKAGE_DIR"
+
+    mkdir -p "$PACKAGE_DIR/content/usr/bin"
+    cat << EOF > "$PACKAGE_DIR/content/usr/bin/hello-world"
+#!/bin/bash
+echo "hello world ($version on $arch)"
+EOF
+    chmod +x "$PACKAGE_DIR/content/usr/bin/hello-world"
+
+    # Create DEBIAN control file
+    mkdir -p "$PACKAGE_DIR/content/DEBIAN"
+    # The "Section:" and "Priority:" values are to make the deb files similar to what
+    # we build in our CI. Also, omitting them from here will result in reprepro failure.
+    echo "Package: hello-world
+Version: $version
+Maintainer: example <example@example.com>
+Architecture: $arch
+Section:
+Priority: optional
+Homepage: http://example.com
+Description: A statically compiled Go program that prints hello" > "$PACKAGE_DIR/content/DEBIAN/control"
+
+    # Build the deb package
+    debfile="hello-world_$version-1_$arch.deb"
+    pushd "$PACKAGE_DIR" > /dev/null
+    dpkg --build content "$outdir/$debfile" &> /dev/null
+    popd > /dev/null
+
+    # Inspect the deb package
+    # dpkg-deb --info hello-world_0.0.1-1_$arch.deb
+    # dpkg-deb --contents hello-world_0.0.1-1_$arch.deb
+
+    created_debs+=("$outdir/$debfile")
+  done
+
+  echo "${created_debs[@]}"
+}
+
+# Build hello world RPMs for given version.
+# Arguments: <output-directory> <version>
+build_rpms() {
+  outdir="$1"
+  version="$2"
+  created_rpms=()
+
+  for arch in "${RPM_ARCHITECTURES[@]}"; do
+    PACKAGE_DIR="$outdir/rpm-hello-world-$version-1.$arch"
+    mkdir -p "$PACKAGE_DIR"
+
+    cat << EOF > "$PACKAGE_DIR/hello-world"
+#!/bin/bash
+echo "hello world ($version on $arch)"
+EOF
+    chmod +x "$PACKAGE_DIR/hello-world"
+
+    echo "Summary: A simple program that prints hello
+Name: hello-world
+Version: $version
+Release: 1
+Epoch: 0
+URL: https://example.com
+License: MIT
+Packager: Example Team
+Requires: bash
+BuildRoot: "$PACKAGE_DIR"
+
+%description
+An example package containing a hello-world binary
+
+%install
+mkdir -p %{buildroot}/usr/bin/
+cp "$PACKAGE_DIR/hello-world" %{buildroot}/usr/bin/hello-world
+
+%files
+/usr/bin/hello-world
+" > "$PACKAGE_DIR/hello-world.spec"
+
+    # Build the rpm package
+    pushd "$PACKAGE_DIR" > /dev/null
+    rpmbuild --target "$arch" --quiet -bb hello-world.spec &> /dev/null
+    popd > /dev/null
+    cp ~/rpmbuild/RPMS/$arch/hello-world-$version-1.$arch.rpm "$outdir"
+
+    # Inspect the RPM package
+    # rpm -qiplv "$created_rpm"
+
+    created_rpms+=("$outdir/hello-world-$version-1.$arch.rpm")
+  done
+
+  echo "${created_rpms[@]}"
+}
+
+
+teardown() {
+  # Kill the HTTP server if it's running
+  if pgrep -f "busybox httpd" > /dev/null; then
+    header "Stopping the HTTP server..."
+    sudo pkill -f "busybox httpd"
+    echo "Server stopped."
+  fi
+
+  header "Removing any installed PGP keyring..."
+  sudo rpmkeys --delete $(sudo rpmkeys --list | grep -i example | cut -f1 -d' ') || echo "(No keys to delete)"
+
+  # Kill gpg-agent
+  if pgrep "^gpg-agent" > /dev/null; then
+    header "Stopping the GPG agent..."
+    sudo pkill "^gpg-agent"
+    echo "GPG agent stopped."
+  fi
+
+  # Remove the artifacts directory
+  if [ -d "$ARTIFACTS_DIR" ]; then
+    header "Removing the artifacts directory: $ARTIFACTS_DIR"
+    rm -rf "$ARTIFACTS_DIR"
+    echo "Artifacts directory removed."
+  fi
+
+  # Remove built RPMs
+  if [ -d ~/rpmbuild/RPMS ]; then
+    header "Removing built RPMs: ~/rpmbuild/RPMS/*"
+    rm -rf ~/rpmbuild/RPMS/*
+    echo "Built RPMs removed."
+  fi
+
+  echo "Cleanup complete."
+}
+
+
+
+# Check for the setup or teardown argument
+if [ "$1" == "docker_setup" ]; then
+  docker_setup
+elif [ "$1" == "setup" ]; then
+  setup
+elif [ "$1" == "server" ]; then
+  server
+elif [ "$1" == "teardown" ]; then
+  teardown
+elif [ "$1" == "docker_teardown" ]; then
+  docker_teardown
+else
+  echo "
+$(bold "PGP key rotation test script")
+
+Usage: $SCRIPT TARGET
+
+The following targets are typical order used to setup and exercise the GitHub CLI RPM packaging process:
+
+- $(bold docker_setup):     create Docker container for testing environment
+- $(bold setup):            create initial RPM repository, create and sign sample application package
+- $(bold server):           start a local HTTP server to serve the repositories (DEB and RPM)
+- $(bold docker_teardown):  stop and remove Docker container
+"
+  exit 1
+fi
