@@ -80,7 +80,11 @@ Expire-Date: seconds=$((1 * 60))
   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.asc # ASCII version
   #GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export --export-options export-minimal > pgp-key.gpg # Binary version
+
+  # Old yum versions (e.g. on `amazonlinux:2.0.20201218.1`) do not play well with binary GPG files, that's why we have
+  # to ship the ASCII armored version as well.
 
   KEY1_FINGERPRINT="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --list-options show-only-fpr-mbox | cut -f1 -d' ' | head -n 1)"
   echo -n "$KEY1_FINGERPRINT" > "$ARTIFACTS_DIR/key1-fingerprint"
@@ -103,7 +107,7 @@ name=Example Repo
 baseurl=http://localhost:8085/rpm-repo
 enabled=1
 gpgcheck=1
-gpgkey=http://localhost:8085/pgp-key.gpg
+gpgkey=http://localhost:8085/pgp-key.asc
 
 # Test only fields:
 # We can enable GPG check for repository metadata; we don't have this in our provided .repo file so it's kept disabled to mimic the actual repo.
@@ -134,12 +138,24 @@ Expire-Date: seconds=$((15 * 60))
   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+  # We won't export like this now due to yum limits; see below.
+  #GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.asc # ASCII version
   #GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export --export-options export-minimal > pgp-key.gpg # Binary version
 
   new_keys_list="$(GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys --with-colons)"
   added_key="$(comm -1 -3 <(echo "$existing_keys_list" | sort) <(echo "$new_keys_list" | sort))"
   KEY2_FINGERPRINT="$(echo "$added_key" | grep -E "^fpr:" | cut -f10 -d: | head -n1)"
   echo -n "$KEY2_FINGERPRINT" > "$ARTIFACTS_DIR/key2-fingerprint"
+
+  # we should concat individual pub-key armored exports, because old yum (e.g. on `amazonlinux:2.0.20201218.1`) does not
+  # support armored ASCII files with a single armored entry that contains more than one key. For this to work we should
+  # have individual ASCII armored entries (each for one key). This is important because it's crucial for our rollout
+  # process to have both keys available.
+
+  # GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.asc # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export "$KEY1_FINGERPRINT" > pgp-key.asc # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export "$KEY2_FINGERPRINT" >> pgp-key.asc # ASCII version
+
   echo "Generated PGP key with fingerprint: $KEY2_FINGERPRINT"
   echo "https://localhost:8085/pgp-key.gpg"
 
@@ -443,6 +459,10 @@ apt_teardown() {
     apt-get update
 }
 
+dnf3_setup() {
+  dnf install 'dnf-command(config-manager)'
+}
+
 dnf_install() {
   if [ "$(readlink $(command -v dnf))" = "dnf5" ]; then
     statepath="/tmp/dnf5-state"
@@ -453,6 +473,26 @@ dnf_install() {
     else
       dnf update hello-world
     fi
+  elif [ "$(readlink $(command -v dnf))" = "dnf-3" ]; then
+    statepath="/tmp/dnf4-state"
+    if ! [ -f "$statepath" ]; then
+      touch "$statepath"
+      dnf config-manager --add-repo http://localhost:8085/rpm-repo/example.repo
+      dnf install hello-world
+    else
+      dnf update hello-world
+    fi
+  fi
+}
+
+yum_install() {
+  statepath="/tmp/yum-state"
+  if ! [ -f "$statepath" ]; then
+    touch "$statepath"
+    yum-config-manager --add-repo http://localhost:8085/rpm-repo/example.repo
+    yum install hello-world
+  else
+    yum update hello-world
   fi
 }
 
@@ -525,6 +565,10 @@ elif [ "$1" == "apt_teardown" ]; then
   apt_teardown
 elif [ "$1" == "dnf_install" ]; then
   dnf_install
+elif [ "$1" == "dnf3_setup" ]; then
+  dnf3_setup
+elif [ "$1" == "yum_install" ]; then
+  yum_install
 elif [ "$1" == "docker_client_teardown" ]; then
   shift 1
   docker_client_teardown "${@}"
@@ -546,6 +590,8 @@ The following targets are typical order used to setup and exercise the GitHub CL
 - $(bold apt_install):                     (client) install packages from apt repository
 - $(bold apt_teardown):                    (client) remove apt sources list and installed packages
 - $(bold dnf_install):                     (client) install packages from dnf repository
+- $(bold dnf3_setup):                      (client) setup dnf3 environment
+- $(bold yum_install):                     (client) install packages from yum repository
 "
   exit 1
 fi
