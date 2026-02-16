@@ -184,11 +184,12 @@ Expire-Date: seconds=$((15 * 60))
   header "> 4. Drop K1 (keyring: K2)"
   prompt_continue
 
-  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --batch --yes --delete-secret-and-public-key "$KEY1_FINGERPRINT"
-  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
-  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
-  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
-  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --batch --yes --delete-secret-and-public-key "$KEY1_FINGERPRINT"
+#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.asc # ASCII version
 
   header "> 5. Release v2 (signed with K2)"
   prompt_continue
