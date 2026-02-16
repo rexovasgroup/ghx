@@ -164,8 +164,10 @@ func searchIssues(client *api.Client, detector fd.Detector, repo ghrepo.Interfac
 	filters.Repo = ghrepo.FullName(repo)
 	filters.Entity = "issue"
 
+	// TODO advancedIssueSearchCleanup
 	if features.AdvancedIssueSearchAPI {
 		variables["query"] = prShared.SearchQueryBuild(filters, true)
+		// TODO advancedIssueSearchCleanup
 		if features.AdvancedIssueSearchAPIOptIn {
 			variables["type"] = "ISSUE_ADVANCED"
 		} else {

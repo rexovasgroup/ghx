@@ -152,6 +152,7 @@ func listRun(opts *ListOptions) error {
 		return err
 	}
 	fields := defaultFields
+	// TODO stateReasonCleanup
 	if features.StateReason {
 		fields = append(defaultFields, "stateReason")
 	}

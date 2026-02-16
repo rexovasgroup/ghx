@@ -219,6 +219,7 @@ func (f *finder) Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface, err
 		if err != nil {
 			return nil, nil, err
 		}
+		// TODO mergeQueueCleanup
 		if !prFeatures.MergeQueue {
 			fields.Remove("isInMergeQueue")
 			fields.Remove("isMergeQueueEnabled")

@@ -132,6 +132,7 @@ func apiClose(httpClient *http.Client, repo ghrepo.Interface, issue *api.Issue, 
 		if err != nil {
 			return err
 		}
+		// TODO stateReasonCleanup
 		if !features.StateReason {
 			// If StateReason is not supported silently close issue without setting StateReason.
 			reason = ""

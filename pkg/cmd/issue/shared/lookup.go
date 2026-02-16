@@ -145,6 +145,7 @@ func FindIssueOrPR(httpClient *http.Client, repo ghrepo.Interface, number int, f
 		if err != nil {
 			return nil, err
 		}
+		// TODO stateReasonCleanup
 		if !features.StateReason {
 			fieldSet.Remove("stateReason")
 		}
