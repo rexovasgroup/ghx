@@ -60,6 +60,8 @@ server() {
   busybox httpd -p 8085 # runs in background by default
   echo "HTTP server started at http://localhost:8085"
 
+  echo -n '-1' > "$ARTIFACTS_DIR/state"
+
   header "> 0. Create a K1 (expires in 1 min) and release v0"
   prompt_continue
 
@@ -116,6 +118,8 @@ repo_gpgcheck=0
 metadata_expire=1
 " > "$ARTIFACTS_DIR/rpm-repo/example.repo"
 
+  echo -n 0 > "$ARTIFACTS_DIR/state"
+
   header "> 1. Add K2 (expires in 15 mins) (keyring: K1 + K2)"
   prompt_continue
 
@@ -159,6 +163,8 @@ Expire-Date: seconds=$((15 * 60))
   echo "Generated PGP key with fingerprint: $KEY2_FINGERPRINT"
   echo "https://localhost:8085/pgp-key.gpg"
 
+  echo -n 1 > "$ARTIFACTS_DIR/state"
+
   header "> 2. Ship v1 (RPM artifacts signed with K1, APT repo signed with K1+K2)"
   prompt_continue
 
@@ -168,6 +174,8 @@ Expire-Date: seconds=$((15 * 60))
 
   create_apt_repo "$ARTIFACTS_DIR/apt-repo" "0.0.1" "$KEY1_FINGERPRINT $KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_debs[@]}"
   create_rpm_repo "$ARTIFACTS_DIR/rpm-repo" "0.0.1" "$KEY1_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  echo -n 2 > "$ARTIFACTS_DIR/state"
 
   header "> 3. Wait for K1 to expire"
   prompt_continue
@@ -181,17 +189,9 @@ Expire-Date: seconds=$((15 * 60))
     sleep $SLEEP
   fi
 
-  header "> 4. Drop K1 (keyring: K2)"
-  prompt_continue
+  echo -n 3 > "$ARTIFACTS_DIR/state"
 
-#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --batch --yes --delete-secret-and-public-key "$KEY1_FINGERPRINT"
-#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
-#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
-#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
-#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
-#   GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.asc # ASCII version
-
-  header "> 5. Release v2 (signed with K2)"
+  header "> 4. Release v2 (signed with K2, with K1 expired still in keyring)"
   prompt_continue
 
   created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.2"))
@@ -200,6 +200,32 @@ Expire-Date: seconds=$((15 * 60))
 
   create_apt_repo "$ARTIFACTS_DIR/apt-repo" "0.0.2" "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_debs[@]}"
   create_rpm_repo "$ARTIFACTS_DIR/rpm-repo" "0.0.2" "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  echo -n 4 > "$ARTIFACTS_DIR/state"
+
+  header "> 5. Drop K1 (keyring: K2)"
+  prompt_continue
+
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --batch --yes --delete-secret-and-public-key "$KEY1_FINGERPRINT"
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --list-keys
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export-secret-keys > pgp-key.private # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.public # ASCII version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --export > pgp-key.gpg # Binary version
+  GNUPGHOME="$ARTIFACTS_DIR/temp-gpg-home" gpg --armor --export > pgp-key.asc # ASCII version
+
+  echo -n 5 > "$ARTIFACTS_DIR/state"
+
+  header "> 6. Release v3 (signed with K2)"
+  prompt_continue
+
+  created_rpms=($(build_rpms "$ARTIFACTS_DIR" "0.0.3"))
+  created_debs=($(build_debs "$ARTIFACTS_DIR" "0.0.3"))
+  sign_rpms "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  create_apt_repo "$ARTIFACTS_DIR/apt-repo" "0.0.3" "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_debs[@]}"
+  create_rpm_repo "$ARTIFACTS_DIR/rpm-repo" "0.0.3" "$KEY2_FINGERPRINT" "$ARTIFACTS_DIR/temp-gpg-home" "${created_rpms[@]}"
+
+  echo -n 6 > "$ARTIFACTS_DIR/state"
 }
 
 # args <key-fp> <gpg-home> <created_rpm>...
@@ -434,13 +460,13 @@ teardown() {
 
 apt_install() {
   if ! [ -f /etc/apt/keyrings/pgp-key.gpg ]; then
-    if ! command -v wget; then
+    if ! command -v curl; then
         apt-get update
-        apt-get install -y wget
+        apt-get install -y curl
     fi
 
     mkdir -p -m 755 /etc/apt/keyrings
-    wget -nv -O /etc/apt/keyrings/pgp-key.gpg http://localhost:8085/pgp-key.gpg
+    curl -s -o /etc/apt/keyrings/pgp-key.gpg http://localhost:8085/pgp-key.gpg
     chmod go+r /etc/apt/keyrings/pgp-key.gpg
   fi
 
@@ -451,6 +477,28 @@ apt_install() {
 
   apt-get update
   apt-get install -y hello-world
+}
+
+apt() {
+  stage="${1:-0}"
+
+  apt-get update
+  apt-get install -y curl
+
+  echo "$(bold ">> will start at stage $stage")"
+  while true; do
+    current_stage="$(curl -s http://localhost:8085/state)"
+    if [ "$current_stage" -ge "$stage" ]; then
+      echo "$(bold ">> starting stage $stage")"
+      if ! apt_install; then
+        echo "$(bold ">> failed at stage $stage")"
+      else
+        echo "$(bold ">> finished stage $stage")"
+      fi
+      stage=$((current_stage + 1))
+    fi
+    sleep 1
+  done
 }
 
 apt_teardown() {
@@ -546,6 +594,38 @@ docker_client_teardown() {
   docker stop "$container_name" && docker rm "$container_name"
 }
 
+docker_client_loop_setup() {
+  image="$1"
+  cmd="$2"
+  stage="$3"
+  shift 3
+
+  container_name="repo-client-${image//:/-}-${cmd}-${stage}"
+  if [ "$(docker ps -a -q -f "name=$container_name")" ]; then
+    read -p "Do you want to teardown the existing container and recreate it? (y/n): " choice
+    if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+      docker_client_loop_teardown "$image" "$cmd" "$stage"
+    else
+      echo "Skip setup and using existing container."
+      docker exec -it "$container_name" bash "/root/pgp-key-rotation-test" "$cmd" "$stage"
+      exit 0
+    fi
+  fi
+
+  echo "Setting up a new container."
+  docker run -it -d --name "$container_name" --net=host -v "$(pwd)/script/pgp-key-rotation-test:/root/pgp-key-rotation-test" -w "/root" "$image"
+  docker exec -it "$container_name" bash "/root/pgp-key-rotation-test" "$cmd" "$stage"
+}
+
+docker_client_loop_teardown() {
+  image="$1"
+  cmd="$2"
+  stage="$3"
+  container_name="repo-client-${image//:/-}-${cmd}-${stage}"
+  docker stop "$container_name" && docker rm "$container_name"
+}
+
+
 # Check for the setup or teardown argument
 if [ "$1" == "docker_setup" ]; then
   docker_setup
@@ -560,8 +640,17 @@ elif [ "$1" == "docker_teardown" ]; then
 elif [ "$1" == "docker_client_setup" ]; then
   shift 1
   docker_client_setup "${@}"
+elif [ "$1" == "docker_client_loop_setup" ]; then
+  shift 1
+  docker_client_loop_setup "${@}"
+elif [ "$1" == "docker_client_loop_teardown" ]; then
+  shift 1
+  docker_client_loop_teardown "${@}"
 elif [ "$1" == "apt_install" ]; then
   apt_install
+elif [ "$1" == "apt" ]; then
+  shift 1
+  apt "${@}"
 elif [ "$1" == "apt_teardown" ]; then
   apt_teardown
 elif [ "$1" == "dnf_install" ]; then
@@ -587,8 +676,11 @@ The following targets are typical order used to setup and exercise the GitHub CL
 - $(bold docker_teardown):  (server) stop and remove Docker container
 
 - $(bold 'docker_client_setup <image>'):     (client) create Docker container for testing environment
+- $(bold 'docker_client_loop_setup <image> <cmd> <stage>'):     (client) create Docker container for testing environment and run a command loop
 - $(bold 'docker_client_teardown <image>'):  (client) stop and remove Docker container
+- $(bold 'docker_client_loop_teardown <image> <cmd> <stage>'):  (client) stop and remove Docker container
 - $(bold apt_install):                     (client) install packages from apt repository
+- $(bold 'apt <start-stage>'):               (client) run automatic client loop for apt repository
 - $(bold apt_teardown):                    (client) remove apt sources list and installed packages
 - $(bold dnf_install):                     (client) install packages from dnf repository
 - $(bold dnf3_setup):                      (client) setup dnf3 environment
