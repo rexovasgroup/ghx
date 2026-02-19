@@ -560,10 +560,31 @@ yum_install() {
   if ! [ -f "$statepath" ]; then
     touch "$statepath"
     yum-config-manager --add-repo http://localhost:8085/rpm-repo/example.repo
-    yum install hello-world
+    yum install -y hello-world
   else
-    yum update hello-world
+    yum update -y hello-world
   fi
+}
+
+_yum() {
+  stage="${1:-0}"
+
+  yum install -y yum-utils
+
+  echo "$(bold ">> will start at stage $stage")"
+  while true; do
+    current_stage="$(curl -s http://localhost:8085/state)"
+    if [ "$current_stage" -ge "$stage" ]; then
+      echo "$(bold ">> starting stage $stage")"
+      if ! yum_install; then
+        echo "$(bold ">> failed at stage $stage")"
+      else
+        echo "$(bold ">> finished stage $stage")"
+      fi
+      stage=$((current_stage + 1))
+    fi
+    sleep 1
+  done
 }
 
 # Function to start up Docker container for environment
@@ -593,7 +614,7 @@ docker_teardown() {
 docker_client_setup() {
   image="$1"
   container_name="repo-client-${image//:/-}"
-  if [ "$(docker ps -a -q -f "name=$container_name")" ]; then
+  if [ "$(docker ps -a -q -f "name=^$container_name\$")" ]; then
     read -p "Do you want to teardown the existing container and recreate it? (y/n): " choice
     if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
       docker_client_teardown "$image"
@@ -622,7 +643,7 @@ docker_client_loop_setup() {
   shift 3
 
   container_name="repo-client-${image//:/-}-${cmd}-${stage}"
-  if [ "$(docker ps -a -q -f "name=$container_name")" ]; then
+  if [ "$(docker ps -a -q -f "name=^$container_name\$")" ]; then
     read -p "Do you want to teardown the existing container and recreate it? (y/n): " choice
     if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
       docker_client_loop_teardown "$image" "$cmd" "$stage"
@@ -683,6 +704,9 @@ elif [ "$1" == "dnf" ]; then
   _dnf "${@}"
 elif [ "$1" == "yum_install" ]; then
   yum_install
+elif [ "$1" == "yum" ]; then
+  shift 1
+  _yum "${@}"
 elif [ "$1" == "docker_client_teardown" ]; then
   shift 1
   docker_client_teardown "${@}"
@@ -710,6 +734,7 @@ The following targets are typical order used to setup and exercise the GitHub CL
 - $(bold dnf_install):                     (client) install packages from dnf repository
 - $(bold dnf3_setup):                      (client) setup dnf3 environment
 - $(bold yum_install):                     (client) install packages from yum repository
+- $(bold 'yum <start-stage>'):               (client) run automatic client loop for yum repository
 "
   exit 1
 fi
