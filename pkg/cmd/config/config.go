@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdConfig is documented here.
+// NewCmdConfig returns a cobra command for managing gh configuration settings.
 func NewCmdConfig(f *cmdutil.Factory) *cobra.Command {
 	longDoc := strings.Builder{}
 	longDoc.WriteString("Display or change configuration settings for gh.\n\n")

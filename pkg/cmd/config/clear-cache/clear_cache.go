@@ -11,11 +11,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ClearCacheOptions is documented here.
+// ClearCacheOptions holds the options for the config clear-cache command.
 type ClearCacheOptions struct {
 	IO       *iostreams.IOStreams
 	CacheDir string
 }
 
+// NewCmdConfigClearCache is documented here.
+
+// NewCmdConfigClearCache returns a cobra command for clearing the gh cache.
 func NewCmdConfigClearCache(f *cmdutil.Factory, runF func(*ClearCacheOptions) error) *cobra.Command {
 	opts := &ClearCacheOptions{
 		IO:       f.IOStreams,

@@ -17,6 +17,8 @@ type helpTopic struct {
 	example string
 }
 
+// HelpTopics is documented here.
+// HelpTopics is the list of additional help topics available in gh.
 var HelpTopics = []helpTopic{
 	{
 		name:  "mintty",
@@ -306,6 +308,9 @@ var HelpTopics = []helpTopic{
 	},
 }
 
+// NewCmdHelpTopic is documented here.
+
+// NewCmdHelpTopic returns a cobra command that displays a help topic.
 func NewCmdHelpTopic(ios *iostreams.IOStreams, ht helpTopic) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     ht.name,

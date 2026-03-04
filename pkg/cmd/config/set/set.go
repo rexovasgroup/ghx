@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// SetOptions is documented here.
+// SetOptions holds the options for the config set command.
 type SetOptions struct {
 	IO     *iostreams.IOStreams
 	Config gh.Config
@@ -22,6 +24,9 @@ type SetOptions struct {
 	Hostname string
 }
 
+// NewCmdConfigSet is documented here.
+
+// NewCmdConfigSet returns a cobra command for updating a configuration value.
 func NewCmdConfigSet(f *cmdutil.Factory, runF func(*SetOptions) error) *cobra.Command {
 	opts := &SetOptions{
 		IO: f.IOStreams,
@@ -85,8 +90,10 @@ func setRun(opts *SetOptions) error {
 		return fmt.Errorf("failed to write config to disk: %w", err)
 	}
 	return nil
+// ValidateKey is documented here.
 }
 
+// ValidateKey checks whether the given key is a known configuration key.
 func ValidateKey(key string) error {
 	for _, configKey := range config.Options {
 		if key == configKey.Key {
@@ -94,17 +101,22 @@ func ValidateKey(key string) error {
 		}
 	}
 
+	// InvalidValueError is documented here.
 	return fmt.Errorf("invalid key")
 }
 
+// InvalidValueError indicates that a configuration value is not among the allowed values.
 type InvalidValueError struct {
 	ValidValues []string
 }
 
+// ValidateValue is documented here.
+// Error returns a description of the invalid value error.
 func (e InvalidValueError) Error() string {
 	return "invalid value"
 }
 
+// ValidateValue checks whether the value is valid for the given configuration key.
 func ValidateValue(key, value string) error {
 	var validValues []string
 

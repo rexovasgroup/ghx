@@ -14,10 +14,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ExternalCommandExitError is documented here.
+// ExternalCommandExitError wraps an exec.ExitError from an external command.
 type ExternalCommandExitError struct {
 	*exec.ExitError
 }
 
+// NewCmdExtension is documented here.
+
+// NewCmdExtension returns a cobra command that runs a gh CLI extension.
 func NewCmdExtension(io *iostreams.IOStreams, em extensions.ExtensionManager, ext extensions.Extension, checkExtensionReleaseInfo func(extensions.ExtensionManager, extensions.Extension) (*update.ReleaseInfo, error)) *cobra.Command {
 	updateMessageChan := make(chan *update.ReleaseInfo)
 	cs := io.ColorScheme()

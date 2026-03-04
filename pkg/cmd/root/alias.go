@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdShellAlias is documented here.
+// NewCmdShellAlias returns a cobra command that executes a shell alias.
 func NewCmdShellAlias(io *iostreams.IOStreams, aliasName, aliasValue string) *cobra.Command {
 	return &cobra.Command{
 		Use:   aliasName,
@@ -47,6 +49,9 @@ func NewCmdShellAlias(io *iostreams.IOStreams, aliasName, aliasValue string) *co
 	}
 }
 
+// NewCmdAlias is documented here.
+
+// NewCmdAlias returns a cobra command that executes a gh command alias.
 func NewCmdAlias(io *iostreams.IOStreams, aliasName, aliasValue string) *cobra.Command {
 	return &cobra.Command{
 		Use:   aliasName,

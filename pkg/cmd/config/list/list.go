@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ListOptions is documented here.
+// ListOptions holds the options for the config list command.
 type ListOptions struct {
 	IO     *iostreams.IOStreams
 	Config func() (gh.Config, error)
@@ -17,6 +19,9 @@ type ListOptions struct {
 	Hostname string
 }
 
+// NewCmdConfigList is documented here.
+
+// NewCmdConfigList returns a cobra command for listing configuration settings.
 func NewCmdConfigList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := &ListOptions{
 		IO:     f.IOStreams,

@@ -48,14 +48,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// AuthError is documented here.
+// AuthError represents an authentication failure.
 type AuthError struct {
 	err error
 }
 
+// Error is documented here.
+
+// Error returns the underlying authentication error message.
 func (ae *AuthError) Error() string {
 	return ae.err.Error()
+// NewCmdRoot is documented here.
 }
 
+// NewCmdRoot creates the root cobra command for the gh CLI.
 func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, error) {
 	io := f.IOStreams
 	cfg, err := f.Config()

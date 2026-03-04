@@ -237,11 +237,16 @@ func findCommand(cmd *cobra.Command, name string) *cobra.Command {
 	return nil
 }
 
+// CommandGroup is documented here.
+// CommandGroup represents a titled group of related commands.
 type CommandGroup struct {
 	Title    string
 	Commands []*cobra.Command
 }
 
+// GroupedCommands is documented here.
+
+// GroupedCommands returns the subcommands of cmd organized into groups.
 func GroupedCommands(cmd *cobra.Command) []CommandGroup {
 	var res []CommandGroup
 
@@ -310,8 +315,10 @@ func dedent(s string) string {
 		fmt.Fprintln(&buf, strings.TrimPrefix(l, strings.Repeat(" ", minIndent)))
 	}
 	return strings.TrimSuffix(buf.String(), "\n")
+// BuildAliasList is documented here.
 }
 
+// BuildAliasList collects all alias names for the given command and its parents.
 func BuildAliasList(cmd *cobra.Command, aliases []string) []string {
 	if !cmd.HasParent() {
 		return aliases

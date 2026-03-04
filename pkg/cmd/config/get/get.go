@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// GetOptions is documented here.
+// GetOptions holds the options for the config get command.
 type GetOptions struct {
 	IO     *iostreams.IOStreams
 	Config gh.Config
@@ -19,6 +21,9 @@ type GetOptions struct {
 	Key      string
 }
 
+// NewCmdConfigGet is documented here.
+
+// NewCmdConfigGet returns a cobra command for retrieving a configuration value.
 func NewCmdConfigGet(f *cmdutil.Factory, runF func(*GetOptions) error) *cobra.Command {
 	opts := &GetOptions{
 		IO: f.IOStreams,
@@ -77,8 +82,10 @@ func getRun(opts *GetOptions) error {
 
 type nonExistentKeyError struct {
 	key string
+// Error is documented here.
 }
 
+// Error returns a message indicating the configuration key was not found.
 func (e nonExistentKeyError) Error() string {
 	return fmt.Sprintf("could not find key \"%s\"", e.key)
 }
