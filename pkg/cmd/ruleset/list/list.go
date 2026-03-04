@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ListOptions is documented here.
+// ListOptions holds the options for the ruleset list command.
 type ListOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -31,6 +33,9 @@ type ListOptions struct {
 	Organization   string
 }
 
+// NewCmdList is documented here.
+
+// NewCmdList creates a new cobra command for listing rulesets.
 func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := &ListOptions{
 		IO:         f.IOStreams,

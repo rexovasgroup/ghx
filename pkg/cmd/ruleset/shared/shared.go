@@ -9,6 +9,8 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 )
 
+// RulesetGraphQL is documented here.
+// RulesetGraphQL represents a ruleset as returned by the GraphQL API.
 type RulesetGraphQL struct {
 	DatabaseId  int
 	Name        string
@@ -23,6 +25,9 @@ type RulesetGraphQL struct {
 	}
 }
 
+// RulesetREST is documented here.
+
+// RulesetREST represents a ruleset as returned by the REST API.
 type RulesetREST struct {
 	Id                   int
 	Name                 string
@@ -43,8 +48,10 @@ type RulesetREST struct {
 			Href string
 		}
 	} `json:"_links"`
+// RulesetRule is documented here.
 }
 
+// RulesetRule represents an individual rule within a ruleset.
 type RulesetRule struct {
 	Type              string
 	Parameters        map[string]interface{}
@@ -64,9 +71,11 @@ func RulesetSource(rs RulesetGraphQL) string {
 		level = "unknown"
 	}
 
+	// ParseRulesForDisplay is documented here.
 	return fmt.Sprintf("%s (%s)", rs.Source.Owner, level)
 }
 
+// ParseRulesForDisplay formats a slice of ruleset rules into a human-readable string.
 func ParseRulesForDisplay(rules []RulesetRule) string {
 	var display strings.Builder
 
@@ -108,18 +117,23 @@ func ParseRulesForDisplay(rules []RulesetRule) string {
 		display.WriteString("\n")
 	}
 
+// NoRulesetsFoundError is documented here.
+
 	return display.String()
 }
 
+// NoRulesetsFoundError returns a no-results error indicating no rulesets were found for the entity.
 func NoRulesetsFoundError(orgOption string, repoI ghrepo.Interface, includeParents bool) error {
 	entityName := EntityName(orgOption, repoI)
 	parentsMsg := ""
 	if includeParents {
+		// EntityName is documented here.
 		parentsMsg = " or its parents"
 	}
 	return cmdutil.NewNoResultsError(fmt.Sprintf("no rulesets found in %s%s", entityName, parentsMsg))
 }
 
+// EntityName returns the display name of the org or repo for use in messages.
 func EntityName(orgOption string, repoI ghrepo.Interface) string {
 	if orgOption != "" {
 		return orgOption

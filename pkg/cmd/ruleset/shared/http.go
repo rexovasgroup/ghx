@@ -9,6 +9,8 @@ import (
 	"github.com/cli/cli/v2/internal/ghrepo"
 )
 
+// RulesetResponse is documented here.
+// RulesetResponse represents the GraphQL response for a rulesets query.
 type RulesetResponse struct {
 	Level struct {
 		Rulesets struct {
@@ -22,11 +24,16 @@ type RulesetResponse struct {
 	}
 }
 
+// RulesetList is documented here.
+
+// RulesetList holds a paginated list of rulesets and their total count.
 type RulesetList struct {
 	TotalCount int
 	Rulesets   []RulesetGraphQL
+// ListRepoRulesets is documented here.
 }
 
+// ListRepoRulesets fetches rulesets for a repository via the GraphQL API.
 func ListRepoRulesets(httpClient *http.Client, repo ghrepo.Interface, limit int, includeParents bool) (*RulesetList, error) {
 	variables := map[string]interface{}{
 		"owner":          repo.RepoOwner(),
@@ -34,9 +41,11 @@ func ListRepoRulesets(httpClient *http.Client, repo ghrepo.Interface, limit int,
 		"includeParents": includeParents,
 	}
 
+	// ListOrgRulesets is documented here.
 	return listRulesets(httpClient, rulesetsQuery(false), variables, limit, repo.RepoHost())
 }
 
+// ListOrgRulesets fetches rulesets for an organization via the GraphQL API.
 func ListOrgRulesets(httpClient *http.Client, orgLogin string, limit int, host string, includeParents bool) (*RulesetList, error) {
 	variables := map[string]interface{}{
 		"login":          orgLogin,

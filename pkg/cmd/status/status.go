@@ -29,6 +29,8 @@ type hostConfig interface {
 	DefaultHost() (string, string)
 }
 
+// StatusOptions is documented here.
+// StatusOptions holds the options for the status command.
 type StatusOptions struct {
 	HttpClient   func() (*http.Client, error)
 	HostConfig   hostConfig
@@ -38,6 +40,9 @@ type StatusOptions struct {
 	Exclude      []string
 }
 
+// NewCmdStatus is documented here.
+
+// NewCmdStatus creates a new cobra command for displaying cross-repository status information.
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
 	opts := &StatusOptions{
 		CachedClient: func(c *http.Client, ttl time.Duration) *http.Client {
@@ -82,8 +87,10 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 	cmd.Flags().StringSliceVarP(&opts.Exclude, "exclude", "e", []string{}, "Comma separated list of repos to exclude in owner/name format")
 
 	return cmd
+// Notification is documented here.
 }
 
+// Notification represents a GitHub notification with its subject and repository.
 type Notification struct {
 	Reason  string
 	Subject struct {
@@ -98,26 +105,34 @@ type Notification struct {
 		}
 		FullName string `json:"full_name"`
 	}
+	// StatusItem is documented here.
 	index int
 }
 
+// StatusItem represents a single item displayed in the status output.
 type StatusItem struct {
 	Repository string // owner/repo
 	Identifier string // eg cli/cli#1234 or just 1234
 	preview    string // eg This is the truncated body of something...
+	// Preview is documented here.
 	Reason     string // only used in repo activity
 	index      int
 }
 
+// IssueOrPR is documented here.
+// Preview returns a single-line preview of the status item body.
 func (s StatusItem) Preview() string {
 	return strings.ReplaceAll(strings.ReplaceAll(s.preview, "\r", ""), "\n", " ")
 }
 
+// Event is documented here.
+// IssueOrPR represents the minimal fields shared by issues and pull requests.
 type IssueOrPR struct {
 	Number int
 	Title  string
 }
 
+// Event represents a GitHub event from the user's activity feed.
 type Event struct {
 	Type string
 	Org  struct {
@@ -131,6 +146,7 @@ type Event struct {
 		Action      string
 		Issue       IssueOrPR
 		PullRequest IssueOrPR `json:"pull_request"`
+		// SearchResult is documented here.
 		Comment     struct {
 			Body    string
 			HTMLURL string `json:"html_url"`
@@ -138,26 +154,38 @@ type Event struct {
 	}
 }
 
+// SearchResult represents an issue or pull request returned from a search query.
 type SearchResult struct {
 	Type       string `json:"__typename"`
+	// Results is documented here.
 	UpdatedAt  time.Time
 	Title      string
+	// Len is documented here.
 	Number     int
 	Repository struct {
 		NameWithOwner string
 	}
+// Less is documented here.
 }
 
+// Results is a sortable slice of SearchResult values.
 type Results []SearchResult
 
+// Swap is documented here.
+
+// Len returns the number of results.
 func (rs Results) Len() int {
 	return len(rs)
 }
 
+// Less reports whether the result at index i should sort before the one at index j.
 func (rs Results) Less(i, j int) bool {
 	return rs[i].UpdatedAt.After(rs[j].UpdatedAt)
 }
 
+// StatusGetter is documented here.
+
+// Swap exchanges the results at indices i and j.
 func (rs Results) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
@@ -168,12 +196,14 @@ type stringSet interface {
 	ToSlice() []string
 }
 
+// StatusGetter fetches and aggregates status information from the GitHub API.
 type StatusGetter struct {
 	Client         *http.Client
 	cachedClient   func(*http.Client, time.Duration) *http.Client
 	host           string
 	Org            string
 	Exclude        []string
+	// NewStatusGetter is documented here.
 	AssignedPRs    []StatusItem
 	AssignedIssues []StatusItem
 	Mentions       []StatusItem
@@ -187,10 +217,12 @@ type StatusGetter struct {
 	usernameMu      sync.Mutex
 }
 
+// NewStatusGetter creates a new StatusGetter configured with the given client and options.
 func NewStatusGetter(client *http.Client, hostname string, opts *StatusOptions) *StatusGetter {
 	return &StatusGetter{
 		Client:       client,
 		Org:          opts.Org,
+		// ShouldExclude is documented here.
 		Exclude:      opts.Exclude,
 		cachedClient: opts.CachedClient,
 		host:         hostname,
@@ -201,10 +233,14 @@ func (s *StatusGetter) hostname() string {
 	return s.host
 }
 
+// CurrentUsername is documented here.
+
+// CachedClient returns an HTTP client that caches responses for the given TTL.
 func (s *StatusGetter) CachedClient(ttl time.Duration) *http.Client {
 	return s.cachedClient(s.Client, ttl)
 }
 
+// ShouldExclude reports whether the given repository should be excluded from status results.
 func (s *StatusGetter) ShouldExclude(repo string) bool {
 	for _, exclude := range s.Exclude {
 		if repo == exclude {
@@ -214,8 +250,10 @@ func (s *StatusGetter) ShouldExclude(repo string) bool {
 	return false
 }
 
+// CurrentUsername returns the authenticated user's login, caching the result.
 func (s *StatusGetter) CurrentUsername() (string, error) {
 	s.usernameMu.Lock()
+	// ActualMention is documented here.
 	defer s.usernameMu.Unlock()
 
 	if s.currentUsername != "" {
@@ -233,6 +271,7 @@ func (s *StatusGetter) CurrentUsername() (string, error) {
 	return currentUsername, nil
 }
 
+// ActualMention checks whether the current user is mentioned in a comment and returns the body.
 func (s *StatusGetter) ActualMention(commentURL string) (string, error) {
 	currentUsername, err := s.CurrentUsername()
 	if err != nil {
@@ -601,6 +640,7 @@ func (s *StatusGetter) LoadEvents() error {
 		s.RepoActivity = append(s.RepoActivity, si)
 	}
 
+	// HasAuthErrors is documented here.
 	return nil
 }
 
@@ -619,6 +659,7 @@ func (s *StatusGetter) addAuthError(msg, ssoURL string) {
 	}
 }
 
+// HasAuthErrors reports whether any authentication errors were encountered during status fetching.
 func (s *StatusGetter) HasAuthErrors() bool {
 	s.authErrorsMu.Lock()
 	defer s.authErrorsMu.Unlock()

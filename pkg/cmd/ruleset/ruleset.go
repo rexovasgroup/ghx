@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdRuleset is documented here.
+// NewCmdRuleset creates a new cobra command for managing repository rulesets.
 func NewCmdRuleset(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ruleset <command>",

@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ViewOptions is documented here.
+// ViewOptions holds the options for the ruleset view command.
 type ViewOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -33,6 +35,9 @@ type ViewOptions struct {
 	Organization    string
 }
 
+// NewCmdView is documented here.
+
+// NewCmdView creates a new cobra command for viewing a ruleset.
 func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Command {
 	opts := &ViewOptions{
 		IO:         f.IOStreams,

@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CheckOptions is documented here.
+// CheckOptions holds the options for the ruleset check command.
 type CheckOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -32,6 +34,9 @@ type CheckOptions struct {
 	WebMode bool
 }
 
+// NewCmdCheck is documented here.
+
+// NewCmdCheck creates a new cobra command for checking ruleset rules on a branch.
 func NewCmdCheck(f *cmdutil.Factory, runF func(*CheckOptions) error) *cobra.Command {
 	opts := &CheckOptions{
 		IO:         f.IOStreams,
