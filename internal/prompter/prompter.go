@@ -14,6 +14,8 @@ import (
 )
 
 //go:generate moq -rm -out prompter_mock.go . Prompter
+
+// Prompter defines an interface for interactive user prompts.
 type Prompter interface {
 	// generic prompts from go-gh
 
@@ -52,6 +54,7 @@ type Prompter interface {
 	MarkdownEditor(prompt string, defaultValue string, blankAllowed bool) (string, error)
 }
 
+// New creates a Prompter backed by the given editor command and IO streams.
 func New(editorCmd string, io *iostreams.IOStreams) Prompter {
 	if io.AccessiblePrompterEnabled() {
 		return &accessiblePrompter{
@@ -104,6 +107,7 @@ func (p *accessiblePrompter) addDefaultsToPrompt(prompt string, defaultValues []
 	return prompt
 }
 
+// Select prompts the user to select an option from a list using accessible forms.
 func (p *accessiblePrompter) Select(prompt, defaultValue string, options []string) (int, error) {
 	var result int
 
@@ -136,6 +140,7 @@ func (p *accessiblePrompter) Select(prompt, defaultValue string, options []strin
 	return result, err
 }
 
+// MultiSelect prompts the user to select multiple options using accessible forms.
 func (p *accessiblePrompter) MultiSelect(prompt string, defaults []string, options []string) ([]int, error) {
 	var result []int
 
@@ -174,6 +179,7 @@ func (p *accessiblePrompter) MultiSelect(prompt string, defaults []string, optio
 	return result, nil
 }
 
+// Input prompts the user to enter a string value using accessible forms.
 func (p *accessiblePrompter) Input(prompt, defaultValue string) (string, error) {
 	result := defaultValue
 	prompt = p.addDefaultsToPrompt(prompt, []string{defaultValue})
@@ -189,6 +195,7 @@ func (p *accessiblePrompter) Input(prompt, defaultValue string) (string, error) 
 	return result, err
 }
 
+// Password prompts the user to enter a password using accessible forms.
 func (p *accessiblePrompter) Password(prompt string) (string, error) {
 	var result string
 	// EchoModePassword is not used as password masking is unsupported in huh.
@@ -210,6 +217,7 @@ func (p *accessiblePrompter) Password(prompt string) (string, error) {
 	return result, nil
 }
 
+// Confirm prompts the user to confirm an action using accessible forms.
 func (p *accessiblePrompter) Confirm(prompt string, defaultValue bool) (bool, error) {
 	result := defaultValue
 
@@ -233,6 +241,7 @@ func (p *accessiblePrompter) Confirm(prompt string, defaultValue bool) (bool, er
 	return result, nil
 }
 
+// AuthToken prompts the user to paste an authentication token using accessible forms.
 func (p *accessiblePrompter) AuthToken() (string, error) {
 	var result string
 	// EchoModeNone and EchoModePassword both result in disabling echo mode
@@ -257,6 +266,7 @@ func (p *accessiblePrompter) AuthToken() (string, error) {
 	return result, err
 }
 
+// ConfirmDeletion prompts the user to type a value to confirm deletion using accessible forms.
 func (p *accessiblePrompter) ConfirmDeletion(requiredValue string) error {
 	form := p.newForm(
 		huh.NewGroup(
@@ -274,6 +284,7 @@ func (p *accessiblePrompter) ConfirmDeletion(requiredValue string) error {
 	return form.Run()
 }
 
+// InputHostname prompts the user to enter a hostname using accessible forms.
 func (p *accessiblePrompter) InputHostname() (string, error) {
 	var result string
 	form := p.newForm(
@@ -292,6 +303,7 @@ func (p *accessiblePrompter) InputHostname() (string, error) {
 	return result, nil
 }
 
+// MarkdownEditor prompts the user to edit markdown in an external editor using accessible forms.
 func (p *accessiblePrompter) MarkdownEditor(prompt, defaultValue string, blankAllowed bool) (string, error) {
 	var result string
 	skipOption := "skip"
@@ -329,6 +341,7 @@ func (p *accessiblePrompter) MarkdownEditor(prompt, defaultValue string, blankAl
 	return text, nil
 }
 
+// MultiSelectWithSearch prompts the user to select multiple options with search using accessible forms.
 func (p *accessiblePrompter) MultiSelectWithSearch(prompt, searchPrompt string, defaultValues, persistentValues []string, searchFunc func(string) MultiSelectSearchResult) ([]string, error) {
 	return multiSelectWithSearch(p, prompt, searchPrompt, defaultValues, persistentValues, searchFunc)
 }
@@ -341,18 +354,22 @@ type surveyPrompter struct {
 	editorCmd string
 }
 
+// Select prompts the user to select an option from a list using survey.
 func (p *surveyPrompter) Select(prompt, defaultValue string, options []string) (int, error) {
 	return p.prompter.Select(prompt, defaultValue, options)
 }
 
+// MultiSelect prompts the user to select multiple options using survey.
 func (p *surveyPrompter) MultiSelect(prompt string, defaultValues, options []string) ([]int, error) {
 	return p.prompter.MultiSelect(prompt, defaultValues, options)
 }
 
+// MultiSelectWithSearch prompts the user to select multiple options with search using survey.
 func (p *surveyPrompter) MultiSelectWithSearch(prompt string, searchPrompt string, defaultValues, persistentValues []string, searchFunc func(string) MultiSelectSearchResult) ([]string, error) {
 	return multiSelectWithSearch(p, prompt, searchPrompt, defaultValues, persistentValues, searchFunc)
 }
 
+// MultiSelectSearchResult holds the results of a search within MultiSelectWithSearch.
 type MultiSelectSearchResult struct {
 	Keys        []string
 	Labels      []string
@@ -503,18 +520,22 @@ func multiSelectWithSearch(p Prompter, prompt, searchPrompt string, defaultValue
 	}
 }
 
+// Input prompts the user to enter a string value using survey.
 func (p *surveyPrompter) Input(prompt, defaultValue string) (string, error) {
 	return p.prompter.Input(prompt, defaultValue)
 }
 
+// Password prompts the user to enter a password using survey.
 func (p *surveyPrompter) Password(prompt string) (string, error) {
 	return p.prompter.Password(prompt)
 }
 
+// Confirm prompts the user to confirm an action using survey.
 func (p *surveyPrompter) Confirm(prompt string, defaultValue bool) (bool, error) {
 	return p.prompter.Confirm(prompt, defaultValue)
 }
 
+// AuthToken prompts the user to paste an authentication token using survey.
 func (p *surveyPrompter) AuthToken() (string, error) {
 	var result string
 	err := p.ask(&survey.Password{
@@ -523,6 +544,7 @@ func (p *surveyPrompter) AuthToken() (string, error) {
 	return result, err
 }
 
+// ConfirmDeletion prompts the user to type a value to confirm deletion using survey.
 func (p *surveyPrompter) ConfirmDeletion(requiredValue string) error {
 	var result string
 	return p.ask(
@@ -539,6 +561,7 @@ func (p *surveyPrompter) ConfirmDeletion(requiredValue string) error {
 			}))
 }
 
+// InputHostname prompts the user to enter a hostname using survey.
 func (p *surveyPrompter) InputHostname() (string, error) {
 	var result string
 	err := p.ask(
@@ -550,6 +573,7 @@ func (p *surveyPrompter) InputHostname() (string, error) {
 	return result, err
 }
 
+// MarkdownEditor prompts the user to edit markdown in an external editor using survey.
 func (p *surveyPrompter) MarkdownEditor(prompt, defaultValue string, blankAllowed bool) (string, error) {
 	var result string
 	err := p.ask(&surveyext.GhEditor{

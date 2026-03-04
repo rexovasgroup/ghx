@@ -1,4 +1,4 @@
-package featuredetection
+	package featuredetection
 
 import (
 	"net/http"
@@ -11,6 +11,7 @@ import (
 	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 )
 
+// Detector queries a GitHub host to determine which API features are available.
 type Detector interface {
 	IssueFeatures() (IssueFeatures, error)
 	PullRequestFeatures() (PullRequestFeatures, error)
@@ -22,6 +23,7 @@ type Detector interface {
 	ActionsFeatures() (ActionsFeatures, error)
 }
 
+// IssueFeatures describes the issue-related capabilities of a GitHub host.
 type IssueFeatures struct {
 	StateReason          bool
 	StateReasonDuplicate bool
@@ -34,6 +36,7 @@ var allIssueFeatures = IssueFeatures{
 	ActorIsAssignable:    true,
 }
 
+// PullRequestFeatures describes the pull-request-related capabilities of a GitHub host.
 type PullRequestFeatures struct {
 	MergeQueue bool
 	// CheckRunAndStatusContextCounts indicates whether the API supports
@@ -49,6 +52,7 @@ var allPullRequestFeatures = PullRequestFeatures{
 	CheckRunEvent:                  true,
 }
 
+// RepositoryFeatures describes the repository-related capabilities of a GitHub host.
 type RepositoryFeatures struct {
 	PullRequestTemplateQuery bool
 	VisibilityField          bool
@@ -61,6 +65,7 @@ var allRepositoryFeatures = RepositoryFeatures{
 	AutoMerge:                true,
 }
 
+// ProjectFeatures describes the project-related capabilities of a GitHub host.
 type ProjectFeatures struct {
 	// ProjectItemQuery indicates support for the `query` argument on
 	// ProjectV2.items (supported on github.com and GHES 3.20+).
@@ -71,6 +76,7 @@ var allProjectFeatures = ProjectFeatures{
 	ProjectItemQuery: true,
 }
 
+// SearchFeatures describes the search-related capabilities of a GitHub host.
 type SearchFeatures struct {
 	// AdvancedIssueSearch indicates whether the host supports advanced issue
 	// search via API calls.
@@ -108,10 +114,12 @@ var advancedIssueSearchSupportedAsOnlyBackend = SearchFeatures{
 	AdvancedIssueSearchAPIOptIn: false,
 }
 
+// ReleaseFeatures describes the release-related capabilities of a GitHub host.
 type ReleaseFeatures struct {
 	ImmutableReleases bool
 }
 
+// ActionsFeatures describes the GitHub Actions capabilities of a GitHub host.
 type ActionsFeatures struct {
 	// DispatchRunDetails indicates whether the API supports the `return_run_details`
 	// field in workflow dispatches that, when set to true, will return the details
@@ -127,6 +135,7 @@ type detector struct {
 	httpClient *http.Client
 }
 
+// NewDetector creates a Detector that queries the given host using the provided HTTP client.
 func NewDetector(httpClient *http.Client, host string) Detector {
 	return &detector{
 		httpClient: httpClient,
@@ -134,6 +143,7 @@ func NewDetector(httpClient *http.Client, host string) Detector {
 	}
 }
 
+// IssueFeatures detects issue-related capabilities of the configured host.
 func (d *detector) IssueFeatures() (IssueFeatures, error) {
 	if !ghauth.IsEnterprise(d.host) {
 		return allIssueFeatures, nil
@@ -182,6 +192,7 @@ func (d *detector) IssueFeatures() (IssueFeatures, error) {
 	return features, nil
 }
 
+// PullRequestFeatures detects pull-request-related capabilities of the configured host.
 func (d *detector) PullRequestFeatures() (PullRequestFeatures, error) {
 	// TODO: reinstate the short-circuit once the APIs are fully available on github.com
 	// https://github.com/cli/cli/issues/5778
@@ -251,6 +262,7 @@ func (d *detector) PullRequestFeatures() (PullRequestFeatures, error) {
 	return features, nil
 }
 
+// RepositoryFeatures detects repository-related capabilities of the configured host.
 func (d *detector) RepositoryFeatures() (RepositoryFeatures, error) {
 	if !ghauth.IsEnterprise(d.host) {
 		return allRepositoryFeatures, nil
@@ -292,6 +304,7 @@ const (
 	enterpriseProjectsV1Removed = "3.17.0"
 )
 
+// ProjectsV1 determines whether the configured host supports classic projects (v1).
 func (d *detector) ProjectsV1() gh.ProjectsV1Support {
 	if !ghauth.IsEnterprise(d.host) {
 		return gh.ProjectsV1Unsupported
@@ -307,6 +320,7 @@ func (d *detector) ProjectsV1() gh.ProjectsV1Support {
 	return gh.ProjectsV1Unsupported
 }
 
+// ProjectFeatures detects project-related capabilities of the configured host.
 func (d *detector) ProjectFeatures() (ProjectFeatures, error) {
 	if !ghauth.IsEnterprise(d.host) {
 		return allProjectFeatures, nil
@@ -356,6 +370,7 @@ const (
 	enterpriseAdvancedIssueSearchSupport = "3.18.0"
 )
 
+// SearchFeatures detects search-related capabilities of the configured host.
 func (d *detector) SearchFeatures() (SearchFeatures, error) {
 	// TODO advancedIssueSearchCleanup
 	// Once GHES 3.17 support ends, we don't need this and, probably, the entire search feature detection.
@@ -441,6 +456,7 @@ func (d *detector) SearchFeatures() (SearchFeatures, error) {
 	return feature, nil
 }
 
+// ReleaseFeatures detects release-related capabilities of the configured host.
 func (d *detector) ReleaseFeatures() (ReleaseFeatures, error) {
 	// TODO: immutableReleaseFullSupport
 	// Once all supported GHES versions fully support immutable releases, we can
@@ -475,6 +491,7 @@ const (
 	enterpriseWorkflowDispatchRunDetailsSupport = "3.21.0"
 )
 
+// ActionsFeatures detects GitHub Actions capabilities of the configured host.
 func (d *detector) ActionsFeatures() (ActionsFeatures, error) {
 	// TODO workflowDispatchRunDetailsCleanup
 	// Once GHES 3.20 support ends, we don't need feature detection for workflow dispatch (i.e. run details support).
