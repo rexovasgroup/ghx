@@ -11,9 +11,9 @@ type ExtTemplateType int
 
 const (
 	// GitTemplateType represents a git-based extension template.
-	GitTemplateType      ExtTemplateType = 0
+	GitTemplateType ExtTemplateType = 0
 	// GoBinTemplateType represents a Go binary extension template.
-	GoBinTemplateType    ExtTemplateType = 1
+	GoBinTemplateType ExtTemplateType = 1
 	// OtherBinTemplateType represents a precompiled binary extension template.
 	OtherBinTemplateType ExtTemplateType = 2
 )

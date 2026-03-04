@@ -82,7 +82,7 @@ func getRun(opts *GetOptions) error {
 
 type nonExistentKeyError struct {
 	key string
-// Error is documented here.
+	// Error is documented here.
 }
 
 // Error returns a message indicating the configuration key was not found.

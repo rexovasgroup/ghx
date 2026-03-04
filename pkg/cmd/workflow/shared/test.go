@@ -7,6 +7,7 @@ var AWorkflow = Workflow{
 	Path:  ".github/workflows/flow.yml",
 	State: Active,
 }
+
 // AWorkflowContent is a test fixture with base64-encoded content for AWorkflow.
 var AWorkflowContent = `{"content":"bmFtZTogYSB3b3JrZmxvdwo="}`
 
@@ -49,6 +50,7 @@ var AnotherWorkflow = Workflow{
 	Path:  ".github/workflows/another.yml",
 	State: Active,
 }
+
 // AnotherWorkflowContent is a test fixture with base64-encoded content for AnotherWorkflow.
 var AnotherWorkflowContent = `{"content":"bmFtZTogYW5vdGhlciB3b3JrZmxvdwo="}`
 

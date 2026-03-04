@@ -15,7 +15,7 @@ const (
 	// AuthenticationKey represents an SSH authentication key type.
 	AuthenticationKey = "authentication"
 	// SigningKey represents an SSH signing key type.
-	SigningKey        = "signing"
+	SigningKey = "signing"
 )
 
 type sshKey struct {

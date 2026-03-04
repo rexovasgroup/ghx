@@ -90,7 +90,7 @@ func setRun(opts *SetOptions) error {
 		return fmt.Errorf("failed to write config to disk: %w", err)
 	}
 	return nil
-// ValidateKey is documented here.
+	// ValidateKey is documented here.
 }
 
 // ValidateKey checks whether the given key is a known configuration key.

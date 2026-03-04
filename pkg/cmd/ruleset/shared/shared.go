@@ -48,7 +48,7 @@ type RulesetREST struct {
 			Href string
 		}
 	} `json:"_links"`
-// RulesetRule is documented here.
+	// RulesetRule is documented here.
 }
 
 // RulesetRule represents an individual rule within a ruleset.
@@ -117,7 +117,7 @@ func ParseRulesForDisplay(rules []RulesetRule) string {
 		display.WriteString("\n")
 	}
 
-// NoRulesetsFoundError is documented here.
+	// NoRulesetsFoundError is documented here.
 
 	return display.String()
 }

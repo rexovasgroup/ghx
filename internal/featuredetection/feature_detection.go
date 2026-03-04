@@ -1,4 +1,4 @@
-	package featuredetection
+package featuredetection
 
 import (
 	"net/http"

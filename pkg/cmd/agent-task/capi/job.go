@@ -48,7 +48,7 @@ type JobPullRequest struct {
 	ID      int    `json:"id"`
 	Number  int    `json:"number"`
 	BaseRef string `json:"base_ref,omitempty"`
-// JobError is documented here.
+	// JobError is documented here.
 }
 
 // JobError describes an error that occurred during an agent task job.

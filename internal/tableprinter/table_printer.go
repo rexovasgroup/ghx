@@ -36,9 +36,9 @@ func (tp *TablePrinter) AddTimeField(now, t time.Time, c func(string) string) {
 
 var (
 	// WithColor applies a color function to subsequent fields.
-	WithColor    = tableprinter.WithColor
+	WithColor = tableprinter.WithColor
 	// WithPadding applies padding to subsequent fields.
-	WithPadding  = tableprinter.WithPadding
+	WithPadding = tableprinter.WithPadding
 	// WithTruncate applies truncation to subsequent fields.
 	WithTruncate = tableprinter.WithTruncate
 )

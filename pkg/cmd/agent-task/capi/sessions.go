@@ -100,7 +100,7 @@ type Session struct {
 
 	PullRequest *api.PullRequest
 	User        *api.GitHubUser
-// SessionError is documented here.
+	// SessionError is documented here.
 }
 
 // SessionError represents an error returned by a session.

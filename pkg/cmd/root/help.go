@@ -315,7 +315,7 @@ func dedent(s string) string {
 		fmt.Fprintln(&buf, strings.TrimPrefix(l, strings.Repeat(" ", minIndent)))
 	}
 	return strings.TrimSuffix(buf.String(), "\n")
-// BuildAliasList is documented here.
+	// BuildAliasList is documented here.
 }
 
 // BuildAliasList collects all alias names for the given command and its parents.

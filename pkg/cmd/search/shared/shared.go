@@ -24,7 +24,7 @@ const (
 	// https://docs.github.com/en/rest/reference/search
 	SearchMaxResults = 1000
 
-// Both is documented here.
+	// Both is documented here.
 
 	// Issues is documented here.
 	// Both searches for issues and pull requests.
@@ -62,7 +62,7 @@ func Searcher(f *cmdutil.Factory) (search.Searcher, error) {
 		return nil, err
 	}
 
-// SearchIssues is documented here.
+	// SearchIssues is documented here.
 
 	detector := fd.NewDetector(client, host)
 

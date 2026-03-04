@@ -59,7 +59,7 @@ type AuthError struct {
 // Error returns the underlying authentication error message.
 func (ae *AuthError) Error() string {
 	return ae.err.Error()
-// NewCmdRoot is documented here.
+	// NewCmdRoot is documented here.
 }
 
 // NewCmdRoot creates the root cobra command for the gh CLI.

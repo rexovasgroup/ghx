@@ -87,7 +87,7 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 	cmd.Flags().StringSliceVarP(&opts.Exclude, "exclude", "e", []string{}, "Comma separated list of repos to exclude in owner/name format")
 
 	return cmd
-// Notification is documented here.
+	// Notification is documented here.
 }
 
 // Notification represents a GitHub notification with its subject and repository.
@@ -115,8 +115,8 @@ type StatusItem struct {
 	Identifier string // eg cli/cli#1234 or just 1234
 	preview    string // eg This is the truncated body of something...
 	// Preview is documented here.
-	Reason     string // only used in repo activity
-	index      int
+	Reason string // only used in repo activity
+	index  int
 }
 
 // IssueOrPR is documented here.
@@ -147,7 +147,7 @@ type Event struct {
 		Issue       IssueOrPR
 		PullRequest IssueOrPR `json:"pull_request"`
 		// SearchResult is documented here.
-		Comment     struct {
+		Comment struct {
 			Body    string
 			HTMLURL string `json:"html_url"`
 		}
@@ -156,16 +156,16 @@ type Event struct {
 
 // SearchResult represents an issue or pull request returned from a search query.
 type SearchResult struct {
-	Type       string `json:"__typename"`
+	Type string `json:"__typename"`
 	// Results is documented here.
-	UpdatedAt  time.Time
-	Title      string
+	UpdatedAt time.Time
+	Title     string
 	// Len is documented here.
 	Number     int
 	Repository struct {
 		NameWithOwner string
 	}
-// Less is documented here.
+	// Less is documented here.
 }
 
 // Results is a sortable slice of SearchResult values.
@@ -198,11 +198,11 @@ type stringSet interface {
 
 // StatusGetter fetches and aggregates status information from the GitHub API.
 type StatusGetter struct {
-	Client         *http.Client
-	cachedClient   func(*http.Client, time.Duration) *http.Client
-	host           string
-	Org            string
-	Exclude        []string
+	Client       *http.Client
+	cachedClient func(*http.Client, time.Duration) *http.Client
+	host         string
+	Org          string
+	Exclude      []string
 	// NewStatusGetter is documented here.
 	AssignedPRs    []StatusItem
 	AssignedIssues []StatusItem
@@ -220,8 +220,8 @@ type StatusGetter struct {
 // NewStatusGetter creates a new StatusGetter configured with the given client and options.
 func NewStatusGetter(client *http.Client, hostname string, opts *StatusOptions) *StatusGetter {
 	return &StatusGetter{
-		Client:       client,
-		Org:          opts.Org,
+		Client: client,
+		Org:    opts.Org,
 		// ShouldExclude is documented here.
 		Exclude:      opts.Exclude,
 		cachedClient: opts.CachedClient,

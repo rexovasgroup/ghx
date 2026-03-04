@@ -87,7 +87,7 @@ func GetVariableEntity(orgName, envName string) (VariableEntity, error) {
 		return Environment, nil
 	}
 	return Repository, nil
-// PopulateSelectedRepositoryInformation is documented here.
+	// PopulateSelectedRepositoryInformation is documented here.
 }
 
 // PopulateMultipleSelectedRepositoryInformation fills in selected repository counts for a slice of variables.

@@ -20,7 +20,7 @@ import (
 
 const (
 	// DefaultLimit is the default maximum number of attestations to fetch.
-	DefaultLimit = 30
+	DefaultLimit     = 30
 	maxLimitForFlag  = 1000
 	maxLimitForFetch = 100
 )

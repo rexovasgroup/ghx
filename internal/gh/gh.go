@@ -21,7 +21,7 @@ const (
 	// ConfigDefaultProvided indicates the value is a built-in default.
 	ConfigDefaultProvided ConfigSource = "default"
 	// ConfigUserProvided indicates the value was explicitly set by the user.
-	ConfigUserProvided    ConfigSource = "user"
+	ConfigUserProvided ConfigSource = "user"
 )
 
 // ConfigEntry represents a single configuration key-value pair.

@@ -72,9 +72,11 @@ func remoteNameSortScore(name string) int {
 }
 
 // https://golang.org/pkg/sort/#Interface
-func (r Remotes) Len() int      { return len(r) }
+func (r Remotes) Len() int { return len(r) }
+
 // Swap exchanges elements i and j in Remotes.
 func (r Remotes) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+
 // Less reports whether element i should sort before element j.
 func (r Remotes) Less(i, j int) bool {
 	return remoteNameSortScore(r[i].Name) > remoteNameSortScore(r[j].Name)

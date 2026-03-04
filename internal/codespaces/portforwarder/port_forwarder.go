@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	githubSubjectId        = "1"
+	githubSubjectId = "1"
 	// InternalPortLabel is the label for internally managed codespace ports.
 	InternalPortLabel = "InternalPort"
 	// UserForwardedPortLabel is the label for user-forwarded codespace ports.

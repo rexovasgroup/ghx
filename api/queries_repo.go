@@ -1113,6 +1113,7 @@ const CopilotAssigneeLogin = "copilot-swe-agent"
 
 // Expected login for Copilot when retrieved as a Pull Request Reviewer.
 const CopilotReviewerLogin = "copilot-pull-request-reviewer"
+
 // CopilotActorName is the display name used for the Copilot actor.
 const CopilotActorName = "Copilot"
 

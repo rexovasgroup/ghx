@@ -30,7 +30,7 @@ type RulesetResponse struct {
 type RulesetList struct {
 	TotalCount int
 	Rulesets   []RulesetGraphQL
-// ListRepoRulesets is documented here.
+	// ListRepoRulesets is documented here.
 }
 
 // ListRepoRulesets fetches rulesets for a repository via the GraphQL API.
