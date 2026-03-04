@@ -21,6 +21,7 @@ const (
 	defaultLimit = 20
 )
 
+// ListOptions holds the options for the list command.
 type ListOptions struct {
 	IO         *iostreams.IOStreams
 	HttpClient func() (*http.Client, error)
@@ -46,6 +47,7 @@ type iprompter interface {
 	Select(string, string, []string) (int, error)
 }
 
+// NewCmdList creates the list command.
 func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := &ListOptions{
 		IO:         f.IOStreams,

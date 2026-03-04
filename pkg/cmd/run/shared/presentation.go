@@ -7,6 +7,7 @@ import (
 	"github.com/cli/cli/v2/pkg/iostreams"
 )
 
+// RenderRunHeader renders a header string for a workflow run.
 func RenderRunHeader(cs *iostreams.ColorScheme, run Run, ago, prNumber string, attempt uint64) string {
 	title := fmt.Sprintf("%s %s%s",
 		cs.Bold(run.HeadBranch), run.WorkflowName(), prNumber)
@@ -25,6 +26,7 @@ func RenderRunHeader(cs *iostreams.ColorScheme, run Run, ago, prNumber string, a
 	return header
 }
 
+// RenderJobs renders a list of jobs with their status and steps.
 func RenderJobs(cs *iostreams.ColorScheme, jobs []Job, verbose bool) string {
 	lines := []string{}
 	for _, job := range jobs {
@@ -47,6 +49,7 @@ func RenderJobs(cs *iostreams.ColorScheme, jobs []Job, verbose bool) string {
 	return strings.Join(lines, "\n")
 }
 
+// RenderJobsCompact renders a compact list of jobs showing only relevant steps.
 func RenderJobsCompact(cs *iostreams.ColorScheme, jobs []Job) string {
 	lines := []string{}
 	for _, job := range jobs {
@@ -89,6 +92,7 @@ func RenderJobsCompact(cs *iostreams.ColorScheme, jobs []Job) string {
 	return strings.Join(lines, "\n")
 }
 
+// RenderAnnotations renders a list of annotations with symbols and messages.
 func RenderAnnotations(cs *iostreams.ColorScheme, annotations []Annotation) string {
 	lines := []string{}
 

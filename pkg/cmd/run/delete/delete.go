@@ -19,6 +19,7 @@ const (
 	defaultRunGetLimit = 10
 )
 
+// DeleteOptions holds the options for the delete command.
 type DeleteOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -28,6 +29,7 @@ type DeleteOptions struct {
 	RunID      string
 }
 
+// NewCmdDelete creates the delete command.
 func NewCmdDelete(f *cmdutil.Factory, runF func(*DeleteOptions) error) *cobra.Command {
 	opts := &DeleteOptions{
 		IO:         f.IOStreams,

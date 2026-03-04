@@ -19,6 +19,7 @@ import (
 
 const defaultInterval int = 3
 
+// WatchOptions holds the options for the watch command.
 type WatchOptions struct {
 	IO         *iostreams.IOStreams
 	HttpClient func() (*http.Client, error)
@@ -35,6 +36,7 @@ type WatchOptions struct {
 	Now func() time.Time
 }
 
+// NewCmdWatch creates the watch command.
 func NewCmdWatch(f *cmdutil.Factory, runF func(*WatchOptions) error) *cobra.Command {
 	opts := &WatchOptions{
 		IO:         f.IOStreams,

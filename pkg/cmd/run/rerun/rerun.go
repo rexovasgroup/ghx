@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// RerunOptions holds the options for the rerun command.
 type RerunOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -31,6 +32,7 @@ type RerunOptions struct {
 	Prompt bool
 }
 
+// NewCmdRerun creates the rerun command.
 func NewCmdRerun(f *cmdutil.Factory, runF func(*RerunOptions) error) *cobra.Command {
 	opts := &RerunOptions{
 		IO:         f.IOStreams,
@@ -228,6 +230,7 @@ func rerunJob(client *api.Client, repo ghrepo.Interface, job *shared.Job, debug 
 	return nil
 }
 
+// RerunPayload is the request body for rerunning a workflow.
 type RerunPayload struct {
 	Debug bool `json:"enable_debug_logging"`
 }

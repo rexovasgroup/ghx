@@ -15,38 +15,60 @@ import (
 	"github.com/cli/cli/v2/pkg/iostreams"
 )
 
+// Prompter provides interactive selection prompts.
 type Prompter interface {
 	Select(string, string, []string) (int, error)
 }
 
 const (
-	// Run statuses
-	Queued     Status = "queued"
-	Completed  Status = "completed"
+	// Queued indicates a workflow run is queued.
+	Queued Status = "queued"
+	// Completed indicates a workflow run has finished.
+	Completed Status = "completed"
+	// InProgress indicates a workflow run is currently executing.
 	InProgress Status = "in_progress"
-	Requested  Status = "requested"
-	Waiting    Status = "waiting"
-	Pending    Status = "pending"
+	// Requested indicates a workflow run has been requested.
+	Requested Status = "requested"
+	// Waiting indicates a workflow run is waiting to be processed.
+	Waiting Status = "waiting"
+	// Pending indicates a workflow run is pending.
+	Pending Status = "pending"
 
-	// Run conclusions
+	// ActionRequired indicates a workflow run requires action.
 	ActionRequired Conclusion = "action_required"
-	Cancelled      Conclusion = "cancelled"
-	Failure        Conclusion = "failure"
-	Neutral        Conclusion = "neutral"
-	Skipped        Conclusion = "skipped"
-	Stale          Conclusion = "stale"
+	// Cancelled indicates a workflow run was cancelled.
+	Cancelled Conclusion = "cancelled"
+	// Failure indicates a workflow run failed.
+	Failure Conclusion = "failure"
+	// Neutral indicates a workflow run completed with a neutral result.
+	Neutral Conclusion = "neutral"
+	// Skipped indicates a workflow run was skipped.
+	Skipped Conclusion = "skipped"
+	// Stale indicates a workflow run became stale.
+	Stale Conclusion = "stale"
+	// StartupFailure indicates a workflow run failed during startup.
 	StartupFailure Conclusion = "startup_failure"
-	Success        Conclusion = "success"
-	TimedOut       Conclusion = "timed_out"
+	// Success indicates a workflow run completed successfully.
+	Success Conclusion = "success"
+	// TimedOut indicates a workflow run exceeded its time limit.
+	TimedOut Conclusion = "timed_out"
 
+	// AnnotationFailure represents a failure-level annotation.
 	AnnotationFailure Level = "failure"
+	// AnnotationWarning represents a warning-level annotation.
 	AnnotationWarning Level = "warning"
 )
 
+// Status represents the status of a workflow run or job.
 type Status string
+
+// Conclusion represents the conclusion of a workflow run or job.
 type Conclusion string
+
+// Level represents the severity level of an annotation.
 type Level string
 
+// AllStatuses contains all valid workflow run status and conclusion values.
 var AllStatuses = []string{
 	"queued",
 	"completed",
@@ -65,6 +87,7 @@ var AllStatuses = []string{
 	"timed_out",
 }
 
+// RunFields lists the available fields for exporting workflow run data.
 var RunFields = []string{
 	"name",
 	"displayTitle",
@@ -84,8 +107,10 @@ var RunFields = []string{
 	"url",
 }
 
+// SingleRunFields extends RunFields with additional fields available for a single run.
 var SingleRunFields = append(RunFields, "jobs")
 
+// Run represents a GitHub Actions workflow run.
 type Run struct {
 	Name           string    `json:"name"` // the semantics of this field are unclear
 	DisplayTitle   string    `json:"display_title"`
@@ -109,6 +134,7 @@ type Run struct {
 	Jobs           []Job  `json:"-"` // populated by GetJobs
 }
 
+// StartedTime returns the effective start time, falling back to CreatedAt.
 func (r *Run) StartedTime() time.Time {
 	if r.StartedAt.IsZero() {
 		return r.CreatedAt
@@ -116,6 +142,7 @@ func (r *Run) StartedTime() time.Time {
 	return r.StartedAt
 }
 
+// Duration returns the elapsed duration of the run.
 func (r *Run) Duration(now time.Time) time.Duration {
 	endTime := r.UpdatedAt
 	if r.Status != Completed {
@@ -128,6 +155,7 @@ func (r *Run) Duration(now time.Time) time.Duration {
 	return d.Round(time.Second)
 }
 
+// Repo represents a repository reference within a workflow run.
 type Repo struct {
 	Owner struct {
 		Login string
@@ -135,6 +163,7 @@ type Repo struct {
 	Name string
 }
 
+// Commit represents a Git commit associated with a workflow run.
 type Commit struct {
 	Message string
 }
@@ -159,6 +188,7 @@ func (r Run) WorkflowName() string {
 	return r.workflowName
 }
 
+// ExportData returns the run data as a map for the given fields.
 func (r *Run) ExportData(fields []string) map[string]interface{} {
 	v := reflect.ValueOf(r).Elem()
 	fieldByName := func(v reflect.Value, field string) reflect.Value {
@@ -219,6 +249,7 @@ func (r *Run) ExportData(fields []string) map[string]interface{} {
 	return data
 }
 
+// Job represents a job within a GitHub Actions workflow run.
 type Job struct {
 	ID          int64
 	Status      Status
@@ -231,6 +262,7 @@ type Job struct {
 	RunID       int64     `json:"run_id"`
 }
 
+// Step represents a step within a workflow job.
 type Step struct {
 	Name        string
 	Status      Status
@@ -240,12 +272,19 @@ type Step struct {
 	CompletedAt time.Time `json:"completed_at"`
 }
 
+// Steps is a sortable slice of Step values.
 type Steps []Step
 
-func (s Steps) Len() int           { return len(s) }
-func (s Steps) Less(i, j int) bool { return s[i].Number < s[j].Number }
-func (s Steps) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+// Len returns the number of steps.
+func (s Steps) Len() int { return len(s) }
 
+// Less reports whether step i should sort before step j.
+func (s Steps) Less(i, j int) bool { return s[i].Number < s[j].Number }
+
+// Swap exchanges steps at indices i and j.
+func (s Steps) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// Annotation represents a check run annotation.
 type Annotation struct {
 	JobName   string
 	Message   string
@@ -254,6 +293,7 @@ type Annotation struct {
 	StartLine int   `json:"start_line"`
 }
 
+// AnnotationSymbol returns the display symbol for an annotation based on its level.
 func AnnotationSymbol(cs *iostreams.ColorScheme, a Annotation) string {
 	switch a.Level {
 	case AnnotationFailure:
@@ -265,10 +305,12 @@ func AnnotationSymbol(cs *iostreams.ColorScheme, a Annotation) string {
 	}
 }
 
+// CheckRun represents a GitHub check run.
 type CheckRun struct {
 	ID int64
 }
 
+// ErrMissingAnnotationsPermissions is returned when the token lacks permission to read annotations.
 var ErrMissingAnnotationsPermissions = errors.New("missing annotations permissions error")
 
 // GetAnnotations fetches annotations from the REST API.
@@ -310,6 +352,7 @@ func GetAnnotations(client *api.Client, repo ghrepo.Interface, job Job) ([]Annot
 	return out, nil
 }
 
+// IsFailureState reports whether the conclusion represents a failure.
 func IsFailureState(c Conclusion) bool {
 	switch c {
 	case ActionRequired, Failure, StartupFailure, TimedOut:
@@ -319,15 +362,18 @@ func IsFailureState(c Conclusion) bool {
 	}
 }
 
+// IsSkipped reports whether the conclusion is skipped.
 func IsSkipped(c Conclusion) bool {
 	return c == Skipped
 }
 
+// RunsPayload is the API response for listing workflow runs.
 type RunsPayload struct {
 	TotalCount   int   `json:"total_count"`
 	WorkflowRuns []Run `json:"workflow_runs"`
 }
 
+// FilterOptions specifies filters for querying workflow runs.
 type FilterOptions struct {
 	Branch     string
 	Actor      string
@@ -360,6 +406,7 @@ func GetRunsWithFilter(client *api.Client, repo ghrepo.Interface, opts *FilterOp
 	return filtered, nil
 }
 
+// GetRuns fetches workflow runs from the API with the given filters and limit.
 func GetRuns(client *api.Client, repo ghrepo.Interface, opts *FilterOptions, limit int) (*RunsPayload, error) {
 	path := fmt.Sprintf("repos/%s/actions/runs", ghrepo.FullName(repo))
 	if opts != nil && opts.WorkflowID > 0 {
@@ -470,11 +517,13 @@ func preloadWorkflowNames(client *api.Client, repo ghrepo.Interface, runs []Run)
 	return nil
 }
 
+// JobsPayload is the API response for listing workflow jobs.
 type JobsPayload struct {
 	TotalCount int `json:"total_count"`
 	Jobs       []Job
 }
 
+// GetJobs fetches the jobs for a workflow run.
 func GetJobs(client *api.Client, repo ghrepo.Interface, run *Run, attempt uint64) ([]Job, error) {
 	if run.Jobs != nil {
 		return run.Jobs, nil
@@ -502,6 +551,7 @@ func GetJobs(client *api.Client, repo ghrepo.Interface, run *Run, attempt uint64
 	return run.Jobs, nil
 }
 
+// GetJob fetches a single job by its ID.
 func GetJob(client *api.Client, repo ghrepo.Interface, jobID string) (*Job, error) {
 	path := fmt.Sprintf("repos/%s/actions/jobs/%s", ghrepo.FullName(repo), jobID)
 
@@ -536,6 +586,7 @@ func SelectRun(p Prompter, cs *iostreams.ColorScheme, runs []Run) (string, error
 	return fmt.Sprintf("%d", runs[selected].ID), nil
 }
 
+// GetRun fetches a single workflow run by its ID and optional attempt number.
 func GetRun(client *api.Client, repo ghrepo.Interface, runID string, attempt uint64) (*Run, error) {
 	var result Run
 
@@ -570,6 +621,7 @@ func GetRun(client *api.Client, repo ghrepo.Interface, runID string, attempt uin
 
 type colorFunc func(string) string
 
+// Symbol returns a display symbol and color function for a given status and conclusion.
 func Symbol(cs *iostreams.ColorScheme, status Status, conclusion Conclusion) (string, colorFunc) {
 	noColor := func(s string) string { return s }
 	if status == Completed {
@@ -586,6 +638,7 @@ func Symbol(cs *iostreams.ColorScheme, status Status, conclusion Conclusion) (st
 	return "*", cs.Yellow
 }
 
+// PullRequestForRun finds the pull request number associated with a workflow run.
 func PullRequestForRun(client *api.Client, repo ghrepo.Interface, run Run) (int, error) {
 	type response struct {
 		Repository struct {

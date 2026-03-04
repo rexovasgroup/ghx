@@ -11,6 +11,7 @@ import (
 	"github.com/cli/cli/v2/internal/ghrepo"
 )
 
+// Artifact represents a GitHub Actions workflow run artifact.
 type Artifact struct {
 	Name        string `json:"name"`
 	Size        uint64 `json:"size_in_bytes"`
@@ -22,6 +23,7 @@ type artifactsPayload struct {
 	Artifacts []Artifact
 }
 
+// ListArtifacts fetches all artifacts for a repository or a specific run.
 func ListArtifacts(httpClient *http.Client, repo ghrepo.Interface, runID string) ([]Artifact, error) {
 	var results []Artifact
 

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// DownloadOptions holds the options for the download command.
 type DownloadOptions struct {
 	IO       *iostreams.IOStreams
 	Platform platform
@@ -35,6 +36,7 @@ type iprompter interface {
 	MultiSelect(string, []string, []string) ([]int, error)
 }
 
+// NewCmdDownload creates the download command.
 func NewCmdDownload(f *cmdutil.Factory, runF func(*DownloadOptions) error) *cobra.Command {
 	opts := &DownloadOptions{
 		IO:       f.IOStreams,

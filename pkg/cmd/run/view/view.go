@@ -25,10 +25,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// RunLogCache provides caching for workflow run log ZIP archives.
 type RunLogCache struct {
 	cacheDir string
 }
 
+// Exists reports whether a cache entry with the given key exists.
 func (c RunLogCache) Exists(key string) (bool, error) {
 	_, err := os.Stat(c.filepath(key))
 	if err == nil {
@@ -42,6 +44,7 @@ func (c RunLogCache) Exists(key string) (bool, error) {
 	return false, fmt.Errorf("checking cache entry: %v", err)
 }
 
+// Create stores content in the cache under the given key.
 func (c RunLogCache) Create(key string, content io.Reader) error {
 	if err := os.MkdirAll(c.cacheDir, 0755); err != nil {
 		return fmt.Errorf("creating cache directory: %v", err)
@@ -61,6 +64,7 @@ func (c RunLogCache) Create(key string, content io.Reader) error {
 	return nil
 }
 
+// Open returns the cached ZIP archive for the given key.
 func (c RunLogCache) Open(key string) (*zip.ReadCloser, error) {
 	r, err := zip.OpenReader(c.filepath(key))
 	if err != nil {
@@ -74,6 +78,7 @@ func (c RunLogCache) filepath(key string) string {
 	return filepath.Join(c.cacheDir, fmt.Sprintf("run-log-%s.zip", key))
 }
 
+// ViewOptions holds the options for the view command.
 type ViewOptions struct {
 	HttpClient  func() (*http.Client, error)
 	IO          *iostreams.IOStreams
@@ -97,6 +102,7 @@ type ViewOptions struct {
 	Now func() time.Time
 }
 
+// NewCmdView creates the view command.
 func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Command {
 	opts := &ViewOptions{
 		IO:         f.IOStreams,

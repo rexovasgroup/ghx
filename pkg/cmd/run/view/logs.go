@@ -26,6 +26,7 @@ type zipLogFetcher struct {
 	File *zip.File
 }
 
+// GetLog opens and returns the log contents from the ZIP file entry.
 func (f *zipLogFetcher) GetLog() (io.ReadCloser, error) {
 	return f.File.Open()
 }
@@ -37,6 +38,7 @@ type apiLogFetcher struct {
 	jobID int64
 }
 
+// GetLog fetches the log contents from the GitHub Actions API.
 func (f *apiLogFetcher) GetLog() (io.ReadCloser, error) {
 	logURL := fmt.Sprintf("%srepos/%s/actions/jobs/%d/logs",
 		ghinstance.RESTPrefix(f.repo.RepoHost()), ghrepo.FullName(f.repo), f.jobID)
@@ -235,6 +237,7 @@ func getZipLogMap(rlz *zip.Reader, jobs []shared.Job) *zipLogMap {
 	return zlm
 }
 
+// JOB_NAME_MAX_LENGTH is the maximum length of a job name in log filenames.
 const JOB_NAME_MAX_LENGTH = 90
 
 func getJobNameForLogFilename(name string) string {

@@ -19,10 +19,12 @@ type apiPlatform struct {
 	repo   ghrepo.Interface
 }
 
+// List returns all artifacts for the given run.
 func (p *apiPlatform) List(runID string) ([]shared.Artifact, error) {
 	return shared.ListArtifacts(p.client, p.repo, runID)
 }
 
+// Download fetches and extracts an artifact to the given directory.
 func (p *apiPlatform) Download(url string, dir safepaths.Absolute) error {
 	return downloadArtifact(p.client, url, dir)
 }

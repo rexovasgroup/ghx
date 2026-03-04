@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CancelOptions holds the options for the cancel command.
 type CancelOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -26,6 +27,7 @@ type CancelOptions struct {
 	Force bool
 }
 
+// NewCmdCancel creates the cancel command.
 func NewCmdCancel(f *cmdutil.Factory, runF func(*CancelOptions) error) *cobra.Command {
 	opts := &CancelOptions{
 		IO:         f.IOStreams,

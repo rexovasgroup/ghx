@@ -8,20 +8,25 @@ import (
 	"github.com/cli/cli/v2/pkg/iostreams"
 )
 
+// TestRunStartTime is the default start time used for test runs.
 var TestRunStartTime, _ = time.Parse("2006-01-02 15:04:05", "2021-02-23 04:51:00")
 
+// TestRun creates a Run with the given ID, status, and conclusion for testing.
 func TestRun(id int64, s Status, c Conclusion) Run {
 	return TestRunWithCommit(id, s, c, "cool commit")
 }
 
+// TestRunWithCommit creates a test Run with a specified commit message.
 func TestRunWithCommit(id int64, s Status, c Conclusion, commit string) Run {
 	return TestRunWithWorkflowAndCommit(123, id, s, c, commit)
 }
 
+// TestRunWithOrgRequiredWorkflow creates a test Run for an organization required workflow.
 func TestRunWithOrgRequiredWorkflow(id int64, s Status, c Conclusion, commit string) Run {
 	return TestRunWithWorkflowAndCommit(456, id, s, c, commit)
 }
 
+// TestRunWithWorkflowAndCommit creates a test Run with a specific workflow ID and commit.
 func TestRunWithWorkflowAndCommit(workflowId, runId int64, s Status, c Conclusion, commit string) Run {
 	return Run{
 		WorkflowID: workflowId,
@@ -45,9 +50,13 @@ func TestRunWithWorkflowAndCommit(workflowId, runId int64, s Status, c Conclusio
 	}
 }
 
+// SuccessfulRun is a test Run that completed successfully.
 var SuccessfulRun Run = TestRun(3, Completed, Success)
+
+// FailedRun is a test Run that completed with a failure.
 var FailedRun Run = TestRun(1234, Completed, Failure)
 
+// TestRuns is a collection of test runs covering various statuses and conclusions.
 var TestRuns []Run = []Run{
 	TestRun(1, Completed, TimedOut),
 	TestRun(2, InProgress, ""),
@@ -61,6 +70,7 @@ var TestRuns []Run = []Run{
 	TestRun(10, Completed, Stale),
 }
 
+// TestRunsWithOrgRequiredWorkflows is a collection of test runs including org required workflows.
 var TestRunsWithOrgRequiredWorkflows []Run = []Run{
 	TestRunWithOrgRequiredWorkflow(1, Completed, TimedOut, "cool commit"),
 	TestRunWithOrgRequiredWorkflow(2, InProgress, "", "cool commit"),
@@ -73,12 +83,14 @@ var TestRunsWithOrgRequiredWorkflows []Run = []Run{
 	TestRun(9, Queued, ""),
 }
 
+// WorkflowRuns is a subset of test runs for workflow-specific testing.
 var WorkflowRuns []Run = []Run{
 	TestRun(2, InProgress, ""),
 	SuccessfulRun,
 	FailedRun,
 }
 
+// SuccessfulJob is a test Job that completed successfully.
 var SuccessfulJob Job = Job{
 	ID:          10,
 	Status:      Completed,
@@ -158,6 +170,7 @@ var LegacySuccessfulJobWithoutStepLogs Job = Job{
 	},
 }
 
+// SkippedJob is a test Job that was skipped.
 var SkippedJob Job = Job{
 	ID:          13,
 	Status:      Completed,
@@ -170,6 +183,7 @@ var SkippedJob Job = Job{
 	Steps:       []Step{},
 }
 
+// FailedJob is a test Job that completed with a failure.
 var FailedJob Job = Job{
 	ID:          20,
 	Status:      Completed,
@@ -249,6 +263,7 @@ var LegacyFailedJobWithoutStepLogs Job = Job{
 	},
 }
 
+// SuccessfulJobAnnotations contains test annotations for a successful job.
 var SuccessfulJobAnnotations []Annotation = []Annotation{
 	{
 		JobName:   "cool job",
@@ -259,6 +274,7 @@ var SuccessfulJobAnnotations []Annotation = []Annotation{
 	},
 }
 
+// FailedJobAnnotations contains test annotations for a failed job.
 var FailedJobAnnotations []Annotation = []Annotation{
 	{
 		JobName:   "sad job",
@@ -269,24 +285,29 @@ var FailedJobAnnotations []Annotation = []Annotation{
 	},
 }
 
+// TestWorkflow is a test Workflow used in test fixtures.
 var TestWorkflow workflowShared.Workflow = workflowShared.Workflow{
 	Name: "CI",
 	ID:   123,
 }
 
+// TestExporter is a mock exporter for testing data export functionality.
 type TestExporter struct {
 	fields       []string
 	writeHandler func(io *iostreams.IOStreams, data interface{}) error
 }
 
+// MakeTestExporter creates a TestExporter with the given fields and write handler.
 func MakeTestExporter(fields []string, wh func(io *iostreams.IOStreams, data interface{}) error) *TestExporter {
 	return &TestExporter{fields: fields, writeHandler: wh}
 }
 
+// Fields returns the export field names.
 func (t *TestExporter) Fields() []string {
 	return t.fields
 }
 
+// Write writes the exported data using the configured handler.
 func (t *TestExporter) Write(io *iostreams.IOStreams, data interface{}) error {
 	return t.writeHandler(io, data)
 }
