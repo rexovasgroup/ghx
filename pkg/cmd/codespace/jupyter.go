@@ -29,6 +29,7 @@ func newJupyterCmd(app *App) *cobra.Command {
 	return jupyterCmd
 }
 
+// Jupyter opens JupyterLab in a browser connected to a codespace.
 func (a *App) Jupyter(ctx context.Context, selector *CodespaceSelector) (err error) {
 	// Ensure all child tasks (e.g. port forwarding) terminate before return.
 	ctx, cancel := context.WithCancel(ctx)

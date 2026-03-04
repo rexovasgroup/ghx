@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CodespaceSelector selects a codespace based on command-line flags.
 type CodespaceSelector struct {
 	api apiClient
 
@@ -34,6 +35,7 @@ func AddCodespaceSelector(cmd *cobra.Command, api apiClient) *CodespaceSelector 
 	return cs
 }
 
+// Select returns a fully resolved codespace based on the selector's flags.
 func (cs *CodespaceSelector) Select(ctx context.Context) (codespace *api.Codespace, err error) {
 	if cs.codespaceName != "" {
 		codespace, err = cs.api.GetCodespace(ctx, cs.codespaceName, true)
@@ -62,6 +64,7 @@ func (cs *CodespaceSelector) Select(ctx context.Context) (codespace *api.Codespa
 	return codespace, nil
 }
 
+// SelectName returns the name of a codespace based on the selector's flags.
 func (cs *CodespaceSelector) SelectName(ctx context.Context) (string, error) {
 	if cs.codespaceName != "" {
 		return cs.codespaceName, nil

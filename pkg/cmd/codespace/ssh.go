@@ -148,6 +148,7 @@ type combinedReadWriteHalfCloser struct {
 	io.WriteCloser
 }
 
+// Close closes both the read and write halves of the connection.
 func (crwc *combinedReadWriteHalfCloser) Close() error {
 	werr := crwc.WriteCloser.Close()
 	rerr := crwc.ReadCloser.Close()
@@ -157,6 +158,7 @@ func (crwc *combinedReadWriteHalfCloser) Close() error {
 	return rerr
 }
 
+// CloseWrite closes the write half of the connection.
 func (crwc *combinedReadWriteHalfCloser) CloseWrite() error {
 	return crwc.WriteCloser.Close()
 }

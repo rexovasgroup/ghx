@@ -76,6 +76,7 @@ func newListCmd(app *App) *cobra.Command {
 	return listCmd
 }
 
+// List displays the user's codespaces in a table or JSON format.
 func (a *App) List(ctx context.Context, opts *listOptions, exporter cmdutil.Exporter) error {
 	if opts.useWeb && opts.repo == "" {
 		return a.browser.Browse(fmt.Sprintf("%s/codespaces", a.apiClient.ServerURL()))

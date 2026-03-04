@@ -52,6 +52,7 @@ func newViewCmd(app *App) *cobra.Command {
 	return viewCmd
 }
 
+// ViewCodespace displays details about a selected codespace.
 func (a *App) ViewCodespace(ctx context.Context, opts *viewOptions) error {
 	// If we are in a codespace and a codespace name wasn't provided, show the details for the codespace we are connected to
 	if (os.Getenv("CODESPACES") == "true") && opts.selector.codespaceName == "" {

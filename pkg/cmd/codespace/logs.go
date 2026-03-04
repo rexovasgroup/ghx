@@ -32,6 +32,7 @@ func newLogsCmd(app *App) *cobra.Command {
 	return logsCmd
 }
 
+// Logs streams the creation log from a codespace.
 func (a *App) Logs(ctx context.Context, selector *CodespaceSelector, follow bool) (err error) {
 	// Ensure all child tasks (port forwarding, remote exec) terminate before return.
 	ctx, cancel := context.WithCancel(ctx)

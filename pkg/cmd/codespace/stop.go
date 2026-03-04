@@ -37,6 +37,7 @@ func newStopCmd(app *App) *cobra.Command {
 	return stopCmd
 }
 
+// StopCodespace stops a running codespace.
 func (a *App) StopCodespace(ctx context.Context, opts *stopOptions) error {
 	var (
 		codespaceName = opts.selector.codespaceName

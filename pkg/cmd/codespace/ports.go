@@ -130,10 +130,12 @@ type portInfo struct {
 	devContainer *devContainer
 }
 
+// BrowseURL returns the browser-accessible URL for the port.
 func (pi *portInfo) BrowseURL() string {
 	return fmt.Sprintf("https://%s-%d.app.github.dev", pi.codespace.Name, pi.Port.PortNumber)
 }
 
+// Label returns the devcontainer label for the port, if any.
 func (pi *portInfo) Label() string {
 	if pi.devContainer != nil {
 		portStr := strconv.Itoa(int(pi.Port.PortNumber))
@@ -151,6 +153,7 @@ var portFields = []string{
 	"browseUrl",
 }
 
+// ExportData returns port information as a map for JSON export.
 func (pi *portInfo) ExportData(fields []string) map[string]interface{} {
 	data := map[string]interface{}{}
 
@@ -230,6 +233,7 @@ func newPortsVisibilityCmd(app *App, selector *CodespaceSelector) *cobra.Command
 	}
 }
 
+// UpdatePortVisibility changes the visibility of forwarded ports in a codespace.
 func (a *App) UpdatePortVisibility(ctx context.Context, selector *CodespaceSelector, args []string) (err error) {
 	ports, err := a.parsePortVisibilities(args)
 	if err != nil {
@@ -309,6 +313,7 @@ func newPortsForwardCmd(app *App, selector *CodespaceSelector) *cobra.Command {
 	}
 }
 
+// ForwardPorts forwards remote codespace ports to local addresses.
 func (a *App) ForwardPorts(ctx context.Context, selector *CodespaceSelector, ports []string) (err error) {
 	portPairs, err := getPortPairs(ports)
 	if err != nil {

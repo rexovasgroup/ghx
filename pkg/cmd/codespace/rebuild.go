@@ -40,6 +40,7 @@ func newRebuildCmd(app *App) *cobra.Command {
 	return rebuildCmd
 }
 
+// Rebuild recreates the container for a codespace.
 func (a *App) Rebuild(ctx context.Context, selector *CodespaceSelector, full bool) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

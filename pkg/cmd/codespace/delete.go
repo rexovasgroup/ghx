@@ -89,6 +89,7 @@ func newDeleteCmd(app *App) *cobra.Command {
 	return deleteCmd
 }
 
+// Delete removes one or more codespaces based on the provided options.
 func (a *App) Delete(ctx context.Context, opts deleteOptions) (err error) {
 	var codespaces []*api.Codespace
 	nameFilter := opts.codespaceName
@@ -219,6 +220,7 @@ func confirmDeletion(p prompter, apiCodespace *api.Codespace, isInteractive bool
 
 type surveyPrompter struct{}
 
+// Confirm prompts the user for a yes/no confirmation.
 func (p *surveyPrompter) Confirm(message string) (bool, error) {
 	prompter := &Prompter{}
 	var confirmed struct {

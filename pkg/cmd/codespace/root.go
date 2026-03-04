@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdCodespace creates the top-level codespace command.
 func NewCmdCodespace(f *cmdutil.Factory) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "codespace",

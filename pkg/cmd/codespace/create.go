@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	// DEVCONTAINER_PROMPT_DEFAULT is the label for the default devcontainer option.
 	DEVCONTAINER_PROMPT_DEFAULT = "Default Codespaces configuration"
 )
 
@@ -29,13 +30,16 @@ const (
 )
 
 var (
+	// DEFAULT_DEVCONTAINER_DEFINITIONS lists the standard devcontainer.json file paths.
 	DEFAULT_DEVCONTAINER_DEFINITIONS = []string{".devcontainer.json", ".devcontainer/devcontainer.json"}
 )
 
+// NullableDuration is an optional duration value used for command flags.
 type NullableDuration struct {
 	*time.Duration
 }
 
+// String returns the string representation of the duration, or empty if nil.
 func (d *NullableDuration) String() string {
 	if d.Duration != nil {
 		return d.Duration.String()
@@ -44,6 +48,7 @@ func (d *NullableDuration) String() string {
 	return ""
 }
 
+// Set parses a duration string and sets the value.
 func (d *NullableDuration) Set(str string) error {
 	duration, err := time.ParseDuration(str)
 	if err != nil {
@@ -53,10 +58,12 @@ func (d *NullableDuration) Set(str string) error {
 	return nil
 }
 
+// Type returns the flag type name for NullableDuration.
 func (d *NullableDuration) Type() string {
 	return "duration"
 }
 
+// Minutes returns the duration in minutes as an int pointer, or nil if unset.
 func (d *NullableDuration) Minutes() *int {
 	if d.Duration != nil {
 		retentionMinutes := int(d.Duration.Minutes())

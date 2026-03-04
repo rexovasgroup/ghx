@@ -27,6 +27,7 @@ type executable interface {
 	Executable() string
 }
 
+// App holds the state and dependencies for codespace commands.
 type App struct {
 	io         *iostreams.IOStreams
 	apiClient  apiClient
@@ -36,6 +37,7 @@ type App struct {
 	remotes    func() (clicontext.Remotes, error)
 }
 
+// NewApp creates a new App with the given dependencies.
 func NewApp(io *iostreams.IOStreams, exe executable, apiClient apiClient, browser browser.Browser, remotes func() (clicontext.Remotes, error)) *App {
 	errLogger := log.New(io.ErrOut, "", 0)
 
@@ -59,6 +61,7 @@ func (a *App) StopProgressIndicator() {
 	a.io.StopProgressIndicator()
 }
 
+// RunWithProgress runs a function while displaying a progress indicator with a label.
 func (a *App) RunWithProgress(label string, run func() error) error {
 	return a.io.RunWithProgress(label, run)
 }
@@ -146,10 +149,12 @@ func safeClose(closer io.Closer, err *error) {
 // It is not portable to assume stdin/stdout are fds 0 and 1.
 var hasTTY = term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 
+// SurveyPrompter is an interface for prompting survey questions.
 type SurveyPrompter interface {
 	Ask(qs []*survey.Question, response interface{}) error
 }
 
+// Prompter implements SurveyPrompter using the terminal.
 type Prompter struct{}
 
 // ask asks survey questions on the terminal, using standard options.
@@ -176,6 +181,7 @@ func (p *Prompter) Ask(qs []*survey.Question, response interface{}) error {
 	return err
 }
 
+// ErrTooManyArgs is returned when a command receives unexpected arguments.
 var ErrTooManyArgs = errors.New("the command accepts no arguments")
 
 func noArgsConstraint(cmd *cobra.Command, args []string) error {
