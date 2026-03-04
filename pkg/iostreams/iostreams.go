@@ -20,6 +20,7 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
+// DefaultWidth is the fallback terminal width when the actual width cannot be determined.
 const DefaultWidth = 80
 
 // ErrClosedPagerPipe is the error returned when writing to a pager that has been closed.
@@ -46,6 +47,8 @@ type term interface {
 	Size() (int, int, error)
 }
 
+// IOStreams provides access to the standard input, output, and error streams along with
+// terminal capabilities and UI helpers such as pagers and progress indicators.
 type IOStreams struct {
 	term term
 
@@ -85,6 +88,7 @@ type IOStreams struct {
 	TempFileOverride *os.File
 }
 
+// ColorEnabled reports whether color output is enabled.
 func (s *IOStreams) ColorEnabled() bool {
 	if s.colorOverride {
 		return s.colorEnabled
@@ -92,6 +96,7 @@ func (s *IOStreams) ColorEnabled() bool {
 	return s.term.IsColorEnabled()
 }
 
+// ColorSupport256 reports whether the terminal supports 256 colors.
 func (s *IOStreams) ColorSupport256() bool {
 	if s.colorOverride {
 		return s.colorEnabled
@@ -99,6 +104,7 @@ func (s *IOStreams) ColorSupport256() bool {
 	return s.term.Is256ColorSupported()
 }
 
+// HasTrueColor reports whether the terminal supports 24-bit true color.
 func (s *IOStreams) HasTrueColor() bool {
 	if s.colorOverride {
 		return s.colorEnabled
@@ -106,6 +112,7 @@ func (s *IOStreams) HasTrueColor() bool {
 	return s.term.IsTrueColorSupported()
 }
 
+// ColorLabels reports whether labels should be colored using their RGB hex color.
 func (s *IOStreams) ColorLabels() bool {
 	return s.colorLabels
 }
@@ -137,20 +144,24 @@ func (s *IOStreams) TerminalTheme() string {
 	return s.terminalTheme
 }
 
+// SetColorEnabled overrides automatic color detection with the given value.
 func (s *IOStreams) SetColorEnabled(colorEnabled bool) {
 	s.colorOverride = true
 	s.colorEnabled = colorEnabled
 }
 
+// SetColorLabels sets whether labels should be colored using their RGB hex color.
 func (s *IOStreams) SetColorLabels(colorLabels bool) {
 	s.colorLabels = colorLabels
 }
 
+// SetStdinTTY overrides automatic stdin TTY detection with the given value.
 func (s *IOStreams) SetStdinTTY(isTTY bool) {
 	s.stdinTTYOverride = true
 	s.stdinIsTTY = isTTY
 }
 
+// IsStdinTTY reports whether standard input is connected to a terminal.
 func (s *IOStreams) IsStdinTTY() bool {
 	if s.stdinTTYOverride {
 		return s.stdinIsTTY
@@ -161,11 +172,13 @@ func (s *IOStreams) IsStdinTTY() bool {
 	return false
 }
 
+// SetStdoutTTY overrides automatic stdout TTY detection with the given value.
 func (s *IOStreams) SetStdoutTTY(isTTY bool) {
 	s.stdoutTTYOverride = true
 	s.stdoutIsTTY = isTTY
 }
 
+// IsStdoutTTY reports whether standard output is connected to a terminal.
 func (s *IOStreams) IsStdoutTTY() bool {
 	if s.stdoutTTYOverride {
 		return s.stdoutIsTTY
@@ -178,11 +191,13 @@ func (s *IOStreams) IsStdoutTTY() bool {
 	return ok && isCygwinTerminal(stdout.Fd())
 }
 
+// SetStderrTTY overrides automatic stderr TTY detection with the given value.
 func (s *IOStreams) SetStderrTTY(isTTY bool) {
 	s.stderrTTYOverride = true
 	s.stderrIsTTY = isTTY
 }
 
+// IsStderrTTY reports whether standard error is connected to a terminal.
 func (s *IOStreams) IsStderrTTY() bool {
 	if s.stderrTTYOverride {
 		return s.stderrIsTTY
@@ -193,14 +208,17 @@ func (s *IOStreams) IsStderrTTY() bool {
 	return false
 }
 
+// SetPager sets the pager command used to paginate output.
 func (s *IOStreams) SetPager(cmd string) {
 	s.pagerCommand = cmd
 }
 
+// GetPager returns the configured pager command.
 func (s *IOStreams) GetPager() string {
 	return s.pagerCommand
 }
 
+// StartPager starts the configured pager process and redirects stdout to it.
 func (s *IOStreams) StartPager() error {
 	if s.pagerCommand == "" || s.pagerCommand == "cat" || !s.IsStdoutTTY() {
 		return nil
@@ -248,6 +266,7 @@ func (s *IOStreams) StartPager() error {
 	return nil
 }
 
+// StopPager stops the running pager process and restores stdout.
 func (s *IOStreams) StopPager() {
 	if s.pagerProcess == nil {
 		return
@@ -259,6 +278,7 @@ func (s *IOStreams) StopPager() {
 	s.pagerProcess = nil
 }
 
+// CanPrompt reports whether interactive prompting is possible.
 func (s *IOStreams) CanPrompt() bool {
 	if s.neverPrompt {
 		return false
@@ -267,26 +287,32 @@ func (s *IOStreams) CanPrompt() bool {
 	return s.IsStdinTTY() && s.IsStdoutTTY()
 }
 
+// GetNeverPrompt reports whether prompting has been permanently disabled.
 func (s *IOStreams) GetNeverPrompt() bool {
 	return s.neverPrompt
 }
 
+// SetNeverPrompt permanently enables or disables interactive prompting.
 func (s *IOStreams) SetNeverPrompt(v bool) {
 	s.neverPrompt = v
 }
 
+// GetSpinnerDisabled reports whether the animated spinner is disabled.
 func (s *IOStreams) GetSpinnerDisabled() bool {
 	return s.spinnerDisabled
 }
 
+// SetSpinnerDisabled enables or disables the animated spinner.
 func (s *IOStreams) SetSpinnerDisabled(v bool) {
 	s.spinnerDisabled = v
 }
 
+// StartProgressIndicator starts a progress spinner with no label.
 func (s *IOStreams) StartProgressIndicator() {
 	s.StartProgressIndicatorWithLabel("")
 }
 
+// StartProgressIndicatorWithLabel starts a progress spinner with the given label.
 func (s *IOStreams) StartProgressIndicatorWithLabel(label string) {
 	if !s.progressIndicatorEnabled {
 		return
@@ -357,6 +383,7 @@ func (s *IOStreams) StopProgressIndicator() {
 	s.progressIndicator = nil
 }
 
+// RunWithProgress runs the given function while displaying a labeled progress spinner.
 func (s *IOStreams) RunWithProgress(label string, run func() error) error {
 	s.StartProgressIndicatorWithLabel(label)
 	defer s.StopProgressIndicator()
@@ -364,6 +391,7 @@ func (s *IOStreams) RunWithProgress(label string, run func() error) error {
 	return run()
 }
 
+// StartAlternateScreenBuffer switches to the terminal's alternate screen buffer.
 func (s *IOStreams) StartAlternateScreenBuffer() {
 	if s.alternateScreenBufferEnabled {
 		s.alternateScreenBufferMu.Lock()
@@ -385,6 +413,7 @@ func (s *IOStreams) StartAlternateScreenBuffer() {
 	}
 }
 
+// StopAlternateScreenBuffer switches back from the terminal's alternate screen buffer.
 func (s *IOStreams) StopAlternateScreenBuffer() {
 	s.alternateScreenBufferMu.Lock()
 	defer s.alternateScreenBufferMu.Unlock()
@@ -395,10 +424,12 @@ func (s *IOStreams) StopAlternateScreenBuffer() {
 	}
 }
 
+// SetAlternateScreenBufferEnabled enables or disables use of the alternate screen buffer.
 func (s *IOStreams) SetAlternateScreenBufferEnabled(enabled bool) {
 	s.alternateScreenBufferEnabled = enabled
 }
 
+// RefreshScreen clears the terminal screen if stdout is a TTY.
 func (s *IOStreams) RefreshScreen() {
 	if s.IsStdoutTTY() {
 		// Move cursor to 0,0
@@ -417,6 +448,7 @@ func (s *IOStreams) TerminalWidth() int {
 	return DefaultWidth
 }
 
+// ColorScheme returns a ColorScheme configured from the current terminal capabilities.
 func (s *IOStreams) ColorScheme() *ColorScheme {
 	return &ColorScheme{
 		Enabled:       s.ColorEnabled(),
@@ -428,6 +460,7 @@ func (s *IOStreams) ColorScheme() *ColorScheme {
 	}
 }
 
+// ReadUserFile reads the contents of the given file, or from stdin if the filename is "-".
 func (s *IOStreams) ReadUserFile(fn string) ([]byte, error) {
 	var r io.ReadCloser
 	if fn == "-" {
@@ -443,6 +476,7 @@ func (s *IOStreams) ReadUserFile(fn string) ([]byte, error) {
 	return io.ReadAll(r)
 }
 
+// TempFile creates a temporary file, or returns the override if one has been set.
 func (s *IOStreams) TempFile(dir, pattern string) (*os.File, error) {
 	if s.TempFileOverride != nil {
 		return s.TempFileOverride, nil
@@ -450,22 +484,27 @@ func (s *IOStreams) TempFile(dir, pattern string) (*os.File, error) {
 	return os.CreateTemp(dir, pattern)
 }
 
+// SetAccessibleColorsEnabled enables or disables accessible base-16 colors.
 func (s *IOStreams) SetAccessibleColorsEnabled(enabled bool) {
 	s.accessibleColorsEnabled = enabled
 }
 
+// AccessibleColorsEnabled reports whether accessible base-16 colors are enabled.
 func (s *IOStreams) AccessibleColorsEnabled() bool {
 	return s.accessibleColorsEnabled
 }
 
+// SetAccessiblePrompterEnabled enables or disables accessible prompting mode.
 func (s *IOStreams) SetAccessiblePrompterEnabled(enabled bool) {
 	s.accessiblePrompterEnabled = enabled
 }
 
+// AccessiblePrompterEnabled reports whether accessible prompting mode is enabled.
 func (s *IOStreams) AccessiblePrompterEnabled() bool {
 	return s.accessiblePrompterEnabled
 }
 
+// System creates an IOStreams instance connected to the real standard streams.
 func System() *IOStreams {
 	terminal := ghTerm.FromEnv()
 
@@ -515,30 +554,37 @@ func System() *IOStreams {
 
 type fakeTerm struct{}
 
+// IsTerminalOutput reports whether output is a terminal (always false for fakeTerm).
 func (t fakeTerm) IsTerminalOutput() bool {
 	return false
 }
 
+// IsColorEnabled reports whether color is enabled (always false for fakeTerm).
 func (t fakeTerm) IsColorEnabled() bool {
 	return false
 }
 
+// Is256ColorSupported reports whether 256 colors are supported (always false for fakeTerm).
 func (t fakeTerm) Is256ColorSupported() bool {
 	return false
 }
 
+// IsTrueColorSupported reports whether true color is supported (always false for fakeTerm).
 func (t fakeTerm) IsTrueColorSupported() bool {
 	return false
 }
 
+// Theme returns the terminal theme (always empty for fakeTerm).
 func (t fakeTerm) Theme() string {
 	return ""
 }
 
+// Size returns a fixed terminal size of 80 columns for fakeTerm.
 func (t fakeTerm) Size() (int, int, error) {
 	return 80, -1, nil
 }
 
+// Test creates an IOStreams instance backed by in-memory buffers for testing.
 func Test() (*IOStreams, *bytes.Buffer, *bytes.Buffer, *bytes.Buffer) {
 	in := &bytes.Buffer{}
 	out := &bytes.Buffer{}
@@ -571,6 +617,7 @@ type pagerWriter struct {
 	io.WriteCloser
 }
 
+// Write writes data to the pager, wrapping EPIPE errors in ErrClosedPagerPipe.
 func (w *pagerWriter) Write(d []byte) (int, error) {
 	n, err := w.WriteCloser.Write(d)
 	if err != nil && (errors.Is(err, io.ErrClosedPipe) || isEpipeError(err)) {
@@ -585,6 +632,7 @@ type fdWriter struct {
 	fd uintptr
 }
 
+// Fd returns the original file descriptor of the wrapped writer.
 func (w *fdWriter) Fd() uintptr {
 	return w.fd
 }
@@ -595,6 +643,7 @@ type fdWriteCloser struct {
 	fd uintptr
 }
 
+// Fd returns the original file descriptor of the wrapped write-closer.
 func (w *fdWriteCloser) Fd() uintptr {
 	return w.fd
 }
@@ -605,6 +654,7 @@ type fdReader struct {
 	fd uintptr
 }
 
+// Fd returns the original file descriptor of the wrapped reader.
 func (r *fdReader) Fd() uintptr {
 	return r.fd
 }

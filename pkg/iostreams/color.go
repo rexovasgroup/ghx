@@ -9,8 +9,11 @@ import (
 )
 
 const (
-	NoTheme        = "none"
-	DarkTheme      = "dark"
+	// NoTheme indicates that no terminal theme is applied.
+	NoTheme = "none"
+	// DarkTheme indicates a dark terminal background theme.
+	DarkTheme = "dark"
+	// LightTheme indicates a light terminal background theme.
 	LightTheme     = "light"
 	highlightStyle = "black:yellow"
 )
@@ -57,6 +60,7 @@ type ColorScheme struct {
 	Theme string
 }
 
+// Bold applies bold formatting to the given text.
 func (c *ColorScheme) Bold(t string) string {
 	if !c.Enabled {
 		return t
@@ -64,10 +68,12 @@ func (c *ColorScheme) Bold(t string) string {
 	return bold(t)
 }
 
+// Boldf applies bold formatting to a formatted string.
 func (c *ColorScheme) Boldf(t string, args ...interface{}) string {
 	return c.Bold(fmt.Sprintf(t, args...))
 }
 
+// Muted applies a muted color to the given text based on the terminal theme.
 func (c *ColorScheme) Muted(t string) string {
 	// Fallback to previous logic if accessible colors preview is disabled.
 	if !c.Accessible {
@@ -89,10 +95,12 @@ func (c *ColorScheme) Muted(t string) string {
 	}
 }
 
+// Mutedf applies a muted color to a formatted string.
 func (c *ColorScheme) Mutedf(t string, args ...interface{}) string {
 	return c.Muted(fmt.Sprintf(t, args...))
 }
 
+// Red applies red color to the given text.
 func (c *ColorScheme) Red(t string) string {
 	if !c.Enabled {
 		return t
@@ -100,10 +108,12 @@ func (c *ColorScheme) Red(t string) string {
 	return red(t)
 }
 
+// Redf applies red color to a formatted string.
 func (c *ColorScheme) Redf(t string, args ...interface{}) string {
 	return c.Red(fmt.Sprintf(t, args...))
 }
 
+// Yellow applies yellow color to the given text.
 func (c *ColorScheme) Yellow(t string) string {
 	if !c.Enabled {
 		return t
@@ -111,10 +121,12 @@ func (c *ColorScheme) Yellow(t string) string {
 	return yellow(t)
 }
 
+// Yellowf applies yellow color to a formatted string.
 func (c *ColorScheme) Yellowf(t string, args ...interface{}) string {
 	return c.Yellow(fmt.Sprintf(t, args...))
 }
 
+// Green applies green color to the given text.
 func (c *ColorScheme) Green(t string) string {
 	if !c.Enabled {
 		return t
@@ -122,10 +134,12 @@ func (c *ColorScheme) Green(t string) string {
 	return green(t)
 }
 
+// Greenf applies green color to a formatted string.
 func (c *ColorScheme) Greenf(t string, args ...interface{}) string {
 	return c.Green(fmt.Sprintf(t, args...))
 }
 
+// GreenBold applies green color with bold formatting to the given text.
 func (c *ColorScheme) GreenBold(t string) string {
 	if !c.Enabled {
 		return t
@@ -149,6 +163,7 @@ func (c *ColorScheme) Grayf(t string, args ...interface{}) string {
 	return c.Gray(fmt.Sprintf(t, args...))
 }
 
+// Magenta applies magenta color to the given text.
 func (c *ColorScheme) Magenta(t string) string {
 	if !c.Enabled {
 		return t
@@ -156,10 +171,12 @@ func (c *ColorScheme) Magenta(t string) string {
 	return magenta(t)
 }
 
+// Magentaf applies magenta color to a formatted string.
 func (c *ColorScheme) Magentaf(t string, args ...interface{}) string {
 	return c.Magenta(fmt.Sprintf(t, args...))
 }
 
+// Cyan applies cyan color to the given text.
 func (c *ColorScheme) Cyan(t string) string {
 	if !c.Enabled {
 		return t
@@ -167,10 +184,12 @@ func (c *ColorScheme) Cyan(t string) string {
 	return cyan(t)
 }
 
+// Cyanf applies cyan color to a formatted string.
 func (c *ColorScheme) Cyanf(t string, args ...interface{}) string {
 	return c.Cyan(fmt.Sprintf(t, args...))
 }
 
+// CyanBold applies cyan color with bold formatting to the given text.
 func (c *ColorScheme) CyanBold(t string) string {
 	if !c.Enabled {
 		return t
@@ -178,6 +197,7 @@ func (c *ColorScheme) CyanBold(t string) string {
 	return cyanBold(t)
 }
 
+// Blue applies blue color to the given text.
 func (c *ColorScheme) Blue(t string) string {
 	if !c.Enabled {
 		return t
@@ -185,30 +205,37 @@ func (c *ColorScheme) Blue(t string) string {
 	return blue(t)
 }
 
+// Bluef applies blue color to a formatted string.
 func (c *ColorScheme) Bluef(t string, args ...interface{}) string {
 	return c.Blue(fmt.Sprintf(t, args...))
 }
 
+// SuccessIcon returns the colored success icon (✓).
 func (c *ColorScheme) SuccessIcon() string {
 	return c.SuccessIconWithColor(c.Green)
 }
 
+// SuccessIconWithColor returns the success icon (✓) using the given color function.
 func (c *ColorScheme) SuccessIconWithColor(colo func(string) string) string {
 	return colo("✓")
 }
 
+// WarningIcon returns the colored warning icon (!).
 func (c *ColorScheme) WarningIcon() string {
 	return c.Yellow("!")
 }
 
+// FailureIcon returns the colored failure icon (X).
 func (c *ColorScheme) FailureIcon() string {
 	return c.FailureIconWithColor(c.Red)
 }
 
+// FailureIconWithColor returns the failure icon (X) using the given color function.
 func (c *ColorScheme) FailureIconWithColor(colo func(string) string) string {
 	return colo("X")
 }
 
+// HighlightStart returns the ANSI escape code to begin highlighted text.
 func (c *ColorScheme) HighlightStart() string {
 	if !c.Enabled {
 		return ""
@@ -217,6 +244,7 @@ func (c *ColorScheme) HighlightStart() string {
 	return highlightStart
 }
 
+// Highlight applies highlight formatting to the given text.
 func (c *ColorScheme) Highlight(t string) string {
 	if !c.Enabled {
 		return t
@@ -225,6 +253,7 @@ func (c *ColorScheme) Highlight(t string) string {
 	return highlight(t)
 }
 
+// Reset returns the ANSI escape code to reset all formatting.
 func (c *ColorScheme) Reset() string {
 	if !c.Enabled {
 		return ""
@@ -233,6 +262,7 @@ func (c *ColorScheme) Reset() string {
 	return ansi.Reset
 }
 
+// ColorFromString returns the color function corresponding to the given color name.
 func (c *ColorScheme) ColorFromString(s string) func(string) string {
 	s = strings.ToLower(s)
 	var fn func(string) string
@@ -274,6 +304,7 @@ func (c *ColorScheme) Label(hex string, x string) string {
 	return fmt.Sprintf("\033[38;2;%d;%d;%dm%s\033[0m", r, g, b, x)
 }
 
+// TableHeader applies table header styling to the given text based on the terminal theme.
 func (c *ColorScheme) TableHeader(t string) string {
 	// Table headers are only stylized if color is enabled including underline modifier.
 	if !c.Enabled {
