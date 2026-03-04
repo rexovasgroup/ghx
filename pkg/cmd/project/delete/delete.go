@@ -32,6 +32,7 @@ type deleteProjectMutation struct {
 	} `graphql:"deleteProjectV2(input:$input)"`
 }
 
+// NewCmdDelete creates the cobra command for deleting a project.
 func NewCmdDelete(f *cmdutil.Factory, runF func(config deleteConfig) error) *cobra.Command {
 	opts := deleteOpts{}
 	deleteCmd := &cobra.Command{

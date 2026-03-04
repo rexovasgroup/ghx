@@ -15,6 +15,7 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// NewClient creates a new project queries Client for the given HTTP client and hostname.
 func NewClient(httpClient *http.Client, hostname string, ios *iostreams.IOStreams) *Client {
 	apiClient := &hostScopedClient{
 		hostname: hostname,
@@ -37,6 +38,7 @@ func WithPrompter(p iprompter) TestClientOpt {
 	}
 }
 
+// NewTestClient creates a Client suitable for use in tests.
 func NewTestClient(opts ...TestClientOpt) *Client {
 	apiClient := &hostScopedClient{
 		hostname: "github.com",
@@ -64,10 +66,12 @@ type hostScopedClient struct {
 	hostname string
 }
 
+// Query executes a GraphQL query scoped to the client's hostname.
 func (c *hostScopedClient) Query(queryName string, query interface{}, variables map[string]interface{}) error {
 	return c.Client.Query(c.hostname, queryName, query, variables)
 }
 
+// Mutate executes a GraphQL mutation scoped to the client's hostname.
 func (c *hostScopedClient) Mutate(queryName string, query interface{}, variables map[string]interface{}) error {
 	return c.Client.Mutate(c.hostname, queryName, query, variables)
 }
@@ -77,6 +81,7 @@ type graphqlClient interface {
 	Mutate(queryName string, query interface{}, variables map[string]interface{}) error
 }
 
+// Client wraps a GraphQL API client for project operations.
 type Client struct {
 	apiClient graphqlClient
 	io        *iostreams.IOStreams
@@ -84,6 +89,7 @@ type Client struct {
 }
 
 const (
+	// LimitDefault is the default number of items to fetch per page.
 	LimitDefault = 30
 	LimitMax     = 100 // https://docs.github.com/en/graphql/overview/resource-limitations#node-limit
 )
@@ -103,6 +109,7 @@ func (c *Client) Mutate(operationName string, query interface{}, variables map[s
 	return handleError(err)
 }
 
+// Query executes a raw GraphQL query with error handling.
 func (c *Client) Query(operationName string, query interface{}, variables map[string]interface{}) error {
 	err := c.apiClient.Query(operationName, query, variables)
 	return handleError(err)
@@ -257,6 +264,7 @@ func newProjectFromQueryWithoutItemsQuery(source projectQueryWithoutQueryableIte
 	return project
 }
 
+// DetailedItems returns project items with their field values as a serializable map.
 func (p Project) DetailedItems() map[string]interface{} {
 	return map[string]interface{}{
 		"items":      serializeProjectWithItems(&p),
@@ -264,6 +272,7 @@ func (p Project) DetailedItems() map[string]interface{} {
 	}
 }
 
+// ExportData returns the project data as a serializable map.
 func (p Project) ExportData(_ []string) map[string]interface{} {
 	return map[string]interface{}{
 		"number":           p.Number,
@@ -287,10 +296,12 @@ func (p Project) ExportData(_ []string) map[string]interface{} {
 	}
 }
 
+// OwnerType returns the type name of the project owner.
 func (p Project) OwnerType() string {
 	return p.Owner.TypeName
 }
 
+// OwnerLogin returns the login of the project owner.
 func (p Project) OwnerLogin() string {
 	if p.OwnerType() == "User" {
 		return p.Owner.User.Login
@@ -298,6 +309,7 @@ func (p Project) OwnerLogin() string {
 	return p.Owner.Organization.Login
 }
 
+// ExportData returns the mutation query project data as a serializable map.
 func (p ProjectMutationQuery) ExportData(_ []string) map[string]interface{} {
 	return map[string]interface{}{
 		"number":           p.Number,
@@ -321,10 +333,12 @@ func (p ProjectMutationQuery) ExportData(_ []string) map[string]interface{} {
 	}
 }
 
+// OwnerType returns the type name of the mutation query project owner.
 func (p ProjectMutationQuery) OwnerType() string {
 	return p.Owner.TypeName
 }
 
+// OwnerLogin returns the login of the mutation query project owner.
 func (p ProjectMutationQuery) OwnerLogin() string {
 	if p.OwnerType() == "User" {
 		return p.Owner.User.Login
@@ -332,11 +346,13 @@ func (p ProjectMutationQuery) OwnerLogin() string {
 	return p.Owner.Organization.Login
 }
 
+// Projects holds a paginated list of projects.
 type Projects struct {
 	Nodes      []Project
 	TotalCount int
 }
 
+// ExportData returns the projects list data as a serializable map.
 func (p Projects) ExportData(_ []string) map[string]interface{} {
 	v := make([]map[string]interface{}, len(p.Nodes))
 	for i := range p.Nodes {
@@ -357,6 +373,7 @@ type ProjectItem struct {
 	} `graphql:"fieldValues(first: 100)"` // hardcoded to 100 for now on the assumption that this is a reasonable limit
 }
 
+// ProjectItemContent holds the content union type of a project item.
 type ProjectItemContent struct {
 	TypeName    string      `graphql:"__typename"`
 	DraftIssue  DraftIssue  `graphql:"... on DraftIssue"`
@@ -364,6 +381,7 @@ type ProjectItemContent struct {
 	Issue       Issue       `graphql:"... on Issue"`
 }
 
+// FieldValueNodes represents the value of a project item field.
 type FieldValueNodes struct {
 	Type                        string `graphql:"__typename"`
 	ProjectV2ItemFieldDateValue struct {
@@ -443,6 +461,7 @@ type FieldValueNodes struct {
 	} `graphql:"... on ProjectV2ItemFieldReviewerValue"`
 }
 
+// ID returns the field ID associated with this field value node.
 func (v FieldValueNodes) ID() string {
 	switch v.Type {
 	case "ProjectV2ItemFieldDateValue":
@@ -472,12 +491,14 @@ func (v FieldValueNodes) ID() string {
 	return ""
 }
 
+// DraftIssue represents a draft issue in a project.
 type DraftIssue struct {
 	ID    string
 	Body  string
 	Title string
 }
 
+// ExportData returns the draft issue data as a serializable map.
 func (i DraftIssue) ExportData(_ []string) map[string]interface{} {
 	v := map[string]interface{}{
 		"title": i.Title,
@@ -491,6 +512,7 @@ func (i DraftIssue) ExportData(_ []string) map[string]interface{} {
 	return v
 }
 
+// PullRequest represents a pull request linked to a project item.
 type PullRequest struct {
 	Body       string
 	Title      string
@@ -501,6 +523,7 @@ type PullRequest struct {
 	}
 }
 
+// ExportData returns the pull request data as a serializable map.
 func (pr PullRequest) ExportData(_ []string) map[string]interface{} {
 	return map[string]interface{}{
 		"type":       "PullRequest",
@@ -512,6 +535,7 @@ func (pr PullRequest) ExportData(_ []string) map[string]interface{} {
 	}
 }
 
+// Issue represents an issue linked to a project item.
 type Issue struct {
 	Body       string
 	Title      string
@@ -522,6 +546,7 @@ type Issue struct {
 	}
 }
 
+// ExportData returns the issue data as a serializable map.
 func (i Issue) ExportData(_ []string) map[string]interface{} {
 	return map[string]interface{}{
 		"type":       "Issue",
@@ -533,6 +558,7 @@ func (i Issue) ExportData(_ []string) map[string]interface{} {
 	}
 }
 
+// DetailedItem returns the underlying content of the project item as an exportable type.
 func (p ProjectItem) DetailedItem() exportable {
 	switch p.Type() {
 	case "DraftIssue":
@@ -637,6 +663,7 @@ func (p ProjectItem) URL() string {
 	return ""
 }
 
+// ExportData returns the project item data as a serializable map.
 func (p ProjectItem) ExportData(_ []string) map[string]interface{} {
 	v := map[string]interface{}{
 		"id":    p.ID(),
@@ -728,155 +755,182 @@ type pager[N projectAttribute] interface {
 	Project() *Project
 }
 
-// userOwnerWithItemsNoQuery
+// userOwnerWithItemsNoQuery implements pager for user-owned projects without item query.
 func (q userOwnerWithItemsNoQuery) HasNextPage() bool {
 	return q.Owner.Project.Items.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for items.
 func (q userOwnerWithItemsNoQuery) EndCursor() string {
 	return string(q.Owner.Project.Items.PageInfo.EndCursor)
 }
 
+// Nodes returns the project items.
 func (q userOwnerWithItemsNoQuery) Nodes() []ProjectItem {
 	return q.Owner.Project.Items.Nodes
 }
 
+// Project returns the project without items query data.
 func (q userOwnerWithItemsNoQuery) Project() *Project {
 	return newProjectFromQueryWithoutItemsQuery(q.Owner.Project)
 }
 
-// userOwnerWithItems
+// userOwnerWithItems implements pager for user-owned projects with item query.
 func (q userOwnerWithItems) HasNextPage() bool {
 	return q.Owner.Project.Items.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for items.
 func (q userOwnerWithItems) EndCursor() string {
 	return string(q.Owner.Project.Items.PageInfo.EndCursor)
 }
 
+// Nodes returns the project items.
 func (q userOwnerWithItems) Nodes() []ProjectItem {
 	return q.Owner.Project.Items.Nodes
 }
 
+// Project returns the project with items query data.
 func (q userOwnerWithItems) Project() *Project {
 	return newProjectFromQueryWithItemsQuery(q.Owner.Project)
 }
 
-// orgOwnerWithItems
+// orgOwnerWithItems implements pager for org-owned projects with item query.
 func (q orgOwnerWithItems) HasNextPage() bool {
 	return q.Owner.Project.Items.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for items.
 func (q orgOwnerWithItems) EndCursor() string {
 	return string(q.Owner.Project.Items.PageInfo.EndCursor)
 }
 
+// Nodes returns the project items.
 func (q orgOwnerWithItems) Nodes() []ProjectItem {
 	return q.Owner.Project.Items.Nodes
 }
 
+// Project returns the project with items query data.
 func (q orgOwnerWithItems) Project() *Project {
 	return newProjectFromQueryWithItemsQuery(q.Owner.Project)
 }
 
-// orgOwnerWithItemsNoQuery
+// orgOwnerWithItemsNoQuery implements pager for org-owned projects without item query.
 func (q orgOwnerWithItemsNoQuery) HasNextPage() bool {
 	return q.Owner.Project.Items.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for items.
 func (q orgOwnerWithItemsNoQuery) EndCursor() string {
 	return string(q.Owner.Project.Items.PageInfo.EndCursor)
 }
 
+// Nodes returns the project items.
 func (q orgOwnerWithItemsNoQuery) Nodes() []ProjectItem {
 	return q.Owner.Project.Items.Nodes
 }
 
+// Project returns the project without items query data.
 func (q orgOwnerWithItemsNoQuery) Project() *Project {
 	return newProjectFromQueryWithoutItemsQuery(q.Owner.Project)
 }
 
-// viewerOwnerWithItems
+// viewerOwnerWithItems implements pager for viewer-owned projects with item query.
 func (q viewerOwnerWithItems) HasNextPage() bool {
 	return q.Owner.Project.Items.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for items.
 func (q viewerOwnerWithItems) EndCursor() string {
 	return string(q.Owner.Project.Items.PageInfo.EndCursor)
 }
 
+// Nodes returns the project items.
 func (q viewerOwnerWithItems) Nodes() []ProjectItem {
 	return q.Owner.Project.Items.Nodes
 }
 
+// Project returns the project with items query data.
 func (q viewerOwnerWithItems) Project() *Project {
 	return newProjectFromQueryWithItemsQuery(q.Owner.Project)
 }
 
-// viewerOwnerWithItemsNoQuery
+// viewerOwnerWithItemsNoQuery implements pager for viewer-owned projects without item query.
 func (q viewerOwnerWithItemsNoQuery) HasNextPage() bool {
 	return q.Owner.Project.Items.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for items.
 func (q viewerOwnerWithItemsNoQuery) EndCursor() string {
 	return string(q.Owner.Project.Items.PageInfo.EndCursor)
 }
 
+// Nodes returns the project items.
 func (q viewerOwnerWithItemsNoQuery) Nodes() []ProjectItem {
 	return q.Owner.Project.Items.Nodes
 }
 
+// Project returns the project without items query data.
 func (q viewerOwnerWithItemsNoQuery) Project() *Project {
 	return newProjectFromQueryWithoutItemsQuery(q.Owner.Project)
 }
 
-// userOwnerWithFields
+// userOwnerWithFields implements pager for user-owned projects with field query.
 func (q userOwnerWithFields) HasNextPage() bool {
 	return q.Owner.Project.Fields.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for fields.
 func (q userOwnerWithFields) EndCursor() string {
 	return string(q.Owner.Project.Fields.PageInfo.EndCursor)
 }
 
+// Nodes returns the project fields.
 func (q userOwnerWithFields) Nodes() []ProjectField {
 	return q.Owner.Project.Fields.Nodes
 }
 
+// Project returns the project without items query data.
 func (q userOwnerWithFields) Project() *Project {
 	return newProjectFromQueryWithoutItemsQuery(q.Owner.Project)
 }
 
-// orgOwnerWithFields
+// orgOwnerWithFields implements pager for org-owned projects with field query.
 func (q orgOwnerWithFields) HasNextPage() bool {
 	return q.Owner.Project.Fields.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for fields.
 func (q orgOwnerWithFields) EndCursor() string {
 	return string(q.Owner.Project.Fields.PageInfo.EndCursor)
 }
 
+// Nodes returns the project fields.
 func (q orgOwnerWithFields) Nodes() []ProjectField {
 	return q.Owner.Project.Fields.Nodes
 }
 
+// Project returns the project without items query data.
 func (q orgOwnerWithFields) Project() *Project {
 	return newProjectFromQueryWithoutItemsQuery(q.Owner.Project)
 }
 
-// viewerOwnerWithFields
+// viewerOwnerWithFields implements pager for viewer-owned projects with field query.
 func (q viewerOwnerWithFields) HasNextPage() bool {
 	return q.Owner.Project.Fields.PageInfo.HasNextPage
 }
 
+// EndCursor returns the pagination end cursor for fields.
 func (q viewerOwnerWithFields) EndCursor() string {
 	return string(q.Owner.Project.Fields.PageInfo.EndCursor)
 }
 
+// Nodes returns the project fields.
 func (q viewerOwnerWithFields) Nodes() []ProjectField {
 	return q.Owner.Project.Fields.Nodes
 }
 
+// Project returns the project without items query data.
 func (q viewerOwnerWithFields) Project() *Project {
 	return newProjectFromQueryWithoutItemsQuery(q.Owner.Project)
 }
@@ -971,11 +1025,13 @@ func (p ProjectField) Type() string {
 	return p.TypeName
 }
 
+// SingleSelectFieldOptions represents an option for a single-select project field.
 type SingleSelectFieldOptions struct {
 	ID   string
 	Name string
 }
 
+// ExportData returns the single-select field option data as a serializable map.
 func (f SingleSelectFieldOptions) ExportData(_ []string) map[string]interface{} {
 	return map[string]interface{}{
 		"id":   f.ID,
@@ -983,6 +1039,7 @@ func (f SingleSelectFieldOptions) ExportData(_ []string) map[string]interface{} 
 	}
 }
 
+// Options returns the available options for a single-select project field.
 func (p ProjectField) Options() []SingleSelectFieldOptions {
 	if p.TypeName == "ProjectV2SingleSelectField" {
 		var options []SingleSelectFieldOptions
@@ -997,6 +1054,7 @@ func (p ProjectField) Options() []SingleSelectFieldOptions {
 	return nil
 }
 
+// ExportData returns the project field data as a serializable map.
 func (p ProjectField) ExportData(_ []string) map[string]interface{} {
 	v := map[string]interface{}{
 		"id":   p.ID(),
@@ -1014,12 +1072,14 @@ func (p ProjectField) ExportData(_ []string) map[string]interface{} {
 	return v
 }
 
+// ProjectFields holds a paginated list of project fields.
 type ProjectFields struct {
 	TotalCount int
 	Nodes      []ProjectField
 	PageInfo   PageInfo
 }
 
+// ExportData returns the project fields data as a serializable map.
 func (p ProjectFields) ExportData(_ []string) map[string]interface{} {
 	fields := make([]map[string]interface{}, len(p.Nodes))
 	for i := range p.Nodes {
@@ -1181,9 +1241,9 @@ type viewerOwnerWithFields struct {
 // OwnerType is the type of the owner of a project, which can be either a user or an organization. Viewer is the current user.
 type OwnerType string
 
-const UserOwner OwnerType = "USER"
-const OrgOwner OwnerType = "ORGANIZATION"
-const ViewerOwner OwnerType = "VIEWER"
+const UserOwner OwnerType = "USER"        // UserOwner represents a user-owned project.
+const OrgOwner OwnerType = "ORGANIZATION" // OrgOwner represents an organization-owned project.
+const ViewerOwner OwnerType = "VIEWER"    // ViewerOwner represents a project owned by the current viewer.
 
 // ViewerLoginName returns the login name of the viewer.
 func (c *Client) ViewerLoginName() (string, error) {
@@ -1385,6 +1445,7 @@ func (c *Client) paginateOrgLogins(l []loginTypes, cursor string) ([]loginTypes,
 	return l, nil
 }
 
+// Owner represents the owner of a project.
 type Owner struct {
 	Login string
 	Type  OwnerType

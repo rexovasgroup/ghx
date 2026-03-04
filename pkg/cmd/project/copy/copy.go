@@ -36,6 +36,7 @@ type copyProjectMutation struct {
 	} `graphql:"copyProjectV2(input:$input)"`
 }
 
+// NewCmdCopy creates the cobra command for copying a project.
 func NewCmdCopy(f *cmdutil.Factory, runF func(config copyConfig) error) *cobra.Command {
 	opts := copyOpts{}
 	copyCmd := &cobra.Command{

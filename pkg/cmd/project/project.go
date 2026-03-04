@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdProject creates the top-level cobra command for working with GitHub Projects.
 func NewCmdProject(f *cmdutil.Factory) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   "project <command>",

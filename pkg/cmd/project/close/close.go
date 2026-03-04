@@ -34,6 +34,7 @@ type updateProjectMutation struct {
 	} `graphql:"updateProjectV2(input:$input)"`
 }
 
+// NewCmdClose creates the cobra command for closing a project.
 func NewCmdClose(f *cmdutil.Factory, runF func(config closeConfig) error) *cobra.Command {
 	opts := closeOpts{}
 	closeCmd := &cobra.Command{

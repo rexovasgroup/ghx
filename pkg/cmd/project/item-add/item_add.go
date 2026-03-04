@@ -34,6 +34,7 @@ type addProjectItemMutation struct {
 	} `graphql:"addProjectV2ItemById(input:$input)"`
 }
 
+// NewCmdAddItem creates the cobra command for adding an item to a project.
 func NewCmdAddItem(f *cmdutil.Factory, runF func(config addItemConfig) error) *cobra.Command {
 	opts := addItemOpts{}
 	addItemCmd := &cobra.Command{

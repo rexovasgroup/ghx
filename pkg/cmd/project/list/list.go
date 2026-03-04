@@ -29,6 +29,7 @@ type listConfig struct {
 	io        *iostreams.IOStreams
 }
 
+// NewCmdList creates the cobra command for listing projects.
 func NewCmdList(f *cmdutil.Factory, runF func(config listConfig) error) *cobra.Command {
 	opts := listOpts{}
 	listCmd := &cobra.Command{

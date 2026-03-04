@@ -37,6 +37,7 @@ type unlinkConfig struct {
 	io         *iostreams.IOStreams
 }
 
+// NewCmdUnlink creates the cobra command for unlinking a project from a repository or team.
 func NewCmdUnlink(f *cmdutil.Factory, runF func(config unlinkConfig) error) *cobra.Command {
 	opts := unlinkOpts{}
 	linkCmd := &cobra.Command{

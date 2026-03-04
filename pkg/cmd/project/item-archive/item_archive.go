@@ -40,6 +40,7 @@ type unarchiveProjectItemMutation struct {
 	} `graphql:"unarchiveProjectV2Item(input:$input)"`
 }
 
+// NewCmdArchiveItem creates the cobra command for archiving a project item.
 func NewCmdArchiveItem(f *cmdutil.Factory, runF func(config archiveItemConfig) error) *cobra.Command {
 	opts := archiveItemOpts{}
 	archiveItemCmd := &cobra.Command{

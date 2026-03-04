@@ -31,6 +31,7 @@ type createProjectMutation struct {
 	} `graphql:"createProjectV2(input:$input)"`
 }
 
+// NewCmdCreate creates the cobra command for creating a project.
 func NewCmdCreate(f *cmdutil.Factory, runF func(config createConfig) error) *cobra.Command {
 	opts := createOpts{}
 	createCmd := &cobra.Command{

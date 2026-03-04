@@ -37,6 +37,7 @@ type linkConfig struct {
 	io         *iostreams.IOStreams
 }
 
+// NewCmdLink creates the cobra command for linking a project to a repository or team.
 func NewCmdLink(f *cmdutil.Factory, runF func(config linkConfig) error) *cobra.Command {
 	opts := linkOpts{}
 	linkCmd := &cobra.Command{

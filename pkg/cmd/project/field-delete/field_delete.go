@@ -28,6 +28,7 @@ type deleteProjectV2FieldMutation struct {
 	} `graphql:"deleteProjectV2Field(input:$input)"`
 }
 
+// NewCmdDeleteField creates the cobra command for deleting a project field.
 func NewCmdDeleteField(f *cmdutil.Factory, runF func(config deleteFieldConfig) error) *cobra.Command {
 	opts := deleteFieldOpts{}
 	deleteFieldCmd := &cobra.Command{

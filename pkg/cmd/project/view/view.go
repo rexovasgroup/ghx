@@ -28,6 +28,7 @@ type viewConfig struct {
 	URLOpener func(string) error
 }
 
+// NewCmdView creates the cobra command for viewing a project.
 func NewCmdView(f *cmdutil.Factory, runF func(config viewConfig) error) *cobra.Command {
 	opts := viewOpts{}
 	viewCmd := &cobra.Command{

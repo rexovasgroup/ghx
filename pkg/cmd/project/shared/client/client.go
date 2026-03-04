@@ -7,6 +7,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 )
 
+// New creates a new project queries client from the given factory.
 func New(f *cmdutil.Factory) (*queries.Client, error) {
 	if f.HttpClient == nil {
 		// This is for compatibility with tests that exercise Cobra command functionality.

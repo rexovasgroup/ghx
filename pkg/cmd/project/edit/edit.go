@@ -39,6 +39,7 @@ type updateProjectMutation struct {
 const projectVisibilityPublic = "PUBLIC"
 const projectVisibilityPrivate = "PRIVATE"
 
+// NewCmdEdit creates the cobra command for editing a project.
 func NewCmdEdit(f *cmdutil.Factory, runF func(config editConfig) error) *cobra.Command {
 	opts := editOpts{}
 	editCmd := &cobra.Command{

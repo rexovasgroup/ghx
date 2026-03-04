@@ -34,6 +34,7 @@ type createProjectDraftItemMutation struct {
 	} `graphql:"addProjectV2DraftIssue(input:$input)"`
 }
 
+// NewCmdCreateItem creates the cobra command for creating a draft issue in a project.
 func NewCmdCreateItem(f *cmdutil.Factory, runF func(config createItemConfig) error) *cobra.Command {
 	opts := createItemOpts{}
 	createItemCmd := &cobra.Command{

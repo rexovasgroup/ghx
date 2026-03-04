@@ -31,6 +31,7 @@ type listConfig struct {
 	detector fd.Detector
 }
 
+// NewCmdList creates the cobra command for listing items in a project.
 func NewCmdList(f *cmdutil.Factory, runF func(config listConfig) error) *cobra.Command {
 	opts := listOpts{}
 	listCmd := &cobra.Command{

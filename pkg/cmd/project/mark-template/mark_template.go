@@ -38,6 +38,7 @@ type unmarkProjectTemplateMutation struct {
 	} `graphql:"unmarkProjectV2AsTemplate(input:$input)"`
 }
 
+// NewCmdMarkTemplate creates the cobra command for marking a project as a template.
 func NewCmdMarkTemplate(f *cmdutil.Factory, runF func(config markTemplateConfig) error) *cobra.Command {
 	opts := markTemplateOpts{}
 	markTemplateCmd := &cobra.Command{

@@ -41,30 +41,35 @@ type editItemConfig struct {
 	opts   editItemOpts
 }
 
+// EditProjectDraftIssue is the GraphQL mutation response for updating a draft issue.
 type EditProjectDraftIssue struct {
 	UpdateProjectV2DraftIssue struct {
 		DraftIssue queries.DraftIssue `graphql:"draftIssue"`
 	} `graphql:"updateProjectV2DraftIssue(input:$input)"`
 }
 
+// DraftIssueQuery is the GraphQL query response for fetching a draft issue by ID.
 type DraftIssueQuery struct {
 	DraftIssueNode struct {
 		DraftIssue queries.DraftIssue `graphql:"... on DraftIssue"`
 	} `graphql:"node(id: $id)"`
 }
 
+// UpdateProjectV2FieldValue is the GraphQL mutation response for updating a project item field value.
 type UpdateProjectV2FieldValue struct {
 	Update struct {
 		Item queries.ProjectItem `graphql:"projectV2Item"`
 	} `graphql:"updateProjectV2ItemFieldValue(input:$input)"`
 }
 
+// ClearProjectV2FieldValue is the GraphQL mutation response for clearing a project item field value.
 type ClearProjectV2FieldValue struct {
 	Clear struct {
 		Item queries.ProjectItem `graphql:"projectV2Item"`
 	} `graphql:"clearProjectV2ItemFieldValue(input:$input)"`
 }
 
+// NewCmdEditItem creates the cobra command for editing a project item.
 func NewCmdEditItem(f *cmdutil.Factory, runF func(config editItemConfig) error) *cobra.Command {
 	opts := editItemOpts{}
 	editItemCmd := &cobra.Command{

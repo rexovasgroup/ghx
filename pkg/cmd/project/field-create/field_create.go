@@ -35,6 +35,7 @@ type createProjectV2FieldMutation struct {
 	} `graphql:"createProjectV2Field(input:$input)"`
 }
 
+// NewCmdCreateField creates the cobra command for creating a project field.
 func NewCmdCreateField(f *cmdutil.Factory, runF func(config createFieldConfig) error) *cobra.Command {
 	opts := createFieldOpts{}
 	createFieldCmd := &cobra.Command{
