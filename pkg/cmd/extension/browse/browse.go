@@ -25,6 +25,7 @@ import (
 
 const pagingOffset = 24
 
+// ExtBrowseOpts holds the options for the extension browse command.
 type ExtBrowseOpts struct {
 	Cmd          *cobra.Command
 	Browser      ibrowser
@@ -63,6 +64,7 @@ type extEntry struct {
 	description string
 }
 
+// Title returns the display title for the extension entry including status indicators.
 func (e extEntry) Title() string {
 	var installed string
 	var official string
@@ -78,6 +80,7 @@ func (e extEntry) Title() string {
 	return fmt.Sprintf("%s%s%s", e.FullName, official, installed)
 }
 
+// Description returns the extension description or a default placeholder.
 func (e extEntry) Description() string {
 	if e.description == "" {
 		return "no description provided"
@@ -103,9 +106,14 @@ type wGroup interface {
 
 type fakeGroup struct{}
 
+// Add is a no-op implementation of the wGroup interface.
 func (w *fakeGroup) Add(int) {}
-func (w *fakeGroup) Done()   {}
-func (w *fakeGroup) Wait()   {}
+
+// Done is a no-op implementation of the wGroup interface.
+func (w *fakeGroup) Done() {}
+
+// Wait is a no-op implementation of the wGroup interface.
+func (w *fakeGroup) Wait() {}
 
 func newExtList(opts ExtBrowseOpts, ui uiRegistry, extEntries []extEntry) *extList {
 	ui.List.SetTitleColor(tcell.ColorWhite)
@@ -219,10 +227,12 @@ func (el *extList) toggleSelected(verb string) {
 	}
 }
 
+// InstallSelected installs the currently highlighted extension.
 func (el *extList) InstallSelected() {
 	el.toggleSelected("install")
 }
 
+// RemoveSelected removes the currently highlighted extension.
 func (el *extList) RemoveSelected() {
 	el.toggleSelected("remove")
 }
@@ -233,15 +243,18 @@ func (el *extList) toggleInstalled(ix int) {
 	el.extEntries[ix] = ee
 }
 
+// Focus sets the application focus to the extension list.
 func (el *extList) Focus() {
 	el.app.SetFocus(el.ui.List)
 }
 
+// Refresh resets the list and reapplies the current filter.
 func (el *extList) Refresh() {
 	el.Reset()
 	el.Filter(el.filter)
 }
 
+// Reset clears the list and repopulates it with all extension entries.
 func (el *extList) Reset() {
 	el.ui.List.Clear()
 	for _, ee := range el.extEntries {
@@ -249,10 +262,12 @@ func (el *extList) Reset() {
 	}
 }
 
+// PageDown moves the list selection down by one page.
 func (el *extList) PageDown() {
 	el.ui.List.SetCurrentItem(el.ui.List.GetCurrentItem() + pagingOffset)
 }
 
+// PageUp moves the list selection up by one page.
 func (el *extList) PageUp() {
 	i := el.ui.List.GetCurrentItem() - pagingOffset
 	if i < 0 {
@@ -261,10 +276,12 @@ func (el *extList) PageUp() {
 	el.ui.List.SetCurrentItem(i)
 }
 
+// ScrollDown moves the list selection down by one item.
 func (el *extList) ScrollDown() {
 	el.ui.List.SetCurrentItem(el.ui.List.GetCurrentItem() + 1)
 }
 
+// ScrollUp moves the list selection up by one item.
 func (el *extList) ScrollUp() {
 	i := el.ui.List.GetCurrentItem() - 1
 	if i < 0 {
@@ -273,6 +290,7 @@ func (el *extList) ScrollUp() {
 	el.ui.List.SetCurrentItem(i)
 }
 
+// FindSelected returns the currently selected extension entry and its index.
 func (el *extList) FindSelected() (extEntry, int) {
 	if el.ui.List.GetItemCount() == 0 {
 		return extEntry{}, -1
@@ -286,6 +304,7 @@ func (el *extList) FindSelected() (extEntry, int) {
 	return extEntry{}, -1
 }
 
+// Filter narrows the displayed list to entries matching the given text.
 func (el *extList) Filter(text string) {
 	el.filter = text
 	if text == "" {
@@ -377,6 +396,7 @@ func getExtensions(opts ExtBrowseOpts) ([]extEntry, error) {
 	return extEntries, nil
 }
 
+// ExtBrowse launches the interactive TUI for browsing and managing extensions.
 func ExtBrowse(opts ExtBrowseOpts) error {
 	if opts.Debug {
 		f, err := os.CreateTemp("", "extBrowse-*.txt")

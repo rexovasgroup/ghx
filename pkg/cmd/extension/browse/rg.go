@@ -20,6 +20,7 @@ func newReadmeGetter(client *http.Client, cacheTTL time.Duration) *readmeGetter 
 	}
 }
 
+// Get fetches the README content for the given repository full name.
 func (g *readmeGetter) Get(repoFullName string) (string, error) {
 	repo, err := ghrepo.FromFullName(repoFullName)
 	if err != nil {

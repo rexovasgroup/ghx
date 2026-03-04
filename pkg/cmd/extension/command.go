@@ -25,6 +25,7 @@ import (
 
 var alreadyInstalledError = errors.New("alreadyInstalledError")
 
+// NewCmdExtension creates the cobra command for managing gh extensions.
 func NewCmdExtension(f *cmdutil.Factory) *cobra.Command {
 	m := f.ExtensionManager
 	io := f.IOStreams

@@ -16,14 +16,19 @@ import (
 
 const manifestName = "manifest.yml"
 
+// ExtensionKind indicates the type of a gh CLI extension.
 type ExtensionKind int
 
 const (
+	// GitKind represents a git-based extension.
 	GitKind ExtensionKind = iota
+	// BinaryKind represents a precompiled binary extension.
 	BinaryKind
+	// LocalKind represents a locally developed extension.
 	LocalKind
 )
 
+// Extension represents an installed gh CLI extension.
 type Extension struct {
 	path       string
 	kind       ExtensionKind
@@ -40,22 +45,27 @@ type Extension struct {
 	owner          string
 }
 
+// Name returns the extension name without the "gh-" prefix.
 func (e *Extension) Name() string {
 	return strings.TrimPrefix(filepath.Base(e.path), "gh-")
 }
 
+// Path returns the filesystem path to the extension executable.
 func (e *Extension) Path() string {
 	return e.path
 }
 
+// IsLocal returns true if the extension is a locally developed extension.
 func (e *Extension) IsLocal() bool {
 	return e.kind == LocalKind
 }
 
+// IsBinary returns true if the extension is a precompiled binary.
 func (e *Extension) IsBinary() bool {
 	return e.kind == BinaryKind
 }
 
+// URL returns the repository URL of the extension.
 func (e *Extension) URL() string {
 	e.mu.RLock()
 	if e.url != "" {
@@ -85,6 +95,7 @@ func (e *Extension) URL() string {
 	return e.url
 }
 
+// CurrentVersion returns the currently installed version of the extension.
 func (e *Extension) CurrentVersion() string {
 	e.mu.RLock()
 	if e.currentVersion != "" {
@@ -113,6 +124,7 @@ func (e *Extension) CurrentVersion() string {
 	return e.currentVersion
 }
 
+// LatestVersion returns the latest available version of the extension.
 func (e *Extension) LatestVersion() string {
 	e.mu.RLock()
 	if e.latestVersion != "" {
@@ -147,6 +159,7 @@ func (e *Extension) LatestVersion() string {
 	return e.latestVersion
 }
 
+// IsPinned returns true if the extension is pinned to a specific version.
 func (e *Extension) IsPinned() bool {
 	e.mu.RLock()
 	if e.isPinned != nil {
@@ -179,6 +192,7 @@ func (e *Extension) IsPinned() bool {
 	return *e.isPinned
 }
 
+// Owner returns the GitHub owner of the extension repository.
 func (e *Extension) Owner() string {
 	e.mu.RLock()
 	if e.owner != "" {
@@ -211,6 +225,7 @@ func (e *Extension) Owner() string {
 	return e.owner
 }
 
+// UpdateAvailable returns true if a newer version of the extension exists.
 func (e *Extension) UpdateAvailable() bool {
 	if e.IsLocal() ||
 		e.CurrentVersion() == "" ||

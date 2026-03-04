@@ -30,17 +30,20 @@ import (
 // ErrInitialCommitFailed indicates the initial commit when making a new extension failed.
 var ErrInitialCommitFailed = errors.New("initial commit failed")
 
+// ErrExtensionExecutableNotFound indicates that an installed extension has no executable.
 type ErrExtensionExecutableNotFound struct {
 	Dir  string
 	Name string
 }
 
+// Error returns a descriptive message about the missing executable.
 func (e *ErrExtensionExecutableNotFound) Error() string {
 	return fmt.Sprintf("an extension has been installed but there is no executable: executable file named \"%s\" in %s is required to run the extension after install. Perhaps you need to build it?\n", e.Name, e.Dir)
 }
 
 const darwinAmd64 = "darwin-amd64"
 
+// Manager handles installation, upgrade, and removal of gh CLI extensions.
 type Manager struct {
 	dataDir    func() string
 	updateDir  func() string
@@ -55,6 +58,7 @@ type Manager struct {
 	dryRunMode bool
 }
 
+// NewManager creates a new extension Manager with default settings.
 func NewManager(ios *iostreams.IOStreams, gc *git.Client) *Manager {
 	return &Manager{
 		dataDir: config.DataDir,
@@ -76,18 +80,22 @@ func NewManager(ios *iostreams.IOStreams, gc *git.Client) *Manager {
 	}
 }
 
+// SetConfig sets the configuration used by the Manager.
 func (m *Manager) SetConfig(cfg gh.Config) {
 	m.config = cfg
 }
 
+// SetClient sets the HTTP client used by the Manager.
 func (m *Manager) SetClient(client *http.Client) {
 	m.client = client
 }
 
+// EnableDryRunMode enables dry-run mode so that no changes are persisted.
 func (m *Manager) EnableDryRunMode() {
 	m.dryRunMode = true
 }
 
+// Dispatch executes an installed extension by name with the given I/O streams.
 func (m *Manager) Dispatch(args []string, stdin io.Reader, stdout, stderr io.Writer) (bool, error) {
 	if len(args) == 0 {
 		return false, errors.New("too few arguments in list")
@@ -133,6 +141,7 @@ func (m *Manager) Dispatch(args []string, stdin io.Reader, stdout, stderr io.Wri
 	return true, externalCmd.Run()
 }
 
+// List returns all installed extensions.
 func (m *Manager) List() []extensions.Extension {
 	exts, _ := m.list(false)
 	r := make([]extensions.Extension, len(exts))
@@ -205,6 +214,7 @@ func (m *Manager) populateLatestVersions(exts []*Extension) {
 	wg.Wait()
 }
 
+// InstallLocal installs a local extension from the given directory.
 func (m *Manager) InstallLocal(dir string) error {
 	name := filepath.Base(dir)
 	if err := m.cleanExtensionUpdateDir(name); err != nil {
@@ -451,6 +461,7 @@ var localExtensionUpgradeError = errors.New("local extensions can not be upgrade
 var upToDateError = errors.New("already up to date")
 var noExtensionsInstalledError = errors.New("no extensions installed")
 
+// Upgrade upgrades the named extension or all extensions if name is empty.
 func (m *Manager) Upgrade(name string, force bool) error {
 	// Fetch metadata during list only when upgrading all extensions.
 	// This is a performance improvement so that we don't make a
@@ -570,6 +581,7 @@ func (m *Manager) upgradeBinExtension(ext *Extension) error {
 	return m.installBin(repo, "")
 }
 
+// Remove uninstalls the named extension and cleans up its files.
 func (m *Manager) Remove(name string) error {
 	name = normalizeExtension(name)
 	targetDir := filepath.Join(m.installDir(), name)
@@ -609,6 +621,7 @@ var scriptTmpl string
 //go:embed ext_tmpls/buildScript.sh
 var buildScript []byte
 
+// Create scaffolds a new extension project with the given name and template type.
 func (m *Manager) Create(name string, tmplType extensions.ExtTemplateType) error {
 	if _, err := m.gitClient.CommandOutput([]string{"init", "--quiet", name}); err != nil {
 		return err
