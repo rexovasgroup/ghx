@@ -15,12 +15,14 @@ func ReplaceTripper(client *http.Client, reg *Registry) {
 	client.Transport = reg
 }
 
+// Registry tracks HTTP stubs and records requests for verification in tests.
 type Registry struct {
 	mu       sync.Mutex
 	stubs    []*Stub
 	Requests []*http.Request
 }
 
+// Register adds a new stub with the given matcher and responder to the registry.
 func (r *Registry) Register(m Matcher, resp Responder) {
 	r.stubs = append(r.stubs, &Stub{
 		Stack:     string(debug.Stack()),
@@ -29,6 +31,7 @@ func (r *Registry) Register(m Matcher, resp Responder) {
 	})
 }
 
+// Exclude registers a stub that causes the test to fail if a matching HTTP request is made.
 func (r *Registry) Exclude(t *testing.T, m Matcher) {
 	registrationStack := string(debug.Stack())
 
@@ -52,11 +55,13 @@ func (r *Registry) Exclude(t *testing.T, m Matcher) {
 	r.stubs = append(r.stubs, excludedStub)
 }
 
+// Testing is an interface for test error reporting used by Verify.
 type Testing interface {
 	Errorf(string, ...interface{})
 	Helper()
 }
 
+// Verify reports an error if any registered stubs were not matched by an HTTP request.
 func (r *Registry) Verify(t Testing) {
 	var unmatchedStubStacks []string
 	for _, s := range r.stubs {
