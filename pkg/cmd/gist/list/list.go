@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ListOptions holds the options for the gist list command.
 type ListOptions struct {
 	IO         *iostreams.IOStreams
 	Config     func() (gh.Config, error)
@@ -28,6 +29,7 @@ type ListOptions struct {
 	Visibility     string // all, secret, public
 }
 
+// NewCmdList creates the gist list command.
 func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := &ListOptions{
 		IO:         f.IOStreams,

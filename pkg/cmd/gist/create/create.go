@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CreateOptions holds the options for the gist create command.
 type CreateOptions struct {
 	IO *iostreams.IOStreams
 
@@ -39,6 +40,7 @@ type CreateOptions struct {
 	Browser    browser.Browser
 }
 
+// NewCmdCreate creates the gist create command.
 func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Command {
 	opts := CreateOptions{
 		IO:         f.IOStreams,

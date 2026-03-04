@@ -19,6 +19,7 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// GistFile represents a single file within a gist.
 type GistFile struct {
 	Filename  string `json:"filename,omitempty"`
 	Type      string `json:"type,omitempty"`
@@ -28,10 +29,12 @@ type GistFile struct {
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
+// GistOwner represents the owner of a gist.
 type GistOwner struct {
 	Login string `json:"login,omitempty"`
 }
 
+// Gist represents a GitHub gist and its metadata.
 type Gist struct {
 	ID          string               `json:"id,omitempty"`
 	Description string               `json:"description"`
@@ -42,6 +45,7 @@ type Gist struct {
 	Owner       *GistOwner           `json:"owner,omitempty"`
 }
 
+// Filename returns the alphabetically first filename in the gist.
 func (g Gist) Filename() string {
 	filenames := make([]string, 0, len(g.Files))
 	for fn := range g.Files {
@@ -54,12 +58,15 @@ func (g Gist) Filename() string {
 	return filenames[0]
 }
 
+// TruncDescription returns a truncated, whitespace-normalized description.
 func (g Gist) TruncDescription() string {
 	return text.Truncate(100, text.RemoveExcessiveWhitespace(g.Description))
 }
 
+// NotFoundErr is returned when a gist cannot be found.
 var NotFoundErr = errors.New("not found")
 
+// GetGist fetches a gist by ID from the GitHub API.
 func GetGist(client *http.Client, hostname, gistID string) (*Gist, error) {
 	gist := Gist{}
 	path := fmt.Sprintf("gists/%s", gistID)
@@ -77,6 +84,7 @@ func GetGist(client *http.Client, hostname, gistID string) (*Gist, error) {
 	return &gist, nil
 }
 
+// GistIDFromURL extracts the gist ID from a URL.
 func GistIDFromURL(gistURL string) (string, error) {
 	u, err := url.Parse(gistURL)
 	if err == nil && strings.HasPrefix(u.Path, "/") {
@@ -96,6 +104,7 @@ func GistIDFromURL(gistURL string) (string, error) {
 
 const maxPerPage = 100
 
+// ListGists retrieves gists for the authenticated user with optional filtering.
 func ListGists(client *http.Client, hostname string, limit int, filter *regexp.Regexp, includeContent bool, visibility string) ([]Gist, error) {
 	type response struct {
 		Viewer struct {
@@ -194,6 +203,7 @@ pagination:
 	return gists, nil
 }
 
+// IsBinaryFile reports whether the given file path contains binary content.
 func IsBinaryFile(file string) (bool, error) {
 	detectedMime, err := mimetype.DetectFile(file)
 	if err != nil {
@@ -210,6 +220,7 @@ func IsBinaryFile(file string) (bool, error) {
 	return isBinary, nil
 }
 
+// IsBinaryContents reports whether the given byte slice contains binary content.
 func IsBinaryContents(contents []byte) bool {
 	isBinary := true
 	for mime := mimetype.Detect(contents); mime != nil; mime = mime.Parent() {
@@ -221,6 +232,7 @@ func IsBinaryContents(contents []byte) bool {
 	return isBinary
 }
 
+// PromptGists prompts the user to select a gist from a list.
 func PromptGists(prompter prompter.Prompter, client *http.Client, host string, cs *iostreams.ColorScheme) (gist *Gist, err error) {
 	gists, err := ListGists(client, host, 10, nil, false, "all")
 	if err != nil {
@@ -248,6 +260,7 @@ func PromptGists(prompter prompter.Prompter, client *http.Client, host string, c
 	return &gists[result], nil
 }
 
+// GetRawGistFile fetches the full raw content of a gist file by URL.
 func GetRawGistFile(httpClient *http.Client, rawURL string) (string, error) {
 	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {

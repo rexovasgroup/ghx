@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// DeleteOptions holds the options for the gist delete command.
 type DeleteOptions struct {
 	IO         *iostreams.IOStreams
 	Config     func() (gh.Config, error)
@@ -26,6 +27,7 @@ type DeleteOptions struct {
 	Confirmed bool
 }
 
+// NewCmdDelete creates the gist delete command.
 func NewCmdDelete(f *cmdutil.Factory, runF func(*DeleteOptions) error) *cobra.Command {
 	opts := DeleteOptions{
 		IO:         f.IOStreams,

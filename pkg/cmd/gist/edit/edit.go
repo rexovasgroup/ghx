@@ -25,6 +25,7 @@ import (
 
 var editNextOptions = []string{"Edit another file", "Submit", "Cancel"}
 
+// EditOptions holds the options for the gist edit command.
 type EditOptions struct {
 	IO         *iostreams.IOStreams
 	HttpClient func() (*http.Client, error)
@@ -41,6 +42,7 @@ type EditOptions struct {
 	Description    string
 }
 
+// NewCmdEdit creates the gist edit command.
 func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Command {
 	opts := EditOptions{
 		IO:         f.IOStreams,

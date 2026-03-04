@@ -16,6 +16,7 @@ import (
 	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 )
 
+// CloneOptions holds the options for the gist clone command.
 type CloneOptions struct {
 	HttpClient func() (*http.Client, error)
 	GitClient  *git.Client
@@ -27,6 +28,7 @@ type CloneOptions struct {
 	Gist      string
 }
 
+// NewCmdClone creates the gist clone command.
 func NewCmdClone(f *cmdutil.Factory, runF func(*CloneOptions) error) *cobra.Command {
 	opts := &CloneOptions{
 		IO:         f.IOStreams,

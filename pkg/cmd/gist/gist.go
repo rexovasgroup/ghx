@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdGist creates the top-level gist command.
 func NewCmdGist(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gist <command>",

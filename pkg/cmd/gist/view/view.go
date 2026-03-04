@@ -21,6 +21,7 @@ type browser interface {
 	Browse(string) error
 }
 
+// ViewOptions holds the options for the gist view command.
 type ViewOptions struct {
 	IO         *iostreams.IOStreams
 	Config     func() (gh.Config, error)
@@ -35,6 +36,7 @@ type ViewOptions struct {
 	ListFiles bool
 }
 
+// NewCmdView creates the gist view command.
 func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Command {
 	opts := &ViewOptions{
 		IO:         f.IOStreams,

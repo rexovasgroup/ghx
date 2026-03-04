@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// RenameOptions holds the options for the gist rename command.
 type RenameOptions struct {
 	IO         *iostreams.IOStreams
 	Config     func() (gh.Config, error)
@@ -27,6 +28,7 @@ type RenameOptions struct {
 	NewFileName string
 }
 
+// NewCmdRename creates the gist rename command.
 func NewCmdRename(f *cmdutil.Factory, runf func(*RenameOptions) error) *cobra.Command {
 	opts := &RenameOptions{
 		IO:         f.IOStreams,
