@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdComment creates the cobra command for adding a comment to a pull request.
 func NewCmdComment(f *cmdutil.Factory, runF func(*shared.CommentableOptions) error) *cobra.Command {
 	opts := &shared.CommentableOptions{
 		IO:                        f.IOStreams,

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CloseOptions holds the configuration for the pr close command.
 type CloseOptions struct {
 	HttpClient func() (*http.Client, error)
 	GitClient  *git.Client
@@ -28,6 +29,7 @@ type CloseOptions struct {
 	DeleteLocalBranch bool
 }
 
+// NewCmdClose creates the cobra command for closing a pull request.
 func NewCmdClose(f *cmdutil.Factory, runF func(*CloseOptions) error) *cobra.Command {
 	opts := &CloseOptions{
 		IO:         f.IOStreams,

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ReadyOptions holds the configuration for the pr ready command.
 type ReadyOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -23,6 +24,7 @@ type ReadyOptions struct {
 	Undo        bool
 }
 
+// NewCmdReady creates the cobra command for marking a pull request as ready for review.
 func NewCmdReady(f *cmdutil.Factory, runF func(*ReadyOptions) error) *cobra.Command {
 	opts := &ReadyOptions{
 		IO:         f.IOStreams,

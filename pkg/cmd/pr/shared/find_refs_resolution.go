@@ -36,6 +36,7 @@ func NewQualifiedHeadRef(owner string, branchName string) QualifiedHeadRef {
 	}
 }
 
+// NewQualifiedHeadRefWithoutOwner creates a QualifiedHeadRef with only a branch name and no owner.
 func NewQualifiedHeadRefWithoutOwner(branchName string) QualifiedHeadRef {
 	return QualifiedHeadRef{
 		owner:      o.None[string](),
@@ -74,6 +75,7 @@ func (r QualifiedHeadRef) String() string {
 	return r.branchName
 }
 
+// BranchName returns the branch name component of the qualified head ref.
 func (r QualifiedHeadRef) BranchName() string {
 	return r.branchName
 }
@@ -97,6 +99,7 @@ func (r PRFindRefs) QualifiedHeadRef() string {
 	return r.qualifiedHeadRef.String()
 }
 
+// UnqualifiedHeadRef returns the branch name without any owner prefix.
 func (r PRFindRefs) UnqualifiedHeadRef() string {
 	return r.qualifiedHeadRef.BranchName()
 }
@@ -109,10 +112,12 @@ func (r PRFindRefs) Matches(baseBranchName, qualifiedHeadRef string) bool {
 	return headMatches && baseMatches
 }
 
+// BaseRepo returns the base repository used for finding the pull request.
 func (r PRFindRefs) BaseRepo() ghrepo.Interface {
 	return r.baseRepo
 }
 
+// RemoteNameToRepoFn is a function type that resolves a git remote name to a repository interface.
 type RemoteNameToRepoFn func(remoteName string) (ghrepo.Interface, error)
 
 // PullRequestFindRefsResolver interrogates git configuration to try and determine
@@ -122,6 +127,7 @@ type PullRequestFindRefsResolver struct {
 	RemoteNameToRepoFn RemoteNameToRepoFn
 }
 
+// NewPullRequestFindRefsResolver creates a PullRequestFindRefsResolver with the given git config client and remotes function.
 func NewPullRequestFindRefsResolver(gitConfigClient GitConfigClient, remotesFn func() (ghContext.Remotes, error)) PullRequestFindRefsResolver {
 	return PullRequestFindRefsResolver{
 		GitConfigClient:    gitConfigClient,
@@ -245,6 +251,7 @@ type remoteToRepoResolver struct {
 	remoteNameToRepo RemoteNameToRepoFn
 }
 
+// NewRemoteToRepoResolver creates a remoteToRepoResolver that maps git remotes to repository interfaces.
 func NewRemoteToRepoResolver(remotesFn func() (ghContext.Remotes, error)) remoteToRepoResolver {
 	return remoteToRepoResolver{
 		remoteNameToRepo: newRemoteNameToRepoFn(remotesFn),

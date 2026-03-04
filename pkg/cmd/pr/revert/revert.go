@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// RevertOptions holds the configuration for the pr revert command.
 type RevertOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -27,6 +28,7 @@ type RevertOptions struct {
 	IsDraft bool
 }
 
+// NewCmdRevert creates the cobra command for reverting a merged pull request.
 func NewCmdRevert(f *cmdutil.Factory, runF func(*RevertOptions) error) *cobra.Command {
 	opts := &RevertOptions{
 		IO:         f.IOStreams,

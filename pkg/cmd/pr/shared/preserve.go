@@ -9,6 +9,7 @@ import (
 	"github.com/cli/cli/v2/pkg/iostreams"
 )
 
+// PreserveInput returns a cleanup function that saves issue or PR metadata state to a temporary file when a creation error occurs, enabling recovery with --recover.
 func PreserveInput(io *iostreams.IOStreams, state *IssueMetadataState, createErr *error) func() {
 	return func() {
 		if !state.IsDirty() {

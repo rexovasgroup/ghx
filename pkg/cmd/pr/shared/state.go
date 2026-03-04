@@ -11,10 +11,13 @@ import (
 type metadataStateType int
 
 const (
+	// IssueMetadata indicates that the metadata state is for an issue.
 	IssueMetadata metadataStateType = iota
+	// PRMetadata indicates that the metadata state is for a pull request.
 	PRMetadata
 )
 
+// IssueMetadataState holds the editable metadata for an issue or pull request during creation or editing.
 type IssueMetadataState struct {
 	Type metadataStateType
 
@@ -38,14 +41,17 @@ type IssueMetadataState struct {
 	dirty bool // whether user i/o has modified this
 }
 
+// MarkDirty flags the state as having been modified by user input.
 func (tb *IssueMetadataState) MarkDirty() {
 	tb.dirty = true
 }
 
+// IsDirty reports whether the state has been modified by user input or has metadata set.
 func (tb *IssueMetadataState) IsDirty() bool {
 	return tb.dirty || tb.HasMetadata()
 }
 
+// HasMetadata reports whether any reviewers, assignees, labels, projects, or milestones are set.
 func (tb *IssueMetadataState) HasMetadata() bool {
 	return len(tb.Reviewers) > 0 ||
 		len(tb.Assignees) > 0 ||
@@ -54,6 +60,7 @@ func (tb *IssueMetadataState) HasMetadata() bool {
 		len(tb.Milestones) > 0
 }
 
+// FillFromJSON populates the given IssueMetadataState by reading and unmarshaling a JSON recovery file.
 func FillFromJSON(io *iostreams.IOStreams, recoverFile string, state *IssueMetadataState) error {
 	var data []byte
 	var err error

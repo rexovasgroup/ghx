@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CheckoutOptions holds the configuration for the pr checkout command.
 type CheckoutOptions struct {
 	HttpClient func() (*http.Client, error)
 	GitClient  *git.Client
@@ -35,6 +36,7 @@ type CheckoutOptions struct {
 	BranchName        string
 }
 
+// NewCmdCheckout creates the cobra command for checking out a pull request locally.
 func NewCmdCheckout(f *cmdutil.Factory, runF func(*CheckoutOptions) error) *cobra.Command {
 	opts := &CheckoutOptions{
 		IO:         f.IOStreams,
@@ -290,6 +292,7 @@ func executeCmds(client *git.Client, credentialPattern git.CredentialPattern, cm
 	return nil
 }
 
+// PRResolver resolves a pull request and its base repository for checkout.
 type PRResolver interface {
 	Resolve() (*api.PullRequest, ghrepo.Interface, error)
 }
@@ -299,6 +302,7 @@ type specificPRResolver struct {
 	selector string
 }
 
+// Resolve finds a pull request by its selector string and returns it along with its base repository.
 func (r *specificPRResolver) Resolve() (*api.PullRequest, ghrepo.Interface, error) {
 	pr, baseRepo, err := r.prFinder.Find(shared.FindOptions{
 		Selector: r.selector,
@@ -326,6 +330,7 @@ type promptingPRResolver struct {
 	baseRepo ghrepo.Interface
 }
 
+// Resolve interactively prompts the user to select a pull request from a list of open PRs.
 func (r *promptingPRResolver) Resolve() (*api.PullRequest, ghrepo.Interface, error) {
 	r.io.StartProgressIndicator()
 	listResult, err := r.prLister.List(shared.ListOptions{

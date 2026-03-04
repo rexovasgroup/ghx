@@ -10,6 +10,7 @@ import (
 	"github.com/cli/cli/v2/pkg/set"
 )
 
+// Editable collects the editable fields of an issue or pull request for interactive or flag-driven editing.
 type Editable struct {
 	Title              EditableString
 	Body               EditableString
@@ -24,6 +25,7 @@ type Editable struct {
 	Metadata           api.RepoMetadataResult
 }
 
+// EditableString holds a single string field that can be edited, along with its default value and valid options.
 type EditableString struct {
 	Value   string
 	Default string
@@ -31,6 +33,7 @@ type EditableString struct {
 	Edited  bool
 }
 
+// EditableSlice holds a list field that supports adding and removing values, along with defaults and valid options.
 type EditableSlice struct {
 	Value   []string
 	Add     []string
@@ -62,6 +65,7 @@ type EditableProjects struct {
 	ProjectItems map[string]string
 }
 
+// Dirty reports whether any field in the Editable has been modified.
 func (e Editable) Dirty() bool {
 	return e.Title.Edited ||
 		e.Body.Edited ||
@@ -73,6 +77,7 @@ func (e Editable) Dirty() bool {
 		e.Milestone.Edited
 }
 
+// TitleValue returns a pointer to the edited title, or nil if the title was not edited.
 func (e Editable) TitleValue() *string {
 	if !e.Title.Edited {
 		return nil
@@ -80,6 +85,7 @@ func (e Editable) TitleValue() *string {
 	return &e.Title.Value
 }
 
+// BodyValue returns a pointer to the edited body, or nil if the body was not edited.
 func (e Editable) BodyValue() *string {
 	if !e.Body.Edited {
 		return nil
@@ -87,6 +93,7 @@ func (e Editable) BodyValue() *string {
 	return &e.Body.Value
 }
 
+// AssigneeIds resolves the edited assignees to their node IDs, applying any add/remove modifications.
 func (e Editable) AssigneeIds(client *api.Client, repo ghrepo.Interface) (*[]string, error) {
 	if !e.Assignees.Edited {
 		return nil, nil
@@ -208,6 +215,7 @@ func (e Editable) ProjectV2Ids() (*[]string, *[]string, error) {
 	return &addIds, &removeIds, nil
 }
 
+// MilestoneId resolves the edited milestone title to its node ID, or returns an empty string to clear it.
 func (e Editable) MilestoneId() (*string, error) {
 	if !e.Milestone.Edited {
 		return nil, nil
@@ -288,6 +296,7 @@ func (ep *EditableProjects) clone() EditableProjects {
 	}
 }
 
+// EditPrompter defines the prompting interface used by interactive editing surveys.
 type EditPrompter interface {
 	Select(string, string, []string) (int, error)
 	Input(string, string) (string, error)
@@ -297,6 +306,7 @@ type EditPrompter interface {
 	Confirm(string, bool) (bool, error)
 }
 
+// EditFieldsSurvey interactively prompts the user to provide values for each edited field and confirms submission.
 func EditFieldsSurvey(p EditPrompter, editable *Editable, editorCommand string) error {
 	var err error
 	if editable.Title.Edited {
@@ -396,6 +406,7 @@ func EditFieldsSurvey(p EditPrompter, editable *Editable, editorCommand string) 
 	return nil
 }
 
+// FieldsToEditSurvey prompts the user to select which fields they want to edit and marks them on the Editable.
 func FieldsToEditSurvey(p EditPrompter, editable *Editable) error {
 	contains := func(s []string, str string) bool {
 		for _, v := range s {
@@ -441,6 +452,7 @@ func FieldsToEditSurvey(p EditPrompter, editable *Editable) error {
 	return nil
 }
 
+// FetchOptions retrieves repository metadata (reviewers, assignees, labels, projects, milestones) needed for editing.
 func FetchOptions(client *api.Client, repo ghrepo.Interface, editable *Editable, projectV1Support gh.ProjectsV1Support) error {
 	// Determine whether to fetch organization teams and reviewers.
 	// Interactive reviewer editing (Edited true, but no Add/Remove slices) still needs

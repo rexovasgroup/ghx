@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ReopenOptions holds the configuration for the pr reopen command.
 type ReopenOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -22,6 +23,7 @@ type ReopenOptions struct {
 	Comment     string
 }
 
+// NewCmdReopen creates the cobra command for reopening a closed pull request.
 func NewCmdReopen(f *cmdutil.Factory, runF func(*ReopenOptions) error) *cobra.Command {
 	opts := &ReopenOptions{
 		IO:         f.IOStreams,

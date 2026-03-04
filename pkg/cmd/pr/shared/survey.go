@@ -15,15 +15,23 @@ import (
 	"github.com/cli/cli/v2/pkg/surveyext"
 )
 
+// Action represents a user-selected action in a submission prompt.
 type Action int
 
 const (
+	// SubmitAction indicates the user chose to submit.
 	SubmitAction Action = iota
+	// PreviewAction indicates the user chose to continue in the browser.
 	PreviewAction
+	// CancelAction indicates the user cancelled the operation.
 	CancelAction
+	// MetadataAction indicates the user chose to add metadata.
 	MetadataAction
+	// EditCommitMessageAction indicates the user chose to edit the commit message.
 	EditCommitMessageAction
+	// EditCommitSubjectAction indicates the user chose to edit the commit subject.
 	EditCommitSubjectAction
+	// SubmitDraftAction indicates the user chose to submit as a draft.
 	SubmitDraftAction
 
 	noMilestone = "(none)"
@@ -35,6 +43,7 @@ const (
 	cancelLabel      = "Cancel"
 )
 
+// Prompt defines the interface for interactive user prompts used during issue and PR creation.
 type Prompt interface {
 	Input(prompt string, defaultValue string) (string, error)
 	Select(prompt string, defaultValue string, options []string) (int, error)
@@ -44,10 +53,12 @@ type Prompt interface {
 	MultiSelectWithSearch(prompt, searchPrompt string, defaults []string, persistentOptions []string, searchFunc func(string) prompter.MultiSelectSearchResult) ([]string, error)
 }
 
+// ConfirmIssueSubmission prompts the user to select a submission action for an issue.
 func ConfirmIssueSubmission(p Prompt, allowPreview bool, allowMetadata bool) (Action, error) {
 	return confirmSubmission(p, allowPreview, allowMetadata, false, false)
 }
 
+// ConfirmPRSubmission prompts the user to select a submission action for a pull request.
 func ConfirmPRSubmission(p Prompt, allowPreview, allowMetadata, isDraft bool) (Action, error) {
 	return confirmSubmission(p, allowPreview, allowMetadata, true, isDraft)
 }
@@ -89,6 +100,7 @@ func confirmSubmission(p Prompt, allowPreview, allowMetadata, allowDraft, isDraf
 	}
 }
 
+// BodySurvey prompts the user to edit the body of an issue or pull request using a markdown editor.
 func BodySurvey(p Prompt, state *IssueMetadataState, templateContent string) error {
 	if templateContent != "" {
 		if state.Body != "" {
@@ -113,6 +125,7 @@ func BodySurvey(p Prompt, state *IssueMetadataState, templateContent string) err
 	return nil
 }
 
+// TitleSurvey prompts the user to enter a required title for an issue or pull request.
 func TitleSurvey(p Prompt, io *iostreams.IOStreams, state *IssueMetadataState) error {
 	var err error
 	result := ""
@@ -135,6 +148,7 @@ func TitleSurvey(p Prompt, io *iostreams.IOStreams, state *IssueMetadataState) e
 	return nil
 }
 
+// MetadataFetcher fetches repository metadata such as assignees, labels, and projects for use in interactive prompts.
 type MetadataFetcher struct {
 	IO        *iostreams.IOStreams
 	APIClient *api.Client
@@ -142,6 +156,7 @@ type MetadataFetcher struct {
 	State     *IssueMetadataState
 }
 
+// RepoMetadataFetch retrieves repository metadata based on the given input and caches the result in State.
 func (mf *MetadataFetcher) RepoMetadataFetch(input api.RepoMetadataInput) (*api.RepoMetadataResult, error) {
 	mf.IO.StartProgressIndicator()
 	metadataResult, err := api.RepoMetadata(mf.APIClient, mf.Repo, input)
@@ -150,10 +165,12 @@ func (mf *MetadataFetcher) RepoMetadataFetch(input api.RepoMetadataInput) (*api.
 	return metadataResult, err
 }
 
+// RepoMetadataFetcher is the interface for fetching repository metadata used during metadata surveys.
 type RepoMetadataFetcher interface {
 	RepoMetadataFetch(api.RepoMetadataInput) (*api.RepoMetadataResult, error)
 }
 
+// MetadataSurvey interactively prompts the user to select and set metadata such as reviewers, assignees, labels, projects, and milestones.
 func MetadataSurvey(p Prompt, io *iostreams.IOStreams, baseRepo ghrepo.Interface, fetcher RepoMetadataFetcher, state *IssueMetadataState, projectsV1Support gh.ProjectsV1Support) error {
 	isChosen := func(m string) bool {
 		for _, c := range state.Metadata {
@@ -360,15 +377,18 @@ func MetadataSurvey(p Prompt, io *iostreams.IOStreams, baseRepo ghrepo.Interface
 	return nil
 }
 
+// Editor is the interface for launching an external text editor.
 type Editor interface {
 	Edit(filename, initialValue string) (string, error)
 }
 
+// UserEditor opens the user's preferred text editor for editing content.
 type UserEditor struct {
 	IO     *iostreams.IOStreams
 	Config func() (gh.Config, error)
 }
 
+// Edit opens the user's configured editor with the given filename and initial content, returning the edited result.
 func (e *UserEditor) Edit(filename, initialValue string) (string, error) {
 	editorCommand, err := cmdutil.DetermineEditor(e.Config)
 	if err != nil {
@@ -382,6 +402,7 @@ const editorHint = `
 Please Enter the title on the first line and the body on subsequent lines.
 Lines below dotted lines will be ignored, and an empty title aborts the creation process.`
 
+// TitledEditSurvey returns a function that opens an editor for the user to provide a title and body.
 func TitledEditSurvey(editor Editor) func(string, string) (string, string, error) {
 	return func(initialTitle, initialBody string) (string, string, error) {
 		initialValue := strings.Join([]string{initialTitle, initialBody, editorHintMarker, editorHint}, "\n")
@@ -397,6 +418,7 @@ func TitledEditSurvey(editor Editor) func(string, string) (string, string, error
 	}
 }
 
+// InitEditorMode determines whether editor mode should be enabled based on flags and user configuration.
 func InitEditorMode(f *cmdutil.Factory, editorMode bool, webMode bool, canPrompt bool) (bool, error) {
 	if err := cmdutil.MutuallyExclusive(
 		"specify only one of `--editor` or `--web`",

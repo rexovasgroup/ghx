@@ -9,10 +9,12 @@ import (
 	api "github.com/cli/cli/v2/api"
 )
 
+// PRLister is the interface for listing pull requests from a repository.
 type PRLister interface {
 	List(opt ListOptions) (*api.PullRequestAndTotalCount, error)
 }
 
+// ListOptions specifies filtering and pagination options for listing pull requests.
 type ListOptions struct {
 	BaseRepo ghrepo.Interface
 
@@ -29,12 +31,14 @@ type lister struct {
 	httpClient *http.Client
 }
 
+// NewLister creates a PRLister that fetches pull requests via the GitHub GraphQL API.
 func NewLister(httpClient *http.Client) PRLister {
 	return &lister{
 		httpClient: httpClient,
 	}
 }
 
+// List retrieves pull requests from the repository matching the given options.
 func (l *lister) List(opts ListOptions) (*api.PullRequestAndTotalCount, error) {
 	type response struct {
 		Repository struct {
@@ -153,6 +157,7 @@ type mockLister struct {
 	err    error
 }
 
+// NewMockLister creates a mock PRLister that returns the given result and error for testing.
 func NewMockLister(result *api.PullRequestAndTotalCount, err error) *mockLister {
 	return &mockLister{
 		result: result,
@@ -160,6 +165,7 @@ func NewMockLister(result *api.PullRequestAndTotalCount, err error) *mockLister 
 	}
 }
 
+// List returns the preconfigured result and error, validating expected fields if set.
 func (m *mockLister) List(opt ListOptions) (*api.PullRequestAndTotalCount, error) {
 	m.called = true
 	if m.err != nil {
@@ -176,6 +182,7 @@ func (m *mockLister) List(opt ListOptions) (*api.PullRequestAndTotalCount, error
 	return m.result, m.err
 }
 
+// ExpectFields sets the GraphQL fields that the mock expects to receive in List calls.
 func (m *mockLister) ExpectFields(fields []string) {
 	m.expectFields = fields
 }

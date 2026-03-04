@@ -20,20 +20,26 @@ import (
 var errNoUserComments = errors.New("no comments found for current user")
 var errDeleteNotConfirmed = errors.New("deletion not confirmed")
 
+// InputType represents the method used for providing comment input.
 type InputType int
 
 const (
+	// InputTypeEditor indicates input will be provided via an external editor.
 	InputTypeEditor InputType = iota
+	// InputTypeInline indicates input is provided directly as a flag value.
 	InputTypeInline
+	// InputTypeWeb indicates the comment will be created via the browser.
 	InputTypeWeb
 )
 
+// Commentable represents an entity that can be commented on, such as an issue or pull request.
 type Commentable interface {
 	Link() string
 	Identifier() string
 	CurrentUserComments() []api.Comment
 }
 
+// CommentableOptions holds the configuration for creating, updating, or deleting comments.
 type CommentableOptions struct {
 	IO                        *iostreams.IOStreams
 	HttpClient                func() (*http.Client, error)
@@ -55,6 +61,7 @@ type CommentableOptions struct {
 	Host                      string
 }
 
+// CommentablePreRun validates flags and configures input type and interactivity before the command runs.
 func CommentablePreRun(cmd *cobra.Command, opts *CommentableOptions) error {
 	inputFlags := 0
 	if cmd.Flags().Changed("body") {
@@ -105,6 +112,7 @@ func CommentablePreRun(cmd *cobra.Command, opts *CommentableOptions) error {
 	return nil
 }
 
+// CommentableRun executes the comment action (create, update, or delete) based on the configured options.
 func CommentableRun(opts *CommentableOptions) error {
 	commentable, repo, err := opts.RetrieveCommentable()
 	if err != nil {
@@ -305,12 +313,14 @@ func deleteComment(commentable Commentable, opts *CommentableOptions) error {
 	return nil
 }
 
+// CommentableConfirmSubmitSurvey returns a function that prompts the user to confirm comment submission.
 func CommentableConfirmSubmitSurvey(p Prompt) func() (bool, error) {
 	return func() (bool, error) {
 		return p.Confirm("Submit?", true)
 	}
 }
 
+// CommentableInteractiveEditSurvey returns a function that opens an editor for composing a comment interactively.
 func CommentableInteractiveEditSurvey(cf func() (gh.Config, error), io *iostreams.IOStreams) func(string) (string, error) {
 	return func(initialValue string) (string, error) {
 		editorCommand, err := cmdutil.DetermineEditor(cf)
@@ -324,12 +334,14 @@ func CommentableInteractiveEditSurvey(cf func() (gh.Config, error), io *iostream
 	}
 }
 
+// CommentableInteractiveCreateIfNoneSurvey returns a function that prompts the user to create a comment when none exist.
 func CommentableInteractiveCreateIfNoneSurvey(p Prompt) func() (bool, error) {
 	return func() (bool, error) {
 		return p.Confirm("No comments found. Create one?", true)
 	}
 }
 
+// CommentableEditSurvey returns a function that opens an editor for composing a comment non-interactively.
 func CommentableEditSurvey(cf func() (gh.Config, error), io *iostreams.IOStreams) func(string) (string, error) {
 	return func(initialValue string) (string, error) {
 		editorCommand, err := cmdutil.DetermineEditor(cf)
@@ -340,6 +352,7 @@ func CommentableEditSurvey(cf func() (gh.Config, error), io *iostreams.IOStreams
 	}
 }
 
+// CommentableConfirmDeleteLastComment returns a function that prompts the user to confirm deletion of their last comment.
 func CommentableConfirmDeleteLastComment(p Prompt) func(string) (bool, error) {
 	return func(body string) (bool, error) {
 		return p.Confirm(fmt.Sprintf("Delete the comment: %q?", body), true)

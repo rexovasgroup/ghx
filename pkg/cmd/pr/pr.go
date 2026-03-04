@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdPR creates the top-level cobra command for managing pull requests.
 func NewCmdPR(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pr <command>",

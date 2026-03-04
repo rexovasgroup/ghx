@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// EditOptions holds the configuration for the pr edit command.
 type EditOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -39,6 +40,7 @@ type EditOptions struct {
 	shared.Editable
 }
 
+// NewCmdEdit creates the cobra command for editing a pull request's properties.
 func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Command {
 	opts := &EditOptions{
 		IO:              f.IOStreams,
@@ -529,6 +531,7 @@ func updatePullRequestReviewsREST(client *api.Client, repo ghrepo.Interface, num
 	return wg.Wait()
 }
 
+// Surveyor provides interactive prompts for selecting and editing pull request fields.
 type Surveyor interface {
 	FieldsToEdit(*shared.Editable) error
 	EditFields(*shared.Editable, string) error
@@ -538,24 +541,29 @@ type surveyor struct {
 	P shared.EditPrompter
 }
 
+// FieldsToEdit prompts the user to select which pull request fields to edit.
 func (s surveyor) FieldsToEdit(editable *shared.Editable) error {
 	return shared.FieldsToEditSurvey(s.P, editable)
 }
 
+// EditFields prompts the user to provide new values for the selected pull request fields.
 func (s surveyor) EditFields(editable *shared.Editable, editorCmd string) error {
 	return shared.EditFieldsSurvey(s.P, editable, editorCmd)
 }
 
+// EditableOptionsFetcher fetches the available options for editable pull request fields.
 type EditableOptionsFetcher interface {
 	EditableOptionsFetch(*api.Client, ghrepo.Interface, *shared.Editable, gh.ProjectsV1Support) error
 }
 
 type fetcher struct{}
 
+// EditableOptionsFetch retrieves the available options such as labels, assignees, and milestones for editing.
 func (f fetcher) EditableOptionsFetch(client *api.Client, repo ghrepo.Interface, opts *shared.Editable, projectsV1Support gh.ProjectsV1Support) error {
 	return shared.FetchOptions(client, repo, opts, projectsV1Support)
 }
 
+// EditorRetriever retrieves the user's preferred text editor command.
 type EditorRetriever interface {
 	Retrieve() (string, error)
 }
@@ -564,6 +572,7 @@ type editorRetriever struct {
 	config func() (gh.Config, error)
 }
 
+// Retrieve returns the user's configured editor command.
 func (e editorRetriever) Retrieve() (string, error) {
 	return cmdutil.DetermineEditor(e.config)
 }

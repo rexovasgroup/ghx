@@ -9,21 +9,33 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// PullRequestMergeMethod represents the strategy used to merge a pull request.
 type PullRequestMergeMethod int
 
 const (
+	// PullRequestMergeMethodMerge creates a merge commit.
 	PullRequestMergeMethodMerge PullRequestMergeMethod = iota
+	// PullRequestMergeMethodRebase rebases the commits onto the base branch.
 	PullRequestMergeMethodRebase
+	// PullRequestMergeMethodSquash squashes all commits into a single commit.
 	PullRequestMergeMethodSquash
 )
 
+// Merge state status constants represent the GitHub GraphQL MergeStateStatus values.
 const (
-	MergeStateStatusBehind   = "BEHIND"
-	MergeStateStatusBlocked  = "BLOCKED"
-	MergeStateStatusClean    = "CLEAN"
-	MergeStateStatusDirty    = "DIRTY"
+	// MergeStateStatusBehind indicates the head branch is behind the base branch.
+	MergeStateStatusBehind = "BEHIND"
+	// MergeStateStatusBlocked indicates the merge is blocked by branch protection or other rules.
+	MergeStateStatusBlocked = "BLOCKED"
+	// MergeStateStatusClean indicates the branch is clean and ready to merge.
+	MergeStateStatusClean = "CLEAN"
+	// MergeStateStatusDirty indicates the branch has merge conflicts.
+	MergeStateStatusDirty = "DIRTY"
+	// MergeStateStatusHasHooks indicates the branch has pre-receive hooks that must pass.
 	MergeStateStatusHasHooks = "HAS_HOOKS"
-	MergeStateStatusMerged   = "MERGED"
+	// MergeStateStatusMerged indicates the pull request has already been merged.
+	MergeStateStatusMerged = "MERGED"
+	// MergeStateStatusUnstable indicates the branch has failing required status checks.
 	MergeStateStatusUnstable = "UNSTABLE"
 )
 

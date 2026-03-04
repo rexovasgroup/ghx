@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ViewOptions holds the configuration for the pr view command.
 type ViewOptions struct {
 	IO      *iostreams.IOStreams
 	Browser browser.Browser
@@ -37,6 +38,7 @@ type ViewOptions struct {
 	Now func() time.Time
 }
 
+// NewCmdView creates the cobra command for viewing a pull request's details.
 func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Command {
 	opts := &ViewOptions{
 		IO:      f.IOStreams,

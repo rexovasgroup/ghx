@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ListOptions holds the configuration for the pr list command.
 type ListOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -43,6 +44,7 @@ type ListOptions struct {
 	Now func() time.Time
 }
 
+// NewCmdList creates the cobra command for listing pull requests in a repository.
 func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := &ListOptions{
 		IO:         f.IOStreams,

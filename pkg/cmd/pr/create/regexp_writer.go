@@ -6,10 +6,12 @@ import (
 	"regexp"
 )
 
+// NewRegexpWriter creates a RegexpWriter that replaces matches of re with repl in the output.
 func NewRegexpWriter(out io.Writer, re *regexp.Regexp, repl string) *RegexpWriter {
 	return &RegexpWriter{out: out, re: *re, repl: repl}
 }
 
+// RegexpWriter is an io.Writer that filters output by replacing lines matching a regexp.
 type RegexpWriter struct {
 	out  io.Writer
 	re   regexp.Regexp
@@ -17,6 +19,7 @@ type RegexpWriter struct {
 	buf  []byte
 }
 
+// Write processes data by applying regexp replacements line by line and writing the result.
 func (s *RegexpWriter) Write(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, nil
@@ -51,6 +54,7 @@ func (s *RegexpWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
+// Flush writes any remaining buffered data after applying regexp replacements.
 func (s *RegexpWriter) Flush() (int, error) {
 	if len(s.buf) > 0 {
 		repl := []byte(s.repl)

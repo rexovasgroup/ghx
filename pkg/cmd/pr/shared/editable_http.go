@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// UpdateIssue applies the edited fields to an issue or pull request via the GitHub API, handling labels, projects, and other fields concurrently.
 func UpdateIssue(httpClient *http.Client, repo ghrepo.Interface, id string, isPR bool, options Editable) error {
 	var wg errgroup.Group
 

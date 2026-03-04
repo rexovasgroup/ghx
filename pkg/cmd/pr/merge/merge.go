@@ -23,6 +23,7 @@ type editor interface {
 	Edit(string, string) (string, error)
 }
 
+// MergeOptions holds the configuration for the pr merge command.
 type MergeOptions struct {
 	HttpClient func() (*http.Client, error)
 	GitClient  *git.Client
@@ -57,6 +58,7 @@ type MergeOptions struct {
 // ErrAlreadyInMergeQueue indicates that the pull request is already in a merge queue
 var ErrAlreadyInMergeQueue = errors.New("already in merge queue")
 
+// NewCmdMerge creates the cobra command for merging a pull request.
 func NewCmdMerge(f *cmdutil.Factory, runF func(*MergeOptions) error) *cobra.Command {
 	opts := &MergeOptions{
 		IO:         f.IOStreams,
@@ -703,6 +705,7 @@ type userEditor struct {
 	config func() (gh.Config, error)
 }
 
+// Edit opens the user's preferred text editor to edit the given text and returns the result.
 func (e *userEditor) Edit(filename, startingText string) (string, error) {
 	editorCommand, err := cmdutil.DetermineEditor(e.config)
 	if err != nil {

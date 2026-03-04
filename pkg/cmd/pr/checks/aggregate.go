@@ -29,6 +29,7 @@ type checkCounts struct {
 	Canceled int
 }
 
+// ExportData returns the check's fields as a map for structured data export.
 func (ch *check) ExportData(fields []string) map[string]interface{} {
 	return cmdutil.StructExportData(ch, fields)
 }

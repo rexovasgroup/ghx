@@ -13,6 +13,7 @@ import (
 	"github.com/google/shlex"
 )
 
+// WithPrAndIssueQueryParams appends issue or pull request metadata from state as query parameters to the given URL.
 func WithPrAndIssueQueryParams(client *api.Client, baseRepo ghrepo.Interface, baseURL string, state IssueMetadataState, projectsV1Support gh.ProjectsV1Support) (string, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -56,6 +57,7 @@ func ValidURL(urlStr string) bool {
 	return len(urlStr) < 8192
 }
 
+// AddMetadataToIssueParams resolves metadata such as assignees, labels, projects, milestones, and reviewers into IDs and adds them to the params map.
 func AddMetadataToIssueParams(client *api.Client, baseRepo ghrepo.Interface, params map[string]interface{}, tb *IssueMetadataState, projectV1Support gh.ProjectsV1Support) error {
 	if !tb.HasMetadata() {
 		return nil
@@ -139,6 +141,7 @@ func AddMetadataToIssueParams(client *api.Client, baseRepo ghrepo.Interface, par
 	return nil
 }
 
+// FilterOptions holds the filtering criteria used when listing issues or pull requests.
 type FilterOptions struct {
 	Assignee   string
 	Author     string
@@ -155,6 +158,7 @@ type FilterOptions struct {
 	State      string
 }
 
+// IsDefault reports whether the filter options represent the default state with no custom filters applied.
 func (opts *FilterOptions) IsDefault() bool {
 	if opts.State != "open" {
 		return false
@@ -186,6 +190,7 @@ func (opts *FilterOptions) IsDefault() bool {
 	return true
 }
 
+// ListURLWithQuery builds a URL by appending a search query derived from FilterOptions to the given list URL.
 func ListURLWithQuery(listURL string, options FilterOptions, advancedIssueSearchSyntax bool) (string, error) {
 	u, err := url.Parse(listURL)
 	if err != nil {
@@ -199,6 +204,7 @@ func ListURLWithQuery(listURL string, options FilterOptions, advancedIssueSearch
 	return u.String(), nil
 }
 
+// SearchQueryBuild constructs a GitHub search query string from the given FilterOptions.
 func SearchQueryBuild(options FilterOptions, advancedIssueSearchSyntax bool) string {
 	var is, state string
 	switch options.State {
@@ -231,6 +237,7 @@ func SearchQueryBuild(options FilterOptions, advancedIssueSearchSyntax bool) str
 	return query.AdvancedIssueSearchString()
 }
 
+// QueryHasStateClause reports whether the search query contains an explicit state or merged filter clause.
 func QueryHasStateClause(searchQuery string) bool {
 	argv, err := shlex.Split(searchQuery)
 	if err != nil {
@@ -253,6 +260,7 @@ type MeReplacer struct {
 	login     string
 }
 
+// NewMeReplacer creates a MeReplacer that resolves @me to the currently authenticated user's login.
 func NewMeReplacer(apiClient *api.Client, hostname string) *MeReplacer {
 	return &MeReplacer{
 		apiClient: apiClient,
@@ -272,6 +280,7 @@ func (r *MeReplacer) currentLogin() (string, error) {
 	return login, nil
 }
 
+// Replace substitutes "@me" with the current user's login, returning other handles unchanged.
 func (r *MeReplacer) Replace(handle string) (string, error) {
 	if handle == "@me" {
 		return r.currentLogin()
@@ -279,6 +288,7 @@ func (r *MeReplacer) Replace(handle string) (string, error) {
 	return handle, nil
 }
 
+// ReplaceSlice applies Replace to each element in the slice, substituting any "@me" occurrences.
 func (r *MeReplacer) ReplaceSlice(handles []string) ([]string, error) {
 	res := make([]string, len(handles))
 	for i, h := range handles {

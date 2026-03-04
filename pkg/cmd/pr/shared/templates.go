@@ -26,34 +26,42 @@ type pullRequestTemplate struct {
 	Gbody string `graphql:"body"`
 }
 
+// Name returns the display name of the issue template.
 func (t *issueTemplate) Name() string {
 	return t.Gname
 }
 
+// NameForSubmit returns the template name to include when submitting an issue.
 func (t *issueTemplate) NameForSubmit() string {
 	return t.Gname
 }
 
+// Body returns the content of the issue template as bytes.
 func (t *issueTemplate) Body() []byte {
 	return []byte(t.Gbody)
 }
 
+// Title returns the default title of the issue template.
 func (t *issueTemplate) Title() string {
 	return t.Gtitle
 }
 
+// Name returns the filename of the pull request template.
 func (t *pullRequestTemplate) Name() string {
 	return t.Gname
 }
 
+// NameForSubmit returns an empty string since pull request templates do not have a submission name.
 func (t *pullRequestTemplate) NameForSubmit() string {
 	return ""
 }
 
+// Body returns the content of the pull request template as bytes.
 func (t *pullRequestTemplate) Body() []byte {
 	return []byte(t.Gbody)
 }
 
+// Title returns an empty string since pull request templates do not have a default title.
 func (t *pullRequestTemplate) Title() string {
 	return ""
 }
@@ -114,6 +122,7 @@ func listPullRequestTemplates(httpClient *http.Client, repo ghrepo.Interface) ([
 	return templates, nil
 }
 
+// Template defines the interface for issue and pull request templates.
 type Template interface {
 	Name() string
 	NameForSubmit() string
@@ -141,6 +150,7 @@ type templateManager struct {
 	fetchError error
 }
 
+// NewTemplateManager creates a templateManager that discovers issue or PR templates from the API and optionally the filesystem.
 func NewTemplateManager(httpClient *http.Client, repo ghrepo.Interface, p iprompter, dir string, allowFS bool, isPR bool) *templateManager {
 	cachedClient := api.NewCachedHTTPClient(httpClient, time.Hour*24)
 	return &templateManager{
@@ -167,6 +177,7 @@ func (m *templateManager) hasAPI() (bool, error) {
 	return features.PullRequestTemplateQuery, nil
 }
 
+// HasTemplates reports whether any templates are available for the repository.
 func (m *templateManager) HasTemplates() (bool, error) {
 	if err := m.memoizedFetch(); err != nil {
 		return false, err
@@ -174,6 +185,7 @@ func (m *templateManager) HasTemplates() (bool, error) {
 	return len(m.templates) > 0, nil
 }
 
+// LegacyBody returns the body of the legacy template, or nil if no legacy template exists.
 func (m *templateManager) LegacyBody() []byte {
 	if m.legacyTemplate == nil {
 		return nil
@@ -181,6 +193,7 @@ func (m *templateManager) LegacyBody() []byte {
 	return m.legacyTemplate.Body()
 }
 
+// Choose prompts the user to interactively select a template from the available options.
 func (m *templateManager) Choose() (Template, error) {
 	if err := m.memoizedFetch(); err != nil {
 		return nil, err
@@ -210,6 +223,7 @@ func (m *templateManager) Choose() (Template, error) {
 	return m.templates[selectedOption], nil
 }
 
+// Select returns the template matching the given name, or an error if not found.
 func (m *templateManager) Select(name string) (Template, error) {
 	if err := m.memoizedFetch(); err != nil {
 		return nil, err
@@ -294,18 +308,22 @@ type filesystemTemplate struct {
 	path string
 }
 
+// Name returns the display name extracted from the filesystem template file.
 func (t *filesystemTemplate) Name() string {
 	return githubtemplate.ExtractName(t.path)
 }
 
+// NameForSubmit returns an empty string since filesystem templates do not have a submission name.
 func (t *filesystemTemplate) NameForSubmit() string {
 	return ""
 }
 
+// Body returns the contents of the filesystem template file.
 func (t *filesystemTemplate) Body() []byte {
 	return githubtemplate.ExtractContents(t.path)
 }
 
+// Title returns the title extracted from the filesystem template file.
 func (t *filesystemTemplate) Title() string {
 	return githubtemplate.ExtractTitle(t.path)
 }

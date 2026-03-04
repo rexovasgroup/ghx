@@ -24,6 +24,7 @@ import (
 	"golang.org/x/text/transform"
 )
 
+// DiffOptions holds the configuration for the pr diff command.
 type DiffOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -38,6 +39,7 @@ type DiffOptions struct {
 	BrowserMode bool
 }
 
+// NewCmdDiff creates the cobra command for viewing the diff of a pull request.
 func NewCmdDiff(f *cmdutil.Factory, runF func(*DiffOptions) error) *cobra.Command {
 	opts := &DiffOptions{
 		IO:         f.IOStreams,

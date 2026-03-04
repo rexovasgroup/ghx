@@ -30,6 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CreateOptions holds the configuration and inputs for creating a pull request.
 type CreateOptions struct {
 	// This struct stores user input and factory functions
 	Detector         fd.Detector
@@ -99,10 +100,12 @@ type baseRefs struct {
 	baseBranchName string
 }
 
+// BaseRef returns the name of the base branch.
 func (r baseRefs) BaseRef() string {
 	return r.baseBranchName
 }
 
+// BaseRepo returns the base repository for the pull request.
 func (r baseRefs) BaseRepo() *api.Repository {
 	return r.baseRepo
 }
@@ -114,10 +117,12 @@ type skipPushRefs struct {
 	qualifiedHeadRef shared.QualifiedHeadRef
 }
 
+// QualifiedHeadRef returns the fully qualified head ref string for cross-repo or same-repo PRs.
 func (r skipPushRefs) QualifiedHeadRef() string {
 	return r.qualifiedHeadRef.String()
 }
 
+// UnqualifiedHeadRef returns the head branch name without any owner prefix.
 func (r skipPushRefs) UnqualifiedHeadRef() string {
 	return r.qualifiedHeadRef.BranchName()
 }
@@ -132,6 +137,7 @@ type pushableRefs struct {
 	headBranchName string
 }
 
+// QualifiedHeadRef returns the head ref, prefixed with the owner if the head and base repos differ.
 func (r pushableRefs) QualifiedHeadRef() string {
 	if ghrepo.IsSame(r.headRepo, r.baseRepo) {
 		return r.headBranchName
@@ -139,10 +145,12 @@ func (r pushableRefs) QualifiedHeadRef() string {
 	return fmt.Sprintf("%s:%s", r.headRepo.RepoOwner(), r.headBranchName)
 }
 
+// UnqualifiedHeadRef returns the head branch name without any owner prefix.
 func (r pushableRefs) UnqualifiedHeadRef() string {
 	return r.headBranchName
 }
 
+// HeadRepo returns the repository where the head branch resides.
 func (r pushableRefs) HeadRepo() ghrepo.Interface {
 	return r.headRepo
 }
@@ -158,10 +166,12 @@ type forkableRefs struct {
 	qualifiedHeadRef shared.QualifiedHeadRef
 }
 
+// QualifiedHeadRef returns the fully qualified head ref string for a fork-based PR.
 func (r forkableRefs) QualifiedHeadRef() string {
 	return r.qualifiedHeadRef.String()
 }
 
+// UnqualifiedHeadRef returns the head branch name without any owner prefix.
 func (r forkableRefs) UnqualifiedHeadRef() string {
 	return r.qualifiedHeadRef.BranchName()
 }
@@ -190,6 +200,7 @@ type CreateContext struct {
 	GitClient          *git.Client
 }
 
+// NewCmdCreate creates a new cobra.Command for opening a pull request.
 func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Command {
 	opts := &CreateOptions{
 		IO:               f.IOStreams,
@@ -641,6 +652,7 @@ func initDefaultTitleBody(ctx CreateContext, state *shared.IssueMetadataState, u
 	return nil
 }
 
+// NewIssueState creates an IssueMetadataState populated from the given CreateContext and CreateOptions.
 func NewIssueState(ctx CreateContext, opts CreateOptions) (*shared.IssueMetadataState, error) {
 	var milestoneTitles []string
 	if opts.Milestone != "" {
@@ -673,6 +685,7 @@ func NewIssueState(ctx CreateContext, opts CreateOptions) (*shared.IssueMetadata
 	return state, nil
 }
 
+// NewCreateContext initializes a CreateContext by resolving remotes, repos, and branch information.
 func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 	httpClient, err := opts.HttpClient()
 	if err != nil {

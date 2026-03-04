@@ -7,6 +7,7 @@ import (
 	"github.com/cli/cli/v2/api"
 )
 
+// ReactionGroupList formats a list of reaction groups into a human-readable string with emoji and counts.
 func ReactionGroupList(rgs api.ReactionGroups) string {
 	var rs []string
 

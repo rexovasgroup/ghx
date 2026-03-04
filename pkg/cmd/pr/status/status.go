@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// StatusOptions holds the configuration for the pr status command.
 type StatusOptions struct {
 	HttpClient func() (*http.Client, error)
 	GitClient  *git.Client
@@ -39,6 +40,7 @@ type StatusOptions struct {
 	Detector fd.Detector
 }
 
+// NewCmdStatus creates the cobra command for showing the status of relevant pull requests.
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
 	opts := &StatusOptions{
 		IO:         f.IOStreams,

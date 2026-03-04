@@ -26,6 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// PRFinder finds a pull request by selector, returning the PR and its base repository.
 type PRFinder interface {
 	Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface, error)
 }
@@ -35,6 +36,7 @@ type progressIndicator interface {
 	StopProgressIndicator()
 }
 
+// GitConfigClient provides access to git branch configuration and push settings.
 type GitConfigClient interface {
 	ReadBranchConfig(ctx context.Context, branchName string) (git.BranchConfig, error)
 	PushDefault(ctx context.Context) (git.PushDefault, error)
@@ -55,6 +57,7 @@ type finder struct {
 	branchName  string
 }
 
+// NewFinder creates a PRFinder backed by the given factory, or returns a test stub if one has been set.
 func NewFinder(factory *cmdutil.Factory) PRFinder {
 	if finderForRunCommandStyleTests != nil {
 		f := finderForRunCommandStyleTests
@@ -92,6 +95,7 @@ func StubFinderForRunCommandStyleTests(t *testing.T, selector string, pr *api.Pu
 	return finder
 }
 
+// FindOptions specifies the parameters for finding a pull request.
 type FindOptions struct {
 	// Selector can be a number with optional `#` prefix, a branch name with optional `<owner>:` prefix, or
 	// a PR URL.
@@ -108,6 +112,7 @@ type FindOptions struct {
 	Detector fd.Detector
 }
 
+// Find locates a pull request by number, URL, or branch name, fetching the requested GraphQL fields.
 func (f *finder) Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface, error) {
 	// If we have a URL, we don't need git stuff
 	if len(opts.Fields) == 0 {
@@ -619,14 +624,17 @@ func preloadPrChecks(client *http.Client, repo ghrepo.Interface, pr *api.PullReq
 	return nil
 }
 
+// NotFoundError indicates that no pull request matching the query was found.
 type NotFoundError struct {
 	error
 }
 
+// Unwrap returns the underlying error wrapped by NotFoundError.
 func (err *NotFoundError) Unwrap() error {
 	return err.error
 }
 
+// NewMockFinder creates a mockFinder for use in tests, returning the given PR and repo when Find is called.
 func NewMockFinder(selector string, pr *api.PullRequest, repo ghrepo.Interface) *mockFinder {
 	var err error
 	if pr == nil {
@@ -649,6 +657,7 @@ type mockFinder struct {
 	err            error
 }
 
+// Find returns the mocked pull request and repository, validating the selector and fields expectations.
 func (m *mockFinder) Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface, error) {
 	if m.err != nil {
 		return nil, nil, m.err
@@ -672,6 +681,7 @@ func (m *mockFinder) Find(opts FindOptions) (*api.PullRequest, ghrepo.Interface,
 	return m.pr, m.repo, nil
 }
 
+// ExpectFields sets the expected GraphQL fields that Find must be called with.
 func (m *mockFinder) ExpectFields(fields []string) {
 	m.expectFields = fields
 }

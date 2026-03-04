@@ -11,6 +11,7 @@ import (
 	"github.com/cli/cli/v2/internal/ghrepo"
 )
 
+// RequestableReviewersForCompletion returns a sorted list of requestable reviewers for shell completion.
 func RequestableReviewersForCompletion(httpClient *http.Client, repo ghrepo.Interface) ([]string, error) {
 	client := api.NewClientFromHTTP(api.NewCachedHTTPClient(httpClient, time.Minute*2))
 

@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ReviewOptions holds the configuration for the pr review command.
 type ReviewOptions struct {
 	HttpClient func() (*http.Client, error)
 	Config     func() (gh.Config, error)
@@ -31,6 +32,7 @@ type ReviewOptions struct {
 	Body            string
 }
 
+// NewCmdReview creates the cobra command for submitting a review on a pull request.
 func NewCmdReview(f *cmdutil.Factory, runF func(*ReviewOptions) error) *cobra.Command {
 	opts := &ReviewOptions{
 		IO:         f.IOStreams,

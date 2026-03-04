@@ -12,6 +12,7 @@ import (
 	"github.com/cli/cli/v2/pkg/markdown"
 )
 
+// Comment represents a comment on an issue or pull request with metadata accessors.
 type Comment interface {
 	Identifier() string
 	AuthorLogin() string
@@ -26,6 +27,7 @@ type Comment interface {
 	Status() string
 }
 
+// RawCommentList returns a plaintext representation of comments and reviews sorted by creation time.
 func RawCommentList(comments api.Comments, reviews api.PullRequestReviews) string {
 	sortedComments := sortComments(comments, reviews)
 	var b strings.Builder
@@ -50,6 +52,7 @@ func formatRawComment(comment Comment) string {
 	return b.String()
 }
 
+// CommentList returns a formatted string of comments and reviews, optionally showing only the newest.
 func CommentList(io *iostreams.IOStreams, comments api.Comments, reviews api.PullRequestReviews, preview bool) (string, error) {
 	sortedComments := sortComments(comments, reviews)
 	if preview && len(sortedComments) > 0 {

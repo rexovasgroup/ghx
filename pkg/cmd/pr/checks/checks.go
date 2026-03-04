@@ -32,6 +32,7 @@ var prCheckFields = []string{
 	"description",
 }
 
+// ChecksOptions holds the configuration for the pr checks command.
 type ChecksOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -49,6 +50,7 @@ type ChecksOptions struct {
 	Required    bool
 }
 
+// NewCmdChecks creates the cobra command for viewing CI status checks on a pull request.
 func NewCmdChecks(f *cmdutil.Factory, runF func(*ChecksOptions) error) *cobra.Command {
 	var interval int
 	opts := &ChecksOptions{

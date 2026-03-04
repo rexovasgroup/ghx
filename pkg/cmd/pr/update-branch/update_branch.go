@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// UpdateBranchOptions holds the configuration for the pr update-branch command.
 type UpdateBranchOptions struct {
 	HttpClient func() (*http.Client, error)
 	IO         *iostreams.IOStreams
@@ -27,6 +28,7 @@ type UpdateBranchOptions struct {
 	Rebase      bool
 }
 
+// NewCmdUpdateBranch creates the cobra command for updating a pull request branch with the latest base branch changes.
 func NewCmdUpdateBranch(f *cmdutil.Factory, runF func(*UpdateBranchOptions) error) *cobra.Command {
 	opts := &UpdateBranchOptions{
 		IO:         f.IOStreams,
