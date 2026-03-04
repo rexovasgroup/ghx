@@ -36,6 +36,7 @@ const (
 	versionKey            = "version"
 )
 
+// NewConfig reads the user's configuration from disk and returns a gh.Config.
 func NewConfig() (gh.Config, error) {
 	c, err := ghConfig.Read(fallbackConfig())
 	if err != nil {
@@ -65,6 +66,7 @@ func (c *cfg) get(hostname, key string) o.Option[string] {
 	return o.None[string]()
 }
 
+// GetOrDefault returns the config value for the given key, falling back to the default value.
 func (c *cfg) GetOrDefault(hostname, key string) o.Option[gh.ConfigEntry] {
 	if val := c.get(hostname, key); val.IsSome() {
 		// Map the Option[string] to Option[gh.ConfigEntry] with a source of ConfigUserProvided
@@ -89,6 +91,7 @@ func toConfigEntry(source gh.ConfigSource) func(val string) gh.ConfigEntry {
 	}
 }
 
+// Set assigns a config value for the given key, scoped to the hostname if provided.
 func (c *cfg) Set(hostname, key, value string) {
 	if hostname == "" {
 		c.cfg.Set([]string{key}, value)
@@ -102,77 +105,93 @@ func (c *cfg) Set(hostname, key, value string) {
 	}
 }
 
+// Write persists the in-memory config to disk.
 func (c *cfg) Write() error {
 	return ghConfig.Write(c.cfg)
 }
 
+// Aliases returns the alias configuration for managing command shortcuts.
 func (c *cfg) Aliases() gh.AliasConfig {
 	return &AliasConfig{cfg: c.cfg}
 }
 
+// Authentication returns the authentication configuration for managing host credentials.
 func (c *cfg) Authentication() gh.AuthConfig {
 	return &AuthConfig{cfg: c.cfg}
 }
 
+// AccessibleColors returns the accessible colors setting for the given hostname.
 func (c *cfg) AccessibleColors(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, accessibleColorsKey).Unwrap()
 }
 
+// AccessiblePrompter returns the accessible prompter setting for the given hostname.
 func (c *cfg) AccessiblePrompter(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, accessiblePrompterKey).Unwrap()
 }
 
+// Browser returns the configured web browser for the given hostname.
 func (c *cfg) Browser(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, browserKey).Unwrap()
 }
 
+// ColorLabels returns the color labels display setting for the given hostname.
 func (c *cfg) ColorLabels(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, colorLabelsKey).Unwrap()
 }
 
+// Editor returns the configured text editor for the given hostname.
 func (c *cfg) Editor(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, editorKey).Unwrap()
 }
 
+// GitProtocol returns the configured git protocol for the given hostname.
 func (c *cfg) GitProtocol(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, gitProtocolKey).Unwrap()
 }
 
+// HTTPUnixSocket returns the configured HTTP Unix socket path for the given hostname.
 func (c *cfg) HTTPUnixSocket(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, httpUnixSocketKey).Unwrap()
 }
 
+// Pager returns the configured pager program for the given hostname.
 func (c *cfg) Pager(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, pagerKey).Unwrap()
 }
 
+// Prompt returns the interactive prompting setting for the given hostname.
 func (c *cfg) Prompt(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, promptKey).Unwrap()
 }
 
+// PreferEditorPrompt returns the editor-based prompting preference for the given hostname.
 func (c *cfg) PreferEditorPrompt(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, preferEditorPromptKey).Unwrap()
 }
 
+// Spinner returns the animated spinner setting for the given hostname.
 func (c *cfg) Spinner(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, spinnerKey).Unwrap()
 }
 
+// Version returns the config schema version, if set.
 func (c *cfg) Version() o.Option[string] {
 	return c.get("", versionKey)
 }
 
+// Migrate applies the given migration to the config if it has not already been applied.
 func (c *cfg) Migrate(m gh.Migration) error {
 	// If there is no version entry we must never have applied a migration, and the following conditional logic
 	// handles the version as an empty string correctly.
@@ -202,6 +221,7 @@ func (c *cfg) Migrate(m gh.Migration) error {
 	return nil
 }
 
+// CacheDir returns the directory used for cached data.
 func (c *cfg) CacheDir() string {
 	return ghConfig.CacheDir()
 }
@@ -314,6 +334,7 @@ func (c *AuthConfig) ActiveUser(hostname string) (string, error) {
 	return c.cfg.Get([]string{hostsKey, hostname, userKey})
 }
 
+// Hosts returns the list of known authenticated hostnames.
 func (c *AuthConfig) Hosts() []string {
 	if c.hostsOverride != nil {
 		return c.hostsOverride()
@@ -329,6 +350,7 @@ func (c *AuthConfig) SetHosts(hosts []string) {
 	}
 }
 
+// DefaultHost returns the default authenticated host and its source.
 func (c *AuthConfig) DefaultHost() (string, string) {
 	if c.defaultHostOverride != nil {
 		return c.defaultHostOverride()
@@ -383,6 +405,7 @@ func (c *AuthConfig) Login(hostname, username, token, gitProtocol string, secure
 	return insecureStorageUsed, c.activateUser(hostname, username)
 }
 
+// SwitchUser changes the active user for the given hostname.
 func (c *AuthConfig) SwitchUser(hostname, user string) error {
 	previouslyActiveUser, err := c.ActiveUser(hostname)
 	if err != nil {
@@ -484,6 +507,7 @@ func (c *AuthConfig) activateUser(hostname, user string) error {
 	return ghConfig.Write(c.cfg)
 }
 
+// UsersForHost returns the list of users configured for the given hostname.
 func (c *AuthConfig) UsersForHost(hostname string) []string {
 	users, err := c.cfg.Keys([]string{hostsKey, hostname, usersKey})
 	if err != nil {
@@ -493,6 +517,7 @@ func (c *AuthConfig) UsersForHost(hostname string) []string {
 	return users
 }
 
+// TokenForUser returns the auth token and its source for the given user on the hostname.
 func (c *AuthConfig) TokenForUser(hostname, user string) (string, string, error) {
 	if token, err := keyring.Get(keyringServiceName(hostname), user); err == nil {
 		return token, "keyring", nil
@@ -509,22 +534,27 @@ func keyringServiceName(hostname string) string {
 	return "gh:" + hostname
 }
 
+// AliasConfig provides access to command alias configuration.
 type AliasConfig struct {
 	cfg *ghConfig.Config
 }
 
+// Get returns the expansion for the given alias.
 func (a *AliasConfig) Get(alias string) (string, error) {
 	return a.cfg.Get([]string{aliasesKey, alias})
 }
 
+// Add creates or updates an alias with the given expansion.
 func (a *AliasConfig) Add(alias, expansion string) {
 	a.cfg.Set([]string{aliasesKey, alias}, expansion)
 }
 
+// Delete removes the given alias from the configuration.
 func (a *AliasConfig) Delete(alias string) error {
 	return a.cfg.Remove([]string{aliasesKey, alias})
 }
 
+// All returns a map of all configured aliases to their expansions.
 func (a *AliasConfig) All() map[string]string {
 	out := map[string]string{}
 	keys, err := a.cfg.Keys([]string{aliasesKey})
@@ -578,6 +608,7 @@ accessible_prompter: disabled
 spinner: enabled
 `
 
+// ConfigOption describes a single configuration setting with its metadata.
 type ConfigOption struct {
 	Key           string
 	Description   string
@@ -586,6 +617,7 @@ type ConfigOption struct {
 	CurrentValue  func(c gh.Config, hostname string) string
 }
 
+// Options is the list of all known configuration options and their defaults.
 var Options = []ConfigOption{
 	{
 		Key:           gitProtocolKey,
@@ -684,6 +716,7 @@ var Options = []ConfigOption{
 	},
 }
 
+// HomeDirPath returns the absolute path to a subdirectory within the user's home directory.
 func HomeDirPath(subdir string) (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -694,14 +727,17 @@ func HomeDirPath(subdir string) (string, error) {
 	return newPath, nil
 }
 
+// StateDir returns the directory used for storing application state.
 func StateDir() string {
 	return ghConfig.StateDir()
 }
 
+// DataDir returns the directory used for storing application data.
 func DataDir() string {
 	return ghConfig.DataDir()
 }
 
+// ConfigDir returns the directory used for storing configuration files.
 func ConfigDir() string {
 	return ghConfig.ConfigDir()
 }

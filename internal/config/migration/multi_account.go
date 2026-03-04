@@ -12,10 +12,12 @@ import (
 
 var noTokenError = errors.New("no token found")
 
+// CowardlyRefusalError indicates the migration was aborted to avoid data loss.
 type CowardlyRefusalError struct {
 	err error
 }
 
+// Error returns the formatted refusal message with the underlying cause.
 func (e CowardlyRefusalError) Error() string {
 	// Consider whether we should add a call to action here like "open an issue with the contents of your redacted hosts.yml"
 	return fmt.Sprintf("cowardly refusing to continue with multi account migration: %s", e.err.Error())
@@ -68,21 +70,25 @@ type tokenSource struct {
 // breaking existing users of go-gh which looks at a specific location
 // in the config for oauth tokens that are stored insecurely.
 
+// MultiAccount is a migration that restructures hosts config to support multiple user accounts per host.
 type MultiAccount struct {
 	// Allow injecting a transport layer in tests.
 	Transport http.RoundTripper
 }
 
+// PreVersion returns the config version required before this migration can be applied.
 func (m MultiAccount) PreVersion() string {
 	// It is expected that there is no version key since this migration
 	// introduces it.
 	return ""
 }
 
+// PostVersion returns the config version after this migration has been applied.
 func (m MultiAccount) PostVersion() string {
 	return "1"
 }
 
+// Do executes the multi-account migration on the given config.
 func (m MultiAccount) Do(c *config.Config) error {
 	hostnames, err := c.Keys(hostsKey)
 	// [github.com, github.localhost]

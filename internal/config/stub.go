@@ -13,10 +13,12 @@ import (
 	ghConfig "github.com/cli/go-gh/v2/pkg/config"
 )
 
+// NewBlankConfig returns a ConfigMock initialized with default configuration values.
 func NewBlankConfig() *ghmock.ConfigMock {
 	return NewFromString(defaultConfigStr)
 }
 
+// NewFromString returns a ConfigMock initialized from the given YAML configuration string.
 func NewFromString(cfgStr string) *ghmock.ConfigMock {
 	c := ghConfig.ReadFromString(cfgStr)
 	cfg := cfg{c}
