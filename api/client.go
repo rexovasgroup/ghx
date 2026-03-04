@@ -28,28 +28,34 @@ const (
 
 var linkRE = regexp.MustCompile(`<([^>]+)>;\s*rel="([^"]+)"`)
 
+// NewClientFromHTTP creates a new Client from an http.Client.
 func NewClientFromHTTP(httpClient *http.Client) *Client {
 	client := &Client{http: httpClient}
 	return client
 }
 
+// Client wraps an http.Client to provide GitHub API request methods.
 type Client struct {
 	http *http.Client
 }
 
+// HTTP returns the underlying http.Client.
 func (c *Client) HTTP() *http.Client {
 	return c.http
 }
 
+// GraphQLError wraps a ghAPI.GraphQLError for GitHub GraphQL API error responses.
 type GraphQLError struct {
 	*ghAPI.GraphQLError
 }
 
+// HTTPError wraps a ghAPI.HTTPError with an optional scopes suggestion message.
 type HTTPError struct {
 	*ghAPI.HTTPError
 	scopesSuggestion string
 }
 
+// ScopesSuggestion returns a message suggesting additional OAuth scopes if applicable.
 func (err HTTPError) ScopesSuggestion() string {
 	return err.scopesSuggestion
 }
@@ -112,6 +118,7 @@ func (c Client) REST(hostname string, method string, p string, body io.Reader, d
 	return handleResponse(restClient.Do(method, p, body, data))
 }
 
+// RESTWithNext performs a REST request and returns the next page URL along with the parsed response.
 func (c Client) RESTWithNext(hostname string, method string, p string, body io.Reader, data interface{}) (string, error) {
 	opts := clientOptions(hostname, c.http.Transport)
 	restClient, err := ghAPI.NewRESTClient(opts)
@@ -193,6 +200,7 @@ func handleResponse(err error) error {
 	return err
 }
 
+// GenerateScopeErrorForGQL returns an error with missing scope details if the GraphQL error indicates insufficient scopes.
 func GenerateScopeErrorForGQL(gqlErr *ghAPI.GraphQLError) error {
 	missing := set.NewStringSet()
 	for _, e := range gqlErr.Errors {

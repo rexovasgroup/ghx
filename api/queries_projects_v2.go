@@ -17,6 +17,7 @@ const (
 	errorProjectsV2PullRequestField  = "Field 'projectItems' doesn't exist on type 'PullRequest'"
 )
 
+// ProjectV2 represents a GitHub Projects (v2) project.
 type ProjectV2 struct {
 	ID           string `json:"id"`
 	Title        string `json:"title"`

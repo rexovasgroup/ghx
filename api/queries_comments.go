@@ -6,6 +6,7 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// Comments represents a paginated list of comments on an issue or pull request.
 type Comments struct {
 	Nodes      []Comment
 	TotalCount int
@@ -15,6 +16,7 @@ type Comments struct {
 	}
 }
 
+// CurrentUserComments returns only the comments authored by the current viewer.
 func (cs Comments) CurrentUserComments() []Comment {
 	var comments []Comment
 	for _, c := range cs.Nodes {
@@ -25,6 +27,7 @@ func (cs Comments) CurrentUserComments() []Comment {
 	return comments
 }
 
+// Comment represents a single comment on an issue or pull request.
 type Comment struct {
 	ID                  string         `json:"id"`
 	Author              CommentAuthor  `json:"author"`
@@ -39,20 +42,24 @@ type Comment struct {
 	ViewerDidAuthor     bool           `json:"viewerDidAuthor"`
 }
 
+// CommentCreateInput defines the parameters for creating a new comment.
 type CommentCreateInput struct {
 	Body      string
 	SubjectId string
 }
 
+// CommentDeleteInput defines the parameters for deleting a comment.
 type CommentDeleteInput struct {
 	CommentId string
 }
 
+// CommentUpdateInput defines the parameters for updating a comment.
 type CommentUpdateInput struct {
 	Body      string
 	CommentId string
 }
 
+// CommentCreate creates a new comment on an issue or pull request and returns the URL of the created comment.
 func CommentCreate(client *Client, repoHost string, params CommentCreateInput) (string, error) {
 	var mutation struct {
 		AddComment struct {
@@ -79,6 +86,7 @@ func CommentCreate(client *Client, repoHost string, params CommentCreateInput) (
 	return mutation.AddComment.CommentEdge.Node.URL, nil
 }
 
+// CommentUpdate updates an existing issue comment and returns the URL of the updated comment.
 func CommentUpdate(client *Client, repoHost string, params CommentUpdateInput) (string, error) {
 	var mutation struct {
 		UpdateIssueComment struct {
@@ -103,6 +111,7 @@ func CommentUpdate(client *Client, repoHost string, params CommentUpdateInput) (
 	return mutation.UpdateIssueComment.IssueComment.URL, nil
 }
 
+// CommentDelete deletes an issue comment via the GraphQL API.
 func CommentDelete(client *Client, repoHost string, params CommentDeleteInput) error {
 	var mutation struct {
 		DeleteIssueComment struct {
@@ -124,46 +133,57 @@ func CommentDelete(client *Client, repoHost string, params CommentDeleteInput) e
 	return nil
 }
 
+// Identifier returns the unique ID of the comment.
 func (c Comment) Identifier() string {
 	return c.ID
 }
 
+// AuthorLogin returns the login name of the comment author.
 func (c Comment) AuthorLogin() string {
 	return c.Author.Login
 }
 
+// Association returns the author's association with the repository.
 func (c Comment) Association() string {
 	return c.AuthorAssociation
 }
 
+// Content returns the body text of the comment.
 func (c Comment) Content() string {
 	return c.Body
 }
 
+// Created returns the time when the comment was created.
 func (c Comment) Created() time.Time {
 	return c.CreatedAt
 }
 
+// HiddenReason returns the reason the comment was minimized, if any.
 func (c Comment) HiddenReason() string {
 	return c.MinimizedReason
 }
 
+// IsEdited returns whether the comment has been edited.
 func (c Comment) IsEdited() bool {
 	return c.IncludesCreatedEdit
 }
 
+// IsHidden returns whether the comment has been minimized.
 func (c Comment) IsHidden() bool {
 	return c.IsMinimized
 }
 
+// Link returns the URL of the comment.
 func (c Comment) Link() string {
 	return c.URL
 }
 
+// Reactions returns the reaction groups associated with the comment.
 func (c Comment) Reactions() ReactionGroups {
 	return c.ReactionGroups
 }
 
+// Status returns the status of the comment; always empty for regular comments.
 func (c Comment) Status() string {
 	return ""
 }

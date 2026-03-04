@@ -13,20 +13,26 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// PullRequestAndTotalCount represents a list of pull requests along with the total count and search cap status.
 type PullRequestAndTotalCount struct {
 	TotalCount   int
 	PullRequests []PullRequest
 	SearchCapped bool
 }
 
+// PullRequestMergeable represents the mergeability state of a pull request.
 type PullRequestMergeable string
 
 const (
+	// PullRequestMergeableConflicting indicates the pull request has merge conflicts.
 	PullRequestMergeableConflicting PullRequestMergeable = "CONFLICTING"
-	PullRequestMergeableMergeable   PullRequestMergeable = "MERGEABLE"
-	PullRequestMergeableUnknown     PullRequestMergeable = "UNKNOWN"
+	// PullRequestMergeableMergeable indicates the pull request can be merged.
+	PullRequestMergeableMergeable PullRequestMergeable = "MERGEABLE"
+	// PullRequestMergeableUnknown indicates the mergeability state is not yet known.
+	PullRequestMergeableUnknown PullRequestMergeable = "UNKNOWN"
 )
 
+// PullRequest represents a GitHub pull request with all associated metadata.
 type PullRequest struct {
 	ID                  string
 	FullDatabaseID      string
@@ -102,18 +108,22 @@ type PullRequest struct {
 	ClosingIssuesReferences ClosingIssuesReferences
 }
 
+// StatusCheckRollupNode represents a node in the status check rollup containing a commit.
 type StatusCheckRollupNode struct {
 	Commit StatusCheckRollupCommit
 }
 
+// StatusCheckRollupCommit represents a commit with its associated status check rollup.
 type StatusCheckRollupCommit struct {
 	StatusCheckRollup CommitStatusCheckRollup
 }
 
+// CommitStatusCheckRollup represents the rollup of status checks for a commit.
 type CommitStatusCheckRollup struct {
 	Contexts CheckContexts
 }
 
+// ClosingIssuesReferences represents issues that will be closed when a pull request is merged.
 type ClosingIssuesReferences struct {
 	Nodes []struct {
 		ID         string
@@ -138,22 +148,37 @@ type ClosingIssuesReferences struct {
 type CheckRunState string
 
 const (
+	// CheckRunStateActionRequired indicates the check run requires action.
 	CheckRunStateActionRequired CheckRunState = "ACTION_REQUIRED"
-	CheckRunStateCancelled      CheckRunState = "CANCELLED"
-	CheckRunStateCompleted      CheckRunState = "COMPLETED"
-	CheckRunStateFailure        CheckRunState = "FAILURE"
-	CheckRunStateInProgress     CheckRunState = "IN_PROGRESS"
-	CheckRunStateNeutral        CheckRunState = "NEUTRAL"
-	CheckRunStatePending        CheckRunState = "PENDING"
-	CheckRunStateQueued         CheckRunState = "QUEUED"
-	CheckRunStateSkipped        CheckRunState = "SKIPPED"
-	CheckRunStateStale          CheckRunState = "STALE"
+	// CheckRunStateCancelled indicates the check run was cancelled.
+	CheckRunStateCancelled CheckRunState = "CANCELLED"
+	// CheckRunStateCompleted indicates the check run has completed.
+	CheckRunStateCompleted CheckRunState = "COMPLETED"
+	// CheckRunStateFailure indicates the check run has failed.
+	CheckRunStateFailure CheckRunState = "FAILURE"
+	// CheckRunStateInProgress indicates the check run is currently in progress.
+	CheckRunStateInProgress CheckRunState = "IN_PROGRESS"
+	// CheckRunStateNeutral indicates the check run completed with a neutral result.
+	CheckRunStateNeutral CheckRunState = "NEUTRAL"
+	// CheckRunStatePending indicates the check run is pending.
+	CheckRunStatePending CheckRunState = "PENDING"
+	// CheckRunStateQueued indicates the check run is queued.
+	CheckRunStateQueued CheckRunState = "QUEUED"
+	// CheckRunStateSkipped indicates the check run was skipped.
+	CheckRunStateSkipped CheckRunState = "SKIPPED"
+	// CheckRunStateStale indicates the check run is stale.
+	CheckRunStateStale CheckRunState = "STALE"
+	// CheckRunStateStartupFailure indicates the check run failed during startup.
 	CheckRunStateStartupFailure CheckRunState = "STARTUP_FAILURE"
-	CheckRunStateSuccess        CheckRunState = "SUCCESS"
-	CheckRunStateTimedOut       CheckRunState = "TIMED_OUT"
-	CheckRunStateWaiting        CheckRunState = "WAITING"
+	// CheckRunStateSuccess indicates the check run succeeded.
+	CheckRunStateSuccess CheckRunState = "SUCCESS"
+	// CheckRunStateTimedOut indicates the check run timed out.
+	CheckRunStateTimedOut CheckRunState = "TIMED_OUT"
+	// CheckRunStateWaiting indicates the check run is waiting.
+	CheckRunStateWaiting CheckRunState = "WAITING"
 )
 
+// CheckRunCountByState represents a count of check runs grouped by their state.
 type CheckRunCountByState struct {
 	State CheckRunState
 	Count int
@@ -163,13 +188,19 @@ type CheckRunCountByState struct {
 type StatusState string
 
 const (
-	StatusStateError    StatusState = "ERROR"
+	// StatusStateError indicates the status check reported an error.
+	StatusStateError StatusState = "ERROR"
+	// StatusStateExpected indicates the status check is expected.
 	StatusStateExpected StatusState = "EXPECTED"
-	StatusStateFailure  StatusState = "FAILURE"
-	StatusStatePending  StatusState = "PENDING"
-	StatusStateSuccess  StatusState = "SUCCESS"
+	// StatusStateFailure indicates the status check has failed.
+	StatusStateFailure StatusState = "FAILURE"
+	// StatusStatePending indicates the status check is pending.
+	StatusStatePending StatusState = "PENDING"
+	// StatusStateSuccess indicates the status check succeeded.
+	StatusStateSuccess StatusState = "SUCCESS"
 )
 
+// StatusContextCountByState represents a count of status contexts grouped by their state.
 type StatusContextCountByState struct {
 	State StatusState
 	Count int
@@ -179,29 +210,45 @@ type StatusContextCountByState struct {
 type CheckStatusState string
 
 const (
-	CheckStatusStateCompleted  CheckStatusState = "COMPLETED"
+	// CheckStatusStateCompleted indicates the check has completed.
+	CheckStatusStateCompleted CheckStatusState = "COMPLETED"
+	// CheckStatusStateInProgress indicates the check is in progress.
 	CheckStatusStateInProgress CheckStatusState = "IN_PROGRESS"
-	CheckStatusStatePending    CheckStatusState = "PENDING"
-	CheckStatusStateQueued     CheckStatusState = "QUEUED"
-	CheckStatusStateRequested  CheckStatusState = "REQUESTED"
-	CheckStatusStateWaiting    CheckStatusState = "WAITING"
+	// CheckStatusStatePending indicates the check is pending.
+	CheckStatusStatePending CheckStatusState = "PENDING"
+	// CheckStatusStateQueued indicates the check is queued.
+	CheckStatusStateQueued CheckStatusState = "QUEUED"
+	// CheckStatusStateRequested indicates the check has been requested.
+	CheckStatusStateRequested CheckStatusState = "REQUESTED"
+	// CheckStatusStateWaiting indicates the check is waiting.
+	CheckStatusStateWaiting CheckStatusState = "WAITING"
 )
 
 // https://docs.github.com/en/graphql/reference/enums#checkconclusionstate
 type CheckConclusionState string
 
 const (
+	// CheckConclusionStateActionRequired indicates the check conclusion requires action.
 	CheckConclusionStateActionRequired CheckConclusionState = "ACTION_REQUIRED"
-	CheckConclusionStateCancelled      CheckConclusionState = "CANCELLED"
-	CheckConclusionStateFailure        CheckConclusionState = "FAILURE"
-	CheckConclusionStateNeutral        CheckConclusionState = "NEUTRAL"
-	CheckConclusionStateSkipped        CheckConclusionState = "SKIPPED"
-	CheckConclusionStateStale          CheckConclusionState = "STALE"
+	// CheckConclusionStateCancelled indicates the check was cancelled.
+	CheckConclusionStateCancelled CheckConclusionState = "CANCELLED"
+	// CheckConclusionStateFailure indicates the check concluded with a failure.
+	CheckConclusionStateFailure CheckConclusionState = "FAILURE"
+	// CheckConclusionStateNeutral indicates the check concluded with a neutral result.
+	CheckConclusionStateNeutral CheckConclusionState = "NEUTRAL"
+	// CheckConclusionStateSkipped indicates the check was skipped.
+	CheckConclusionStateSkipped CheckConclusionState = "SKIPPED"
+	// CheckConclusionStateStale indicates the check conclusion is stale.
+	CheckConclusionStateStale CheckConclusionState = "STALE"
+	// CheckConclusionStateStartupFailure indicates the check failed during startup.
 	CheckConclusionStateStartupFailure CheckConclusionState = "STARTUP_FAILURE"
-	CheckConclusionStateSuccess        CheckConclusionState = "SUCCESS"
-	CheckConclusionStateTimedOut       CheckConclusionState = "TIMED_OUT"
+	// CheckConclusionStateSuccess indicates the check concluded successfully.
+	CheckConclusionStateSuccess CheckConclusionState = "SUCCESS"
+	// CheckConclusionStateTimedOut indicates the check conclusion timed out.
+	CheckConclusionStateTimedOut CheckConclusionState = "TIMED_OUT"
 )
 
+// CheckContexts represents the check and status context information for a commit.
 type CheckContexts struct {
 	// These fields are available on newer versions of the GraphQL API
 	// to support summary counts by state
@@ -219,6 +266,7 @@ type CheckContexts struct {
 	}
 }
 
+// CheckContext represents a single check run or status context for a commit.
 type CheckContext struct {
 	TypeName   string     `json:"__typename"`
 	Name       string     `json:"name"`
@@ -241,25 +289,30 @@ type CheckContext struct {
 	CreatedAt time.Time   `json:"createdAt"`
 }
 
+// CheckSuite represents a GitHub check suite containing a workflow run.
 type CheckSuite struct {
 	WorkflowRun WorkflowRun `json:"workflowRun"`
 }
 
+// WorkflowRun represents a GitHub Actions workflow run triggered by an event.
 type WorkflowRun struct {
 	Event    string   `json:"event"`
 	Workflow Workflow `json:"workflow"`
 }
 
+// Workflow represents a GitHub Actions workflow.
 type Workflow struct {
 	Name string `json:"name"`
 }
 
+// PRRepository represents a repository associated with a pull request.
 type PRRepository struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
 	NameWithOwner string `json:"nameWithOwner"`
 }
 
+// AutoMergeRequest represents an auto-merge configuration for a pull request.
 type AutoMergeRequest struct {
 	AuthorEmail    *string `json:"authorEmail"`
 	CommitBody     *string `json:"commitBody"`
@@ -275,6 +328,7 @@ type Commit struct {
 	OID string `json:"oid"`
 }
 
+// PullRequestCommit represents a commit associated with a pull request.
 type PullRequestCommit struct {
 	Commit PullRequestCommitCommit
 }
@@ -295,6 +349,7 @@ type PullRequestCommitCommit struct {
 	AuthoredDate    time.Time
 }
 
+// PullRequestFile represents a file changed in a pull request.
 type PullRequestFile struct {
 	Path       string `json:"path"`
 	Additions  int    `json:"additions"`
@@ -302,12 +357,14 @@ type PullRequestFile struct {
 	ChangeType string `json:"changeType"`
 }
 
+// ReviewRequests represents the review requests on a pull request.
 type ReviewRequests struct {
 	Nodes []struct {
 		RequestedReviewer RequestedReviewer
 	}
 }
 
+// RequestedReviewer represents a user, bot, or team requested for review on a pull request.
 type RequestedReviewer struct {
 	TypeName     string `json:"__typename"`
 	Login        string `json:"login"`
@@ -321,6 +378,7 @@ type RequestedReviewer struct {
 const teamTypeName = "Team"
 const botTypeName = "Bot"
 
+// LoginOrSlug returns the login for users or the org/slug for teams.
 func (r RequestedReviewer) LoginOrSlug() string {
 	if r.TypeName == teamTypeName {
 		return fmt.Sprintf("%s/%s", r.Organization.Login, r.Slug)
@@ -344,6 +402,7 @@ func (r RequestedReviewer) DisplayName() string {
 	return r.Login
 }
 
+// Logins returns the login or slug identifiers for all requested reviewers.
 func (r ReviewRequests) Logins() []string {
 	logins := make([]string, len(r.Nodes))
 	for i, r := range r.Nodes {
@@ -361,6 +420,7 @@ func (r ReviewRequests) DisplayNames() []string {
 	return names
 }
 
+// HeadLabel returns the head branch label, including the owner prefix for cross-repository pull requests.
 func (pr PullRequest) HeadLabel() string {
 	if pr.IsCrossRepository {
 		return fmt.Sprintf("%s:%s", pr.HeadRepositoryOwner.Login, pr.HeadRefName)
@@ -368,28 +428,34 @@ func (pr PullRequest) HeadLabel() string {
 	return pr.HeadRefName
 }
 
+// Link returns the URL of the pull request.
 func (pr PullRequest) Link() string {
 	return pr.URL
 }
 
+// Identifier returns the GraphQL node ID of the pull request.
 func (pr PullRequest) Identifier() string {
 	return pr.ID
 }
 
+// CurrentUserComments returns the comments on the pull request authored by the current user.
 func (pr PullRequest) CurrentUserComments() []Comment {
 	return pr.Comments.CurrentUserComments()
 }
 
+// IsOpen returns true if the pull request state is open.
 func (pr PullRequest) IsOpen() bool {
 	return pr.State == "OPEN"
 }
 
+// PullRequestReviewStatus represents the review decision status of a pull request.
 type PullRequestReviewStatus struct {
 	ChangesRequested bool
 	Approved         bool
 	ReviewRequired   bool
 }
 
+// ReviewStatus returns the review decision status of the pull request.
 func (pr *PullRequest) ReviewStatus() PullRequestReviewStatus {
 	var status PullRequestReviewStatus
 	switch pr.ReviewDecision {
@@ -403,6 +469,7 @@ func (pr *PullRequest) ReviewStatus() PullRequestReviewStatus {
 	return status
 }
 
+// PullRequestChecksStatus represents the summary of CI check statuses for a pull request.
 type PullRequestChecksStatus struct {
 	Pending int
 	Failing int
@@ -410,6 +477,7 @@ type PullRequestChecksStatus struct {
 	Total   int
 }
 
+// ChecksStatus returns the aggregated CI checks status for the pull request.
 func (pr *PullRequest) ChecksStatus() PullRequestChecksStatus {
 	var summary PullRequestChecksStatus
 
@@ -542,6 +610,7 @@ func parseCheckStatusFromCheckConclusionState(state CheckConclusionState) checkS
 	}
 }
 
+// DisplayableReviews returns the pull request reviews that are suitable for display, excluding pending and empty comment reviews.
 func (pr *PullRequest) DisplayableReviews() PullRequestReviews {
 	published := []PullRequestReview{}
 	for _, prr := range pr.Reviews.Nodes {
@@ -904,6 +973,7 @@ type ReviewerUser struct {
 	AssignableUser
 }
 
+// NewReviewerUser creates a new ReviewerUser with the given login and name.
 func NewReviewerUser(login, name string) ReviewerUser {
 	return ReviewerUser{
 		AssignableUser: NewAssignableUser("", login, name),
@@ -917,12 +987,14 @@ type ReviewerBot struct {
 	AssignableBot
 }
 
+// NewReviewerBot creates a new ReviewerBot with the given login.
 func NewReviewerBot(login string) ReviewerBot {
 	return ReviewerBot{
 		AssignableBot: NewAssignableBot("", login),
 	}
 }
 
+// DisplayName returns a user-friendly name for the bot reviewer.
 func (b ReviewerBot) DisplayName() string {
 	if b.login == CopilotReviewerLogin {
 		return fmt.Sprintf("%s (AI)", CopilotActorName)
@@ -943,14 +1015,17 @@ func NewReviewerTeam(orgName, teamSlug string) ReviewerTeam {
 	return ReviewerTeam{org: orgName, teamSlug: teamSlug}
 }
 
+// DisplayName returns the org/slug display name for the team reviewer.
 func (r ReviewerTeam) DisplayName() string {
 	return fmt.Sprintf("%s/%s", r.org, r.teamSlug)
 }
 
+// Login returns the org/slug identifier for the team reviewer.
 func (r ReviewerTeam) Login() string {
 	return fmt.Sprintf("%s/%s", r.org, r.teamSlug)
 }
 
+// Slug returns the team slug for the team reviewer.
 func (r ReviewerTeam) Slug() string {
 	return r.teamSlug
 }
@@ -1106,6 +1181,7 @@ func SuggestedReviewerActors(client *Client, repo ghrepo.Interface, prID string,
 	return candidates, moreResults, nil
 }
 
+// UpdatePullRequestBranch updates the head branch of a pull request with the latest upstream changes.
 func UpdatePullRequestBranch(client *Client, repo ghrepo.Interface, params githubv4.UpdatePullRequestBranchInput) error {
 	var mutation struct {
 		UpdatePullRequestBranch struct {
@@ -1129,6 +1205,7 @@ func isBlank(v interface{}) bool {
 	}
 }
 
+// PullRequestClose closes a pull request by its ID.
 func PullRequestClose(httpClient *http.Client, repo ghrepo.Interface, prID string) error {
 	var mutation struct {
 		ClosePullRequest struct {
@@ -1148,6 +1225,7 @@ func PullRequestClose(httpClient *http.Client, repo ghrepo.Interface, prID strin
 	return client.Mutate(repo.RepoHost(), "PullRequestClose", &mutation, variables)
 }
 
+// PullRequestReopen reopens a previously closed pull request by its ID.
 func PullRequestReopen(httpClient *http.Client, repo ghrepo.Interface, prID string) error {
 	var mutation struct {
 		ReopenPullRequest struct {
@@ -1167,6 +1245,7 @@ func PullRequestReopen(httpClient *http.Client, repo ghrepo.Interface, prID stri
 	return client.Mutate(repo.RepoHost(), "PullRequestReopen", &mutation, variables)
 }
 
+// PullRequestReady marks a draft pull request as ready for review.
 func PullRequestReady(client *Client, repo ghrepo.Interface, pr *PullRequest) error {
 	var mutation struct {
 		MarkPullRequestReadyForReview struct {
@@ -1185,6 +1264,7 @@ func PullRequestReady(client *Client, repo ghrepo.Interface, pr *PullRequest) er
 	return client.Mutate(repo.RepoHost(), "PullRequestReadyForReview", &mutation, variables)
 }
 
+// PullRequestRevert reverts a merged pull request and returns the newly created revert pull request.
 func PullRequestRevert(client *Client, repo ghrepo.Interface, params githubv4.RevertPullRequestInput) (*PullRequest, error) {
 	var mutation struct {
 		RevertPullRequest struct {
@@ -1216,6 +1296,7 @@ func PullRequestRevert(client *Client, repo ghrepo.Interface, params githubv4.Re
 	return revertPR, nil
 }
 
+// ConvertPullRequestToDraft converts a pull request to draft state.
 func ConvertPullRequestToDraft(client *Client, repo ghrepo.Interface, pr *PullRequest) error {
 	var mutation struct {
 		ConvertPullRequestToDraft struct {
@@ -1234,17 +1315,20 @@ func ConvertPullRequestToDraft(client *Client, repo ghrepo.Interface, pr *PullRe
 	return client.Mutate(repo.RepoHost(), "ConvertPullRequestToDraft", &mutation, variables)
 }
 
+// BranchDeleteRemote deletes a branch from the remote repository.
 func BranchDeleteRemote(client *Client, repo ghrepo.Interface, branch string) error {
 	path := fmt.Sprintf("repos/%s/%s/git/refs/heads/%s", repo.RepoOwner(), repo.RepoName(), url.PathEscape(branch))
 	return client.REST(repo.RepoHost(), "DELETE", path, nil, nil)
 }
 
+// RefComparison represents the comparison between two Git references.
 type RefComparison struct {
 	AheadBy  int
 	BehindBy int
 	Status   string
 }
 
+// ComparePullRequestBaseBranchWith compares the base branch of a pull request with the given head reference.
 func ComparePullRequestBaseBranchWith(client *Client, repo ghrepo.Interface, prNumber int, headRef string) (*RefComparison, error) {
 	query := `query ComparePullRequestBaseBranchWith($owner: String!, $repo: String!, $pullRequestNumber: Int!, $headRef: String!) {
 		repository(owner: $owner, name: $repo) {

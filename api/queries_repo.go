@@ -140,6 +140,7 @@ type RepositoryOwner struct {
 	Login string `json:"login"`
 }
 
+// GitHubUser represents a GitHub user with basic profile information.
 type GitHubUser struct {
 	ID         string `json:"id"`
 	Login      string `json:"login"`
@@ -164,33 +165,39 @@ type BranchRef struct {
 	Name string `json:"name"`
 }
 
+// CodeOfConduct represents a repository's code of conduct.
 type CodeOfConduct struct {
 	Key  string `json:"key"`
 	Name string `json:"name"`
 	URL  string `json:"url"`
 }
 
+// RepositoryLicense represents the license associated with a repository.
 type RepositoryLicense struct {
 	Key      string `json:"key"`
 	Name     string `json:"name"`
 	Nickname string `json:"nickname"`
 }
 
+// ContactLink represents a contact link configured for a repository.
 type ContactLink struct {
 	About string `json:"about"`
 	Name  string `json:"name"`
 	URL   string `json:"url"`
 }
 
+// FundingLink represents a funding platform link for a repository.
 type FundingLink struct {
 	Platform string `json:"platform"`
 	URL      string `json:"url"`
 }
 
+// CodingLanguage represents a programming language used in a repository.
 type CodingLanguage struct {
 	Name string `json:"name"`
 }
 
+// IssueTemplate represents an issue template defined in a repository.
 type IssueTemplate struct {
 	Name  string `json:"name"`
 	Title string `json:"title"`
@@ -198,15 +205,18 @@ type IssueTemplate struct {
 	About string `json:"about"`
 }
 
+// PullRequestTemplate represents a pull request template defined in a repository.
 type PullRequestTemplate struct {
 	Filename string `json:"filename"`
 	Body     string `json:"body"`
 }
 
+// RepositoryTopic represents a topic tag associated with a repository.
 type RepositoryTopic struct {
 	Name string `json:"name"`
 }
 
+// RepositoryRelease represents a release published in a repository.
 type RepositoryRelease struct {
 	Name        string    `json:"name"`
 	TagName     string    `json:"tagName"`
@@ -214,6 +224,7 @@ type RepositoryRelease struct {
 	PublishedAt time.Time `json:"publishedAt"`
 }
 
+// IssueLabel represents a label that can be applied to issues and pull requests.
 type IssueLabel struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -221,6 +232,7 @@ type IssueLabel struct {
 	Color       string `json:"color"`
 }
 
+// License represents a software license with its full details from the GitHub API.
 type License struct {
 	Key            string   `json:"key"`
 	Name           string   `json:"name"`
@@ -237,6 +249,7 @@ type License struct {
 	Featured       bool     `json:"featured"`
 }
 
+// GitIgnore represents a gitignore template from the GitHub API.
 type GitIgnore struct {
 	Name   string `json:"name"`
 	Source string `json:"source"`
@@ -277,6 +290,7 @@ func (r Repository) ViewerCanTriage() bool {
 	}
 }
 
+// FetchRepository queries the GitHub GraphQL API for a repository with the specified fields.
 func FetchRepository(client *Client, repo ghrepo.Interface, fields []string) (*Repository, error) {
 	query := fmt.Sprintf(`query RepositoryInfo($owner: String!, $name: String!) {
 		repository(owner: $owner, name: $name) {%s}
@@ -309,6 +323,7 @@ func FetchRepository(client *Client, repo ghrepo.Interface, fields []string) (*R
 	return InitRepoHostname(result.Repository, repo.RepoHost()), nil
 }
 
+// GitHubRepo fetches detailed repository information including its parent, if any.
 func GitHubRepo(client *Client, repo ghrepo.Interface) (*Repository, error) {
 	query := `
 	fragment repo on Repository {
@@ -362,6 +377,7 @@ func GitHubRepo(client *Client, repo ghrepo.Interface) (*Repository, error) {
 	return InitRepoHostname(result.Repository, repo.RepoHost()), nil
 }
 
+// RepoDefaultBranch returns the name of the default branch for a repository.
 func RepoDefaultBranch(client *Client, repo ghrepo.Interface) (string, error) {
 	if r, ok := repo.(*Repository); ok && r.DefaultBranchRef.Name != "" {
 		return r.DefaultBranchRef.Name, nil
@@ -374,6 +390,7 @@ func RepoDefaultBranch(client *Client, repo ghrepo.Interface) (string, error) {
 	return r.DefaultBranchRef.Name, nil
 }
 
+// CanPushToRepo reports whether the current user has push access to the repository.
 func CanPushToRepo(httpClient *http.Client, repo ghrepo.Interface) (bool, error) {
 	if r, ok := repo.(*Repository); ok && r.ViewerPermission != "" {
 		return r.ViewerCanPush(), nil
@@ -520,6 +537,7 @@ func RepoNetwork(client *Client, repos []ghrepo.Interface) (RepoNetworkResult, e
 	return result, nil
 }
 
+// InitRepoHostname sets the hostname on a repository and its parent, if present.
 func InitRepoHostname(repo *Repository, hostname string) *Repository {
 	repo.hostname = hostname
 	if repo.Parent != nil {
@@ -619,6 +637,7 @@ func RenameRepo(client *Client, repo ghrepo.Interface, newRepoName string) (*Rep
 	}, nil
 }
 
+// LastCommit returns the most recent commit on the default branch of a repository.
 func LastCommit(client *Client, repo ghrepo.Interface) (*Commit, error) {
 	var responseData struct {
 		Repository struct {
@@ -686,6 +705,7 @@ func RepoFindForks(client *Client, repo ghrepo.Interface, limit int) ([]*Reposit
 	return results, nil
 }
 
+// RepoMetadataResult holds pre-fetched metadata for issues and pull requests.
 type RepoMetadataResult struct {
 	CurrentLogin     string
 	AssignableUsers  []AssignableUser
@@ -697,6 +717,7 @@ type RepoMetadataResult struct {
 	Teams            []OrgTeam
 }
 
+// MembersToIDs resolves user or actor login names to their corresponding node IDs.
 func (m *RepoMetadataResult) MembersToIDs(names []string) ([]string, error) {
 	var ids []string
 	for _, assigneeLogin := range names {
@@ -733,6 +754,7 @@ func (m *RepoMetadataResult) MembersToIDs(names []string) ([]string, error) {
 	return ids, nil
 }
 
+// TeamsToIDs resolves team slugs to their corresponding node IDs.
 func (m *RepoMetadataResult) TeamsToIDs(names []string) ([]string, error) {
 	var ids []string
 	for _, teamSlug := range names {
@@ -752,6 +774,7 @@ func (m *RepoMetadataResult) TeamsToIDs(names []string) ([]string, error) {
 	return ids, nil
 }
 
+// LabelsToIDs resolves label names to their corresponding node IDs.
 func (m *RepoMetadataResult) LabelsToIDs(names []string) ([]string, error) {
 	var ids []string
 	for _, labelName := range names {
@@ -818,6 +841,7 @@ func (m *RepoMetadataResult) v2ProjectTitleToID(title string) (string, bool) {
 	return "", false
 }
 
+// ProjectTitlesToPaths resolves project titles to their resource paths, checking both v1 and v2 projects.
 func ProjectTitlesToPaths(client *Client, repo ghrepo.Interface, titles []string, projectsV1Support gh.ProjectsV1Support) ([]string, error) {
 	paths := make([]string, 0, len(titles))
 	matchedPaths := map[string]struct{}{}
@@ -885,6 +909,7 @@ func ProjectTitlesToPaths(client *Client, repo ghrepo.Interface, titles []string
 	return paths, nil
 }
 
+// MilestoneToID resolves a milestone title to its corresponding node ID.
 func (m *RepoMetadataResult) MilestoneToID(title string) (string, error) {
 	for _, m := range m.Milestones {
 		if strings.EqualFold(title, m.Title) {
@@ -894,6 +919,7 @@ func (m *RepoMetadataResult) MilestoneToID(title string) (string, error) {
 	return "", fmt.Errorf("'%s' not found", title)
 }
 
+// Merge combines another RepoMetadataResult into the receiver, preferring non-empty values from m2.
 func (m *RepoMetadataResult) Merge(m2 *RepoMetadataResult) {
 	if len(m2.AssignableUsers) > 0 || len(m.AssignableUsers) == 0 {
 		m.AssignableUsers = m2.AssignableUsers
@@ -916,6 +942,7 @@ func (m *RepoMetadataResult) Merge(m2 *RepoMetadataResult) {
 	}
 }
 
+// RepoMetadataInput specifies which categories of repository metadata to fetch.
 type RepoMetadataInput struct {
 	Assignees      bool
 	ActorAssignees bool
@@ -1035,6 +1062,7 @@ func RepoMetadata(client *Client, repo ghrepo.Interface, input RepoMetadataInput
 	return &result, nil
 }
 
+// RepoProject represents a GitHub classic project (v1) associated with a repository.
 type RepoProject struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
@@ -1085,8 +1113,10 @@ const CopilotAssigneeLogin = "copilot-swe-agent"
 
 // Expected login for Copilot when retrieved as a Pull Request Reviewer.
 const CopilotReviewerLogin = "copilot-pull-request-reviewer"
+// CopilotActorName is the display name used for the Copilot actor.
 const CopilotActorName = "Copilot"
 
+// AssignableActor defines the interface for entities that can be assigned to issues or pull requests.
 type AssignableActor interface {
 	DisplayName() string
 	ID() string
@@ -1095,13 +1125,14 @@ type AssignableActor interface {
 	sealedAssignableActor()
 }
 
-// Always a user
+// AssignableUser represents a user that can be assigned to issues or pull requests.
 type AssignableUser struct {
 	id    string
 	login string
 	name  string
 }
 
+// NewAssignableUser creates a new AssignableUser with the given id, login, and name.
 func NewAssignableUser(id, login, name string) AssignableUser {
 	return AssignableUser{
 		id:    id,
@@ -1118,25 +1149,30 @@ func (u AssignableUser) DisplayName() string {
 	return u.login
 }
 
+// ID returns the node ID of the user.
 func (u AssignableUser) ID() string {
 	return u.id
 }
 
+// Login returns the login name of the user.
 func (u AssignableUser) Login() string {
 	return u.login
 }
 
+// Name returns the display name of the user.
 func (u AssignableUser) Name() string {
 	return u.name
 }
 
 func (u AssignableUser) sealedAssignableActor() {}
 
+// AssignableBot represents a bot account that can be assigned to issues or pull requests.
 type AssignableBot struct {
 	id    string
 	login string
 }
 
+// NewAssignableBot creates a new AssignableBot with the given id and login.
 func NewAssignableBot(id, login string) AssignableBot {
 	return AssignableBot{
 		id:    id,
@@ -1144,6 +1180,7 @@ func NewAssignableBot(id, login string) AssignableBot {
 	}
 }
 
+// DisplayName returns a formatted display name for the bot.
 func (b AssignableBot) DisplayName() string {
 	if b.login == CopilotAssigneeLogin {
 		return fmt.Sprintf("%s (AI)", CopilotActorName)
@@ -1151,14 +1188,17 @@ func (b AssignableBot) DisplayName() string {
 	return b.Login()
 }
 
+// ID returns the node ID of the bot.
 func (b AssignableBot) ID() string {
 	return b.id
 }
 
+// Login returns the login name of the bot.
 func (b AssignableBot) Login() string {
 	return b.login
 }
 
+// Name returns an empty string as bots do not have display names.
 func (b AssignableBot) Name() string {
 	return ""
 }
@@ -1281,6 +1321,7 @@ func RepoAssignableActors(client *Client, repo ghrepo.Interface) ([]AssignableAc
 	return actors, nil
 }
 
+// RepoLabel represents a label in a repository.
 type RepoLabel struct {
 	ID   string
 	Name string
@@ -1324,6 +1365,7 @@ func RepoLabels(client *Client, repo ghrepo.Interface) ([]RepoLabel, error) {
 	return labels, nil
 }
 
+// RepoMilestone represents a milestone in a repository.
 type RepoMilestone struct {
 	ID    string
 	Title string
@@ -1485,6 +1527,7 @@ func v2Projects(client *Client, repo ghrepo.Interface) ([]ProjectV2, error) {
 	return projectsV2, nil
 }
 
+// CreateRepoTransformToV4 creates a repository via the REST API and transforms the v3 response into a v4-style Repository.
 func CreateRepoTransformToV4(apiClient *Client, hostname string, method string, path string, body io.Reader) (*Repository, error) {
 	var responsev3 repositoryV3
 	err := apiClient.REST(hostname, method, path, body, &responsev3)
@@ -1542,6 +1585,7 @@ func GetRepoIDs(client *Client, host string, repositories []ghrepo.Interface) ([
 	return result, nil
 }
 
+// RepoExists checks whether a repository exists by making a HEAD request to the REST API.
 func RepoExists(client *Client, repo ghrepo.Interface) (bool, error) {
 	path := fmt.Sprintf("%srepos/%s/%s", ghinstance.RESTPrefix(repo.RepoHost()), repo.RepoOwner(), repo.RepoName())
 

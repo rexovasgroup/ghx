@@ -4,6 +4,7 @@ import (
 	"reflect"
 )
 
+// ExportData returns repository data as a map for the specified field names.
 func (repo *Repository) ExportData(fields []string) map[string]interface{} {
 	v := reflect.ValueOf(repo).Elem()
 	data := map[string]interface{}{}

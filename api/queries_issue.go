@@ -8,18 +8,21 @@ import (
 	"github.com/cli/cli/v2/internal/ghrepo"
 )
 
+// IssuesPayload represents categorized issue results for the current user.
 type IssuesPayload struct {
 	Assigned  IssuesAndTotalCount
 	Mentioned IssuesAndTotalCount
 	Authored  IssuesAndTotalCount
 }
 
+// IssuesAndTotalCount represents a list of issues along with pagination metadata.
 type IssuesAndTotalCount struct {
 	Issues       []Issue
 	TotalCount   int
 	SearchCapped bool
 }
 
+// Issue represents a GitHub issue or pull request.
 type Issue struct {
 	Typename         string `json:"__typename"`
 	ID               string
@@ -49,6 +52,7 @@ type Issue struct {
 	ClosedByPullRequestsReferences ClosedByPullRequestsReferences
 }
 
+// ClosedByPullRequestsReferences represents pull requests that close an issue.
 type ClosedByPullRequestsReferences struct {
 	Nodes []struct {
 		ID         string
@@ -75,15 +79,18 @@ const (
 	TypePullRequest string = "PullRequest"
 )
 
+// IsPullRequest reports whether the issue is actually a pull request.
 func (i Issue) IsPullRequest() bool {
 	return i.Typename == TypePullRequest
 }
 
+// Assignees represents users assigned to an issue or pull request.
 type Assignees struct {
 	Nodes      []GitHubUser
 	TotalCount int
 }
 
+// Logins returns the login usernames of all assignees.
 func (a Assignees) Logins() []string {
 	logins := make([]string, len(a.Nodes))
 	for i, a := range a.Nodes {
@@ -92,11 +99,13 @@ func (a Assignees) Logins() []string {
 	return logins
 }
 
+// AssignedActors represents actors (users or bots) assigned to an issue or pull request.
 type AssignedActors struct {
 	Nodes      []Actor
 	TotalCount int
 }
 
+// Logins returns the login usernames of all assigned actors.
 func (a AssignedActors) Logins() []string {
 	logins := make([]string, len(a.Nodes))
 	for i, a := range a.Nodes {
@@ -147,11 +156,13 @@ func (a AssignedActors) DisplayNames() []string {
 	return displayNames
 }
 
+// Labels represents the set of labels applied to an issue or pull request.
 type Labels struct {
 	Nodes      []IssueLabel
 	TotalCount int
 }
 
+// Names returns the names of all labels.
 func (l Labels) Names() []string {
 	names := make([]string, len(l.Nodes))
 	for i, l := range l.Nodes {
@@ -160,16 +171,19 @@ func (l Labels) Names() []string {
 	return names
 }
 
+// ProjectCards represents classic project cards associated with an issue or pull request.
 type ProjectCards struct {
 	Nodes      []*ProjectInfo
 	TotalCount int
 }
 
+// ProjectItems represents ProjectV2 items associated with an issue or pull request.
 type ProjectItems struct {
 	Nodes      []*ProjectV2Item
 	TotalCount int
 }
 
+// ProjectInfo represents a classic project card's project and column names.
 type ProjectInfo struct {
 	Project struct {
 		Name string `json:"name"`
@@ -179,22 +193,26 @@ type ProjectInfo struct {
 	} `json:"column"`
 }
 
+// ProjectV2Item represents an item within a GitHub ProjectV2.
 type ProjectV2Item struct {
 	ID      string `json:"id"`
 	Project ProjectV2ItemProject
 	Status  ProjectV2ItemStatus
 }
 
+// ProjectV2ItemProject represents the project associated with a ProjectV2 item.
 type ProjectV2ItemProject struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 }
 
+// ProjectV2ItemStatus represents the status field of a ProjectV2 item.
 type ProjectV2ItemStatus struct {
 	OptionID string `json:"optionId"`
 	Name     string `json:"name"`
 }
 
+// ProjectNames returns the project names from all classic project cards.
 func (p ProjectCards) ProjectNames() []string {
 	names := make([]string, len(p.Nodes))
 	for i, c := range p.Nodes {
@@ -203,6 +221,7 @@ func (p ProjectCards) ProjectNames() []string {
 	return names
 }
 
+// ProjectTitles returns the project titles from all ProjectV2 items.
 func (p ProjectItems) ProjectTitles() []string {
 	titles := make([]string, len(p.Nodes))
 	for i, c := range p.Nodes {
@@ -211,6 +230,7 @@ func (p ProjectItems) ProjectTitles() []string {
 	return titles
 }
 
+// Milestone represents a GitHub milestone.
 type Milestone struct {
 	Number      int        `json:"number"`
 	Title       string     `json:"title"`
@@ -218,22 +238,26 @@ type Milestone struct {
 	DueOn       *time.Time `json:"dueOn"`
 }
 
+// IssuesDisabledError indicates that issues are disabled for a repository.
 type IssuesDisabledError struct {
 	error
 }
 
+// Owner represents the owner of a GitHub repository.
 type Owner struct {
 	ID    string `json:"id,omitempty"`
 	Name  string `json:"name,omitempty"`
 	Login string `json:"login"`
 }
 
+// Author represents the author of an issue, pull request, or comment.
 type Author struct {
 	ID    string
 	Name  string
 	Login string
 }
 
+// MarshalJSON implements the json.Marshaler interface for Author.
 func (author Author) MarshalJSON() ([]byte, error) {
 	if author.ID == "" {
 		return json.Marshal(map[string]interface{}{
@@ -249,6 +273,7 @@ func (author Author) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// CommentAuthor represents the author of a comment with only a login field.
 type CommentAuthor struct {
 	Login string `json:"login"`
 	// Unfortunately, there is no easy way to add "id" and "name" fields to this struct because it's being
@@ -317,11 +342,13 @@ func IssueCreate(client *Client, repo *Repository, params map[string]interface{}
 	return issue, nil
 }
 
+// IssueStatusOptions specifies options for querying the current user's issue status.
 type IssueStatusOptions struct {
 	Username string
 	Fields   []string
 }
 
+// IssueStatus returns issues assigned to, mentioning, or authored by the current user.
 func IssueStatus(client *Client, repo ghrepo.Interface, options IssueStatusOptions) (*IssuesPayload, error) {
 	type response struct {
 		Repository struct {
@@ -401,14 +428,17 @@ func IssueStatus(client *Client, repo ghrepo.Interface, options IssueStatusOptio
 	return &payload, nil
 }
 
+// Link returns the URL of the issue.
 func (i Issue) Link() string {
 	return i.URL
 }
 
+// Identifier returns the unique ID of the issue.
 func (i Issue) Identifier() string {
 	return i.ID
 }
 
+// CurrentUserComments returns comments on the issue authored by the current user.
 func (i Issue) CurrentUserComments() []Comment {
 	return i.Comments.CurrentUserComments()
 }

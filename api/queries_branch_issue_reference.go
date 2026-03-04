@@ -7,11 +7,13 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// LinkedBranch represents a branch linked to a GitHub issue.
 type LinkedBranch struct {
 	BranchName string
 	URL        string
 }
 
+// CreateLinkedBranch creates a linked branch for the given issue and returns the branch name.
 func CreateLinkedBranch(client *Client, host string, repoID, issueID, branchID, branchName string) (string, error) {
 	var mutation struct {
 		CreateLinkedBranch struct {
@@ -48,6 +50,7 @@ func CreateLinkedBranch(client *Client, host string, repoID, issueID, branchID, 
 	return mutation.CreateLinkedBranch.LinkedBranch.Ref.Name, nil
 }
 
+// ListLinkedBranches returns all branches linked to the given issue.
 func ListLinkedBranches(client *Client, repo ghrepo.Interface, issueNumber int) ([]LinkedBranch, error) {
 	var query struct {
 		Repository struct {
@@ -89,6 +92,7 @@ func ListLinkedBranches(client *Client, repo ghrepo.Interface, issueNumber int) 
 	return branchNames, nil
 }
 
+// CheckLinkedBranchFeature checks whether the linked branch feature is available on the given host.
 func CheckLinkedBranchFeature(client *Client, host string) error {
 	var query struct {
 		Name struct {
@@ -109,6 +113,7 @@ func CheckLinkedBranchFeature(client *Client, host string) error {
 	return nil
 }
 
+// FindRepoBranchID returns the repository node ID and the git object ID for the given ref.
 func FindRepoBranchID(client *Client, repo ghrepo.Interface, ref string) (string, string, error) {
 	var query struct {
 		Repository struct {

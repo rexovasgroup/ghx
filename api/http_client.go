@@ -16,6 +16,7 @@ type tokenGetter interface {
 	ActiveToken(string) (string, string)
 }
 
+// HTTPClientOptions defines configuration options for creating an HTTP client.
 type HTTPClientOptions struct {
 	AppVersion         string
 	CacheTTL           time.Duration
@@ -27,6 +28,7 @@ type HTTPClientOptions struct {
 	SkipDefaultHeaders bool
 }
 
+// NewHTTPClient creates a new http.Client configured with the given options.
 func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	// Provide invalid host, and token values so gh.HTTPClient will not automatically resolve them.
 	// The real host and token are inserted at request time.
@@ -71,6 +73,7 @@ func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	return client, nil
 }
 
+// NewCachedHTTPClient wraps an existing http.Client with a cache layer using the given TTL.
 func NewCachedHTTPClient(httpClient *http.Client, ttl time.Duration) *http.Client {
 	newClient := *httpClient
 	newClient.Transport = AddCacheTTLHeader(httpClient.Transport, ttl)
@@ -131,6 +134,7 @@ type funcTripper struct {
 	roundTrip func(*http.Request) (*http.Response, error)
 }
 
+// RoundTrip executes the wrapped round-trip function.
 func (tr funcTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return tr.roundTrip(req)
 }

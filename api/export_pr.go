@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// ExportData returns issue data as a map for the specified field names.
 func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 	v := reflect.ValueOf(issue).Elem()
 	data := map[string]interface{}{}
@@ -55,6 +56,7 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 	return data
 }
 
+// ExportData returns pull request data as a map for the specified field names.
 func (pr *PullRequest) ExportData(fields []string) map[string]interface{} {
 	v := reflect.ValueOf(pr).Elem()
 	data := map[string]interface{}{}

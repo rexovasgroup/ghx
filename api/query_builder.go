@@ -205,6 +205,7 @@ var autoMergeRequest = shortenQuery(`
 	}
 `)
 
+// StatusCheckRollupGraphQLWithCountByState returns a GraphQL query fragment for status check rollup counts grouped by state.
 func StatusCheckRollupGraphQLWithCountByState() string {
 	return shortenQuery(`
 	statusCheckRollup: commits(last: 1) {
@@ -229,6 +230,7 @@ func StatusCheckRollupGraphQLWithCountByState() string {
 	}`)
 }
 
+// StatusCheckRollupGraphQLWithoutCountByState returns a GraphQL query fragment for status check rollup with individual check nodes.
 func StatusCheckRollupGraphQLWithoutCountByState(after string) string {
 	var afterClause string
 	if after != "" {
@@ -267,6 +269,7 @@ func StatusCheckRollupGraphQLWithoutCountByState(after string) string {
 	}`), afterClause)
 }
 
+// RequiredStatusCheckRollupGraphQL returns a GraphQL query fragment for required status checks filtered by pull request ID.
 func RequiredStatusCheckRollupGraphQL(prID, after string, includeEvent bool) string {
 	var afterClause string
 	if after != "" {
@@ -342,8 +345,10 @@ var issueOnlyFields = []string{
 	"closedByPullRequestsReferences",
 }
 
+// IssueFields is the list of all known issue field names for GraphQL queries.
 var IssueFields = append(sharedIssuePRFields, issueOnlyFields...)
 
+// PullRequestFields is the list of all known pull request field names for GraphQL queries.
 var PullRequestFields = append(sharedIssuePRFields,
 	"additions",
 	"autoMergeRequest",
@@ -452,6 +457,7 @@ func PullRequestGraphQL(fields []string) string {
 	return IssueGraphQL(s.ToSlice())
 }
 
+// RepositoryFields is the list of all known repository field names for GraphQL queries.
 var RepositoryFields = []string{
 	"id",
 	"name",
@@ -531,6 +537,7 @@ var RepositoryFields = []string{
 	// "collaborators", // does it make sense to expose without affiliation filter?
 }
 
+// RepositoryGraphQL constructs a GraphQL query fragment for a set of repository fields.
 func RepositoryGraphQL(fields []string) string {
 	var q []string
 	for _, field := range fields {

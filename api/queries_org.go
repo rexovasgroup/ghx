@@ -43,6 +43,7 @@ func OrganizationProjects(client *Client, repo ghrepo.Interface) ([]RepoProject,
 	return projects, nil
 }
 
+// OrgTeam represents a team within a GitHub organization.
 type OrgTeam struct {
 	ID   string
 	Slug string

@@ -1,9 +1,11 @@
 package api
 
+// Organization represents a GitHub organization with a login name.
 type Organization struct {
 	Login string
 }
 
+// CurrentLoginName returns the login name of the currently authenticated user.
 func CurrentLoginName(client *Client, hostname string) (string, error) {
 	var query struct {
 		Viewer struct {
@@ -14,6 +16,7 @@ func CurrentLoginName(client *Client, hostname string) (string, error) {
 	return query.Viewer.Login, err
 }
 
+// CurrentLoginNameAndOrgs returns the login name and organization memberships of the currently authenticated user.
 func CurrentLoginNameAndOrgs(client *Client, hostname string) (string, []string, error) {
 	var query struct {
 		Viewer struct {
@@ -34,6 +37,7 @@ func CurrentLoginNameAndOrgs(client *Client, hostname string) (string, []string,
 	return query.Viewer.Login, orgNames, nil
 }
 
+// CurrentUserID returns the node ID of the currently authenticated user.
 func CurrentUserID(client *Client, hostname string) (string, error) {
 	var query struct {
 		Viewer struct {
