@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdSSHKey creates a new cobra command for the s s h key subcommand.
 func NewCmdSSHKey(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ssh-key <command>",

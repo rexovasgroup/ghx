@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdGPGKey creates a new cobra command for the g p g key subcommand.
 func NewCmdGPGKey(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gpg-key <command>",

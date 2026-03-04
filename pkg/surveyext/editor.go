@@ -159,6 +159,7 @@ func (e *GhEditor) Prompt(config *survey.PromptConfig) (interface{}, error) {
 	return e.prompt(initialValue, config)
 }
 
+// EditorName returns the name of the user's preferred text editor.
 func EditorName(editorCommand string) string {
 	if editorCommand == "" {
 		editorCommand = defaultEditor

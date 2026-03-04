@@ -10,6 +10,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/tableprinter"
 )
 
+// TablePrinter wraps the table printer with additional formatting options.
 type TablePrinter struct {
 	tableprinter.TablePrinter
 	isTTY bool
@@ -34,8 +35,11 @@ func (tp *TablePrinter) AddTimeField(now, t time.Time, c func(string) string) {
 }
 
 var (
+	// WithColor applies a color function to subsequent fields.
 	WithColor    = tableprinter.WithColor
+	// WithPadding applies padding to subsequent fields.
 	WithPadding  = tableprinter.WithPadding
+	// WithTruncate applies truncation to subsequent fields.
 	WithTruncate = tableprinter.WithTruncate
 )
 

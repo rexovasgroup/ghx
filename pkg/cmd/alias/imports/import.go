@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ImportOptions holds the options for the command.
 type ImportOptions struct {
 	Config func() (gh.Config, error)
 	IO     *iostreams.IOStreams
@@ -25,6 +26,7 @@ type ImportOptions struct {
 	validAliasExpansion func(string) bool
 }
 
+// NewCmdImport creates a new cobra command for the import subcommand.
 func NewCmdImport(f *cmdutil.Factory, runF func(*ImportOptions) error) *cobra.Command {
 	opts := &ImportOptions{
 		IO:     f.IOStreams,

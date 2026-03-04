@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ListOptions holds the options for the command.
 type ListOptions struct {
 	BaseRepo   func() (ghrepo.Interface, error)
 	HttpClient func() (*http.Client, error)
@@ -31,6 +32,7 @@ type ListOptions struct {
 	Ref   string
 }
 
+// NewCmdList creates a new cobra command for the list subcommand.
 func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := ListOptions{
 		IO:         f.IOStreams,

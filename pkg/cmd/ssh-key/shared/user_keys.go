@@ -12,7 +12,9 @@ import (
 )
 
 const (
+	// AuthenticationKey represents an SSH authentication key type.
 	AuthenticationKey = "authentication"
+	// SigningKey represents an SSH signing key type.
 	SigningKey        = "signing"
 )
 
@@ -24,6 +26,7 @@ type sshKey struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// UserKeys fetches the user's SSH authentication keys.
 func UserKeys(httpClient *http.Client, host, userHandle string) ([]sshKey, error) {
 	resource := "user/keys"
 	if userHandle != "" {
@@ -44,6 +47,7 @@ func UserKeys(httpClient *http.Client, host, userHandle string) ([]sshKey, error
 	return keys, nil
 }
 
+// UserSigningKeys fetches the user's SSH signing keys.
 func UserSigningKeys(httpClient *http.Client, host, userHandle string) ([]sshKey, error) {
 	resource := "user/ssh_signing_keys"
 	if userHandle != "" {

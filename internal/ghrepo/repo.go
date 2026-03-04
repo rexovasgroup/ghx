@@ -82,6 +82,7 @@ func IsSame(a, b Interface) bool {
 		normalizeHostname(a.RepoHost()) == normalizeHostname(b.RepoHost())
 }
 
+// GenerateRepoURL constructs a URL for the given repository and path.
 func GenerateRepoURL(repo Interface, p string, args ...interface{}) string {
 	baseURL := fmt.Sprintf("%s%s/%s", ghinstance.HostPrefix(repo.RepoHost()), repo.RepoOwner(), repo.RepoName())
 	if p != "" {
@@ -92,6 +93,7 @@ func GenerateRepoURL(repo Interface, p string, args ...interface{}) string {
 	return baseURL
 }
 
+// FormatRemoteURL formats a remote URL for the given repository.
 func FormatRemoteURL(repo Interface, protocol string) string {
 	if protocol == "ssh" {
 		if tenant, found := ghinstance.TenantName(repo.RepoHost()); found {
@@ -108,14 +110,17 @@ type ghRepo struct {
 	hostname string
 }
 
+// RepoOwner returns the owner of the repository.
 func (r ghRepo) RepoOwner() string {
 	return r.owner
 }
 
+// RepoName returns the name of the repository.
 func (r ghRepo) RepoName() string {
 	return r.name
 }
 
+// RepoHost returns the host of the repository.
 func (r ghRepo) RepoHost() string {
 	return r.hostname
 }

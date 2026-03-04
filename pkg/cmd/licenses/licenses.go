@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdLicenses creates a new cobra command for the licenses subcommand.
 func NewCmdLicenses(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "licenses",

@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdVersion creates a new cobra command for the version subcommand.
 func NewCmdVersion(f *cmdutil.Factory, version, buildDate string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    "version",
@@ -23,6 +24,7 @@ func NewCmdVersion(f *cmdutil.Factory, version, buildDate string) *cobra.Command
 	return cmd
 }
 
+// Format returns a formatted version string.
 func Format(version, buildDate string) string {
 	version = strings.TrimPrefix(version, "v")
 

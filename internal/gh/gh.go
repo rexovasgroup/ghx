@@ -14,13 +14,17 @@ import (
 	ghConfig "github.com/cli/go-gh/v2/pkg/config"
 )
 
+// ConfigSource indicates whether a config value was provided by the user or is a default.
 type ConfigSource string
 
 const (
+	// ConfigDefaultProvided indicates the value is a built-in default.
 	ConfigDefaultProvided ConfigSource = "default"
+	// ConfigUserProvided indicates the value was explicitly set by the user.
 	ConfigUserProvided    ConfigSource = "user"
 )
 
+// ConfigEntry represents a single configuration key-value pair.
 type ConfigEntry struct {
 	Value  string
 	Source ConfigSource

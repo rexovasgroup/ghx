@@ -26,6 +26,7 @@ import (
 var ssoHeader string
 var ssoURLRE = regexp.MustCompile(`\burl=([^;]+)`)
 
+// New creates and returns a new instance with default settings.
 func New(appVersion string) *cmdutil.Factory {
 	f := &cmdutil.Factory{
 		AppVersion:     appVersion,

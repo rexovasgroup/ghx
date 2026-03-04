@@ -120,6 +120,7 @@ type paginatedArrayReader struct {
 	cachedByte       byte
 }
 
+// Read reads data from the paginatedArrayReader.
 func (r *paginatedArrayReader) Read(p []byte) (int, error) {
 	var n int
 	var err error
@@ -157,6 +158,7 @@ type jsonArrayWriter struct {
 	color   bool
 }
 
+// Preface writes preliminary data before the main content.
 func (w *jsonArrayWriter) Preface() []json.Delim {
 	if w.started {
 		return []json.Delim{'['}
@@ -190,6 +192,7 @@ func (w *jsonArrayWriter) ReadFrom(r io.Reader) (int64, error) {
 	return written, nil
 }
 
+// Close closes the jsonArrayWriter and releases resources.
 func (w *jsonArrayWriter) Close() error {
 	var delims string
 	if w.started {

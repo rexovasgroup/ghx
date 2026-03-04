@@ -28,6 +28,7 @@ type ReleaseInfo struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
+// StateEntry stores information about a CLI update check.
 type StateEntry struct {
 	CheckedForUpdateAt time.Time   `yaml:"checked_for_update_at"`
 	LatestRelease      ReleaseInfo `yaml:"latest_release"`

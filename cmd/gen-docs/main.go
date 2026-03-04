@@ -91,6 +91,7 @@ func linkHandler(name string) string {
 // Implements browser.Browser interface.
 type browser struct{}
 
+// Browse opens the given URL in a browser.
 func (b *browser) Browse(_ string) error {
 	return nil
 }
@@ -98,36 +99,45 @@ func (b *browser) Browse(_ string) error {
 // Implements extensions.ExtensionManager interface.
 type em struct{}
 
+// List returns the list of installed extensions.
 func (e *em) List() []extensions.Extension {
 	return nil
 }
 
+// Install installs an extension from a repository.
 func (e *em) Install(_ ghrepo.Interface, _ string) error {
 	return nil
 }
 
+// InstallLocal installs an extension from a local directory.
 func (e *em) InstallLocal(_ string) error {
 	return nil
 }
 
+// Upgrade upgrades an installed extension.
 func (e *em) Upgrade(_ string, _ bool) error {
 	return nil
 }
 
+// Remove deletes a value from the set.
 func (e *em) Remove(_ string) error {
 	return nil
 }
 
+// Dispatch executes an installed extension.
 func (e *em) Dispatch(_ []string, _ io.Reader, _, _ io.Writer) (bool, error) {
 	return false, nil
 }
 
+// Create initializes a new extension project.
 func (e *em) Create(_ string, _ extensions.ExtTemplateType) error {
 	return nil
 }
 
+// EnableDryRunMode enables dry run mode for the extension manager.
 func (e *em) EnableDryRunMode() {}
 
+// UpdateDir sets the directory used for extension updates.
 func (e *em) UpdateDir(_ string) string {
 	return ""
 }

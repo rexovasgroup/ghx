@@ -12,6 +12,7 @@ const (
 	gitAuthRE = `-c credential(?:\..+)?\.helper= -c credential(?:\..+)?\.helper=!"[^"]+" auth git-credential `
 )
 
+// T defines the interface for t.
 type T interface {
 	Helper()
 	Errorf(string, ...interface{})
@@ -96,6 +97,7 @@ func (cs *CommandStubber) find(args []string) *commandStub {
 	return nil
 }
 
+// CommandCallback is a function that handles command execution in stubs.
 type CommandCallback func([]string)
 
 type commandStub struct {
@@ -111,10 +113,12 @@ type errWithExitCode struct {
 	exitCode int
 }
 
+// Error returns the error message for errWithExitCode.
 func (e errWithExitCode) Error() string {
 	return e.message
 }
 
+// ExitCode returns the exit code of the command.
 func (e errWithExitCode) ExitCode() int {
 	return e.exitCode
 }

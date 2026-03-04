@@ -27,6 +27,7 @@ const (
 	emptyCommitFlag = "last"
 )
 
+// BrowseOptions holds the options for the command.
 type BrowseOptions struct {
 	BaseRepo         func() (ghrepo.Interface, error)
 	Browser          browser.Browser
@@ -49,6 +50,7 @@ type BrowseOptions struct {
 	HasRepoOverride bool
 }
 
+// NewCmdBrowse creates a new cobra command for the browse subcommand.
 func NewCmdBrowse(f *cmdutil.Factory, runF func(*BrowseOptions) error) *cobra.Command {
 	opts := &BrowseOptions{
 		Browser:    f.Browser,
@@ -368,10 +370,12 @@ type remoteGitClient struct {
 	httpClient func() (*http.Client, error)
 }
 
+// LastCommit returns the SHA of the last commit on the default branch.
 func (gc *localGitClient) LastCommit() (*git.Commit, error) {
 	return gc.client.LastCommit(context.Background())
 }
 
+// LastCommit returns the SHA of the last commit on the default branch.
 func (gc *remoteGitClient) LastCommit() (*git.Commit, error) {
 	httpClient, err := gc.httpClient()
 	if err != nil {

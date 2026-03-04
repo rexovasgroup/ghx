@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdActions creates a new cobra command for the actions subcommand.
 func NewCmdActions(f *cmdutil.Factory) *cobra.Command {
 	cs := f.IOStreams.ColorScheme()
 

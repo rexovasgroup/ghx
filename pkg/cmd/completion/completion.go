@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdCompletion creates a new cobra command for the completion subcommand.
 func NewCmdCompletion(io *iostreams.IOStreams) *cobra.Command {
 	var shellType string
 

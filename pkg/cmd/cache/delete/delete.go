@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// DeleteOptions holds the options for the command.
 type DeleteOptions struct {
 	BaseRepo   func() (ghrepo.Interface, error)
 	HttpClient func() (*http.Client, error)
@@ -28,6 +29,7 @@ type DeleteOptions struct {
 	Ref               string
 }
 
+// NewCmdDelete creates a new cobra command for the delete subcommand.
 func NewCmdDelete(f *cmdutil.Factory, runF func(*DeleteOptions) error) *cobra.Command {
 	opts := &DeleteOptions{
 		IO:         f.IOStreams,

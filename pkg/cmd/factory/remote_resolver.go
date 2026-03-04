@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	// GH_HOST is g h_ h o s t.
 	GH_HOST = "GH_HOST"
 )
 
@@ -25,6 +26,7 @@ type remoteResolver struct {
 	remotesError  error
 }
 
+// Resolver returns a function that resolves remotes for the given factory.
 func (rr *remoteResolver) Resolver() func() (context.Remotes, error) {
 	return func() (context.Remotes, error) {
 		if rr.cachedRemotes != nil || rr.remotesError != nil {

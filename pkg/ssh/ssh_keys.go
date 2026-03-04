@@ -13,6 +13,7 @@ import (
 	"github.com/cli/safeexec"
 )
 
+// Context holds configuration for SSH key operations.
 type Context struct {
 	configDir string
 	keygenExe string
@@ -27,13 +28,16 @@ func NewContextForTests(configDir, keygenExe string) Context {
 	}
 }
 
+// KeyPair holds a public and private SSH key pair.
 type KeyPair struct {
 	PublicKeyPath  string
 	PrivateKeyPath string
 }
 
+// ErrKeyAlreadyExists is returned when an SSH key already exists.
 var ErrKeyAlreadyExists = errors.New("SSH key already exists")
 
+// LocalPublicKeys returns the list of public SSH keys found locally.
 func (c *Context) LocalPublicKeys() ([]string, error) {
 	sshDir, err := c.SshDir()
 	if err != nil {
@@ -43,11 +47,13 @@ func (c *Context) LocalPublicKeys() ([]string, error) {
 	return filepath.Glob(filepath.Join(sshDir, "*.pub"))
 }
 
+// HasKeygen reports whether ssh-keygen is available.
 func (c *Context) HasKeygen() bool {
 	_, err := c.findKeygen()
 	return err == nil
 }
 
+// GenerateSSHKey generates a new SSH key pair.
 func (c *Context) GenerateSSHKey(keyName string, passphrase string) (*KeyPair, error) {
 	keygenExe, err := c.findKeygen()
 	if err != nil {
@@ -88,6 +94,7 @@ func (c *Context) GenerateSSHKey(keyName string, passphrase string) (*KeyPair, e
 	return &keyPair, nil
 }
 
+// SshDir returns the path to the SSH directory.
 func (c *Context) SshDir() (string, error) {
 	if c.configDir != "" {
 		return c.configDir, nil

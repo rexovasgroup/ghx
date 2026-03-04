@@ -16,6 +16,7 @@ const (
 	colorBool   = "33"   // yellow
 )
 
+// JsonWriter defines the interface for json writer.
 type JsonWriter interface {
 	Preface() []json.Delim
 }

@@ -48,6 +48,7 @@ func (r Remotes) FilterByHosts(hosts []string) Remotes {
 	return filtered
 }
 
+// ResolvedRemote returns the resolved remote information.
 func (r Remotes) ResolvedRemote() (*Remote, error) {
 	for _, rr := range r {
 		if rr.Resolved != "" {
@@ -72,7 +73,9 @@ func remoteNameSortScore(name string) int {
 
 // https://golang.org/pkg/sort/#Interface
 func (r Remotes) Len() int      { return len(r) }
+// Swap exchanges elements i and j in Remotes.
 func (r Remotes) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+// Less reports whether element i should sort before element j.
 func (r Remotes) Less(i, j int) bool {
 	return remoteNameSortScore(r[i].Name) > remoteNameSortScore(r[j].Name)
 }
@@ -98,10 +101,12 @@ func (r Remote) RepoHost() string {
 	return r.Repo.RepoHost()
 }
 
+// Translator defines the interface for translating remote URLs.
 type Translator interface {
 	Translate(*url.URL) *url.URL
 }
 
+// TranslateRemotes converts git remotes using a URL translator.
 func TranslateRemotes(gitRemotes git.RemoteSet, translator Translator) (remotes Remotes) {
 	for _, r := range gitRemotes {
 		var repo ghrepo.Interface

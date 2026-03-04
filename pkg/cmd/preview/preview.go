@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdPreview creates a new cobra command for the preview subcommand.
 func NewCmdPreview(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "preview <command>",

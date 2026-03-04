@@ -15,6 +15,7 @@ type showable interface {
 	Show() error
 }
 
+// Edit opens the given content in a text editor and returns the result.
 func Edit(editorCommand, fn, initialValue string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (string, error) {
 	return edit(editorCommand, fn, initialValue, stdin, stdout, stderr, nil, defaultLookPath)
 }

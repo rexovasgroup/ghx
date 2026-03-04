@@ -30,6 +30,7 @@ type cmdWithStderr struct {
 	*exec.Cmd
 }
 
+// Output runs the cmdWithStderr and returns its output.
 func (c cmdWithStderr) Output() ([]byte, error) {
 	if isVerbose, _ := utils.IsDebugEnabled(); isVerbose {
 		_ = printArgs(os.Stderr, c.Cmd.Args)
@@ -49,6 +50,7 @@ func (c cmdWithStderr) Output() ([]byte, error) {
 	return out, cmdErr
 }
 
+// Run executes the cmdWithStderr command.
 func (c cmdWithStderr) Run() error {
 	if isVerbose, _ := utils.IsDebugEnabled(); isVerbose {
 		_ = printArgs(os.Stderr, c.Cmd.Args)
@@ -76,6 +78,7 @@ type CmdError struct {
 	Stderr *bytes.Buffer
 }
 
+// Error returns the error message for CmdError.
 func (e CmdError) Error() string {
 	msg := e.Stderr.String()
 	if msg != "" && !strings.HasSuffix(msg, "\n") {
@@ -84,6 +87,7 @@ func (e CmdError) Error() string {
 	return fmt.Sprintf("%s%s: %s", msg, e.Args[0], e.Err)
 }
 
+// Unwrap returns the underlying error for CmdError.
 func (e CmdError) Unwrap() error {
 	return e.Err
 }

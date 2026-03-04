@@ -33,6 +33,7 @@ func isGarage(h string) bool {
 	return strings.EqualFold(h, "garage.github.com")
 }
 
+// HostnameValidator returns a function that validates GitHub hostnames.
 func HostnameValidator(hostname string) error {
 	if len(strings.TrimSpace(hostname)) < 1 {
 		return errors.New("a value is required")
@@ -43,6 +44,7 @@ func HostnameValidator(hostname string) error {
 	return nil
 }
 
+// GraphQLEndpoint returns the GraphQL API endpoint for the given host.
 func GraphQLEndpoint(hostname string) string {
 	if isGarage(hostname) {
 		return fmt.Sprintf("https://%s/api/graphql", hostname)
@@ -56,6 +58,7 @@ func GraphQLEndpoint(hostname string) string {
 	return fmt.Sprintf("https://api.%s/graphql", hostname)
 }
 
+// RESTPrefix returns the REST API URL prefix for the given host.
 func RESTPrefix(hostname string) string {
 	if isGarage(hostname) {
 		return fmt.Sprintf("https://%s/api/v3/", hostname)
@@ -69,6 +72,7 @@ func RESTPrefix(hostname string) string {
 	return fmt.Sprintf("https://api.%s/", hostname)
 }
 
+// GistPrefix returns the Gist URL prefix for the given host.
 func GistPrefix(hostname string) string {
 	prefix := "https://"
 	if strings.EqualFold(hostname, localhost) {
@@ -77,6 +81,7 @@ func GistPrefix(hostname string) string {
 	return prefix + GistHost(hostname)
 }
 
+// GistHost returns the Gist host for the given GitHub host.
 func GistHost(hostname string) string {
 	if isGarage(hostname) {
 		return fmt.Sprintf("%s/gist/", hostname)
@@ -90,6 +95,7 @@ func GistHost(hostname string) string {
 	return fmt.Sprintf("gist.%s/", hostname)
 }
 
+// HostPrefix returns the URL prefix for the given host.
 func HostPrefix(hostname string) string {
 	if strings.EqualFold(hostname, localhost) {
 		return fmt.Sprintf("http://%s/", hostname)

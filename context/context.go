@@ -16,6 +16,7 @@ import (
 // unusually large number of git remotes.
 const defaultRemotesForLookup = 5
 
+// ResolveRemotesToRepos maps git remotes to GitHub repositories.
 func ResolveRemotesToRepos(remotes Remotes, client *api.Client, base string) (*ResolvedRemotes, error) {
 	sort.Stable(remotes)
 
@@ -51,6 +52,7 @@ func resolveNetwork(result *ResolvedRemotes, remotesForLookup int) error {
 	return err
 }
 
+// ResolvedRemotes holds git remotes that have been mapped to GitHub repositories.
 type ResolvedRemotes struct {
 	baseOverride ghrepo.Interface
 	remotes      Remotes
@@ -58,6 +60,7 @@ type ResolvedRemotes struct {
 	apiClient    *api.Client
 }
 
+// BaseRepo determines the base repository from resolved remotes.
 func (r *ResolvedRemotes) BaseRepo(io *iostreams.IOStreams) (ghrepo.Interface, error) {
 	if r.baseOverride != nil {
 		return r.baseOverride, nil
@@ -108,6 +111,7 @@ func (r *ResolvedRemotes) BaseRepo(io *iostreams.IOStreams) (ghrepo.Interface, e
 		"please run `gh repo set-default` to select a default remote repository.")
 }
 
+// HeadRepos returns candidate head repositories for pull requests.
 func (r *ResolvedRemotes) HeadRepos() ([]*api.Repository, error) {
 	if r.network == nil {
 		err := resolveNetwork(r, defaultRemotesForLookup)

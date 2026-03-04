@@ -7,6 +7,7 @@ import (
 	"golang.org/x/term"
 )
 
+// IsDebugEnabled reports whether debug mode is active.
 func IsDebugEnabled() (bool, string) {
 	debugValue, isDebugSet := os.LookupEnv("GH_DEBUG")
 	legacyDebugValue := os.Getenv("DEBUG")
@@ -28,6 +29,7 @@ func IsDebugEnabled() (bool, string) {
 	}
 }
 
+// TerminalSize returns the width and height of the terminal.
 var TerminalSize = func(w interface{}) (int, int, error) {
 	if f, isFile := w.(*os.File); isFile {
 		return term.GetSize(int(f.Fd()))

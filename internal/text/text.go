@@ -16,6 +16,7 @@ import (
 
 var whitespaceRE = regexp.MustCompile(`\s+`)
 
+// Indent prepends each line of the string with the given prefix.
 func Indent(s, indent string) string {
 	return text.Indent(s, indent)
 }
@@ -31,18 +32,22 @@ func RemoveExcessiveWhitespace(s string) string {
 	return whitespaceRE.ReplaceAllString(strings.TrimSpace(s), " ")
 }
 
+// DisplayWidth returns the display width of a string accounting for wide characters.
 func DisplayWidth(s string) int {
 	return text.DisplayWidth(s)
 }
 
+// Truncate shortens a string to fit within the given display width.
 func Truncate(maxWidth int, s string) string {
 	return text.Truncate(maxWidth, s)
 }
 
+// Pluralize returns the singular or plural form based on the count.
 func Pluralize(num int, thing string) string {
 	return text.Pluralize(num, thing)
 }
 
+// FuzzyAgo returns a human-friendly relative time string.
 func FuzzyAgo(a, b time.Time) string {
 	return text.RelativeTimeAgo(a, b)
 }
@@ -85,6 +90,7 @@ func RemoveDiacritics(value string) string {
 	return text.RemoveDiacritics(value)
 }
 
+// PadRight pads a string on the right to reach the specified width.
 func PadRight(maxWidth int, s string) string {
 	return text.PadRight(maxWidth, s)
 }

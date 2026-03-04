@@ -8,6 +8,7 @@ import (
 	ghMarkdown "github.com/cli/go-gh/v2/pkg/markdown"
 )
 
+// WithoutIndentation returns a render option that disables indentation.
 func WithoutIndentation() glamour.TermRendererOption {
 	return ghMarkdown.WithoutIndentation()
 }
@@ -27,14 +28,17 @@ func WithWrap(w int) glamour.TermRendererOption {
 	return ghMarkdown.WithWrap(w)
 }
 
+// WithTheme returns a render option that sets the glamour theme.
 func WithTheme(theme string) glamour.TermRendererOption {
 	return ghMarkdown.WithTheme(theme)
 }
 
+// WithBaseURL returns a render option that sets the base URL for relative links.
 func WithBaseURL(u string) glamour.TermRendererOption {
 	return ghMarkdown.WithBaseURL(u)
 }
 
+// Render converts markdown text to a terminal-friendly format.
 func Render(text string, opts ...glamour.TermRendererOption) (string, error) {
 	return ghMarkdown.Render(text, opts...)
 }

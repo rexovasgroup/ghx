@@ -8,12 +8,15 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+// ErrNotFound is returned when a keyring entry is not found.
 var ErrNotFound = errors.New("secret not found in keyring")
 
+// TimeoutError represents an error returned by the operation.
 type TimeoutError struct {
 	message string
 }
 
+// Error returns the error message for TimeoutError.
 func (e *TimeoutError) Error() string {
 	return e.message
 }
@@ -73,10 +76,12 @@ func Delete(service, user string) error {
 	}
 }
 
+// MockInit sets up a mock keyring for testing.
 func MockInit() {
 	keyring.MockInit()
 }
 
+// MockInitWithError sets up a mock keyring that returns the given error.
 func MockInitWithError(err error) {
 	keyring.MockInitWithError(err)
 }

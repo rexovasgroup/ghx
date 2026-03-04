@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// AddOptions holds the options for the command.
 type AddOptions struct {
 	IO         *iostreams.IOStreams
 	Config     func() (gh.Config, error)
@@ -23,6 +24,7 @@ type AddOptions struct {
 	Type    string
 }
 
+// NewCmdAdd creates a new cobra command for the add subcommand.
 func NewCmdAdd(f *cmdutil.Factory, runF func(*AddOptions) error) *cobra.Command {
 	opts := &AddOptions{
 		HTTPClient: f.HttpClient,

@@ -19,6 +19,7 @@ type prompterOptions struct {
 	PromptsToRun []func(prompter.Prompter, *iostreams.IOStreams) error
 }
 
+// NewCmdPrompter creates a new cobra command for the prompter subcommand.
 func NewCmdPrompter(f *cmdutil.Factory, runF func(*prompterOptions) error) *cobra.Command {
 	opts := &prompterOptions{
 		IO:     f.IOStreams,

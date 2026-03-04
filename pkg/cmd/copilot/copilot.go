@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CopilotOptions holds the options for the command.
 type CopilotOptions struct {
 	IO         *iostreams.IOStreams
 	HttpClient func() (*http.Client, error)
@@ -37,6 +38,7 @@ type CopilotOptions struct {
 	Remove      bool
 }
 
+// NewCmdCopilot creates a new cobra command for the copilot subcommand.
 func NewCmdCopilot(f *cmdutil.Factory, runF func(*CopilotOptions) error) *cobra.Command {
 	opts := &CopilotOptions{
 		IO:         f.IOStreams,

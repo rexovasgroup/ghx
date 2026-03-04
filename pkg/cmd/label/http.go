@@ -44,6 +44,7 @@ type listQueryOptions struct {
 	fields []string
 }
 
+// OrderBy returns the GraphQL ordering clause.
 func (opts listQueryOptions) OrderBy() map[string]string {
 	// Set on copy to keep original intact.
 	if opts.Order == "" {

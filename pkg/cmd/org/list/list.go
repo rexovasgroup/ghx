@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ListOptions holds the options for the command.
 type ListOptions struct {
 	IO         *iostreams.IOStreams
 	Config     func() (gh.Config, error)
@@ -20,6 +21,7 @@ type ListOptions struct {
 	Limit int
 }
 
+// NewCmdList creates a new cobra command for the list subcommand.
 func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := ListOptions{
 		IO:         f.IOStreams,

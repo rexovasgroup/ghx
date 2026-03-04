@@ -15,12 +15,14 @@ const (
 	webURL = "https://accessibility.github.com/conformance/cli/"
 )
 
+// AccessibilityOptions holds the options for the command.
 type AccessibilityOptions struct {
 	IO      *iostreams.IOStreams
 	Browser browser.Browser
 	Web     bool
 }
 
+// NewCmdAccessibility creates a new cobra command for the accessibility subcommand.
 func NewCmdAccessibility(f *cmdutil.Factory) *cobra.Command {
 	opts := AccessibilityOptions{
 		IO:      f.IOStreams,

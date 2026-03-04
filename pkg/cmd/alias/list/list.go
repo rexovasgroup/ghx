@@ -9,11 +9,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ListOptions holds the options for the command.
 type ListOptions struct {
 	Config func() (gh.Config, error)
 	IO     *iostreams.IOStreams
 }
 
+// NewCmdList creates a new cobra command for the list subcommand.
 func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Command {
 	opts := &ListOptions{
 		IO:     f.IOStreams,

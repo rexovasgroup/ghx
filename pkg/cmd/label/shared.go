@@ -28,6 +28,7 @@ type label struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
+// ExportData returns the requested fields as exportable data.
 func (l *label) ExportData(fields []string) map[string]interface{} {
 	return cmdutil.StructExportData(l, fields)
 }

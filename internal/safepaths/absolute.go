@@ -64,11 +64,13 @@ func (a Absolute) isSubpathOf(dir Absolute) (bool, error) {
 	return !strings.HasPrefix(relativePath, ".."), nil
 }
 
+// PathTraversalError represents an error returned by the operation.
 type PathTraversalError struct {
 	Base  Absolute
 	Elems []string
 }
 
+// Error returns the error message for PathTraversalError.
 func (e PathTraversalError) Error() string {
 	return fmt.Sprintf("joining %s and %s would be a traversal", e.Base, filepath.Join(e.Elems...))
 }

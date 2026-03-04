@@ -12,10 +12,12 @@ type CmdOut struct {
 	BrowsedURL string
 }
 
+// String returns the string representation of CmdOut.
 func (c CmdOut) String() string {
 	return c.OutBuf.String()
 }
 
+// Stderr performs the Stderr operation on CmdOut.
 func (c CmdOut) Stderr() string {
 	return c.ErrBuf.String()
 }
@@ -26,6 +28,7 @@ type OutputStub struct {
 	Error error
 }
 
+// Output runs the OutputStub and returns its output.
 func (s OutputStub) Output() ([]byte, error) {
 	if s.Error != nil {
 		return s.Out, s.Error
@@ -33,6 +36,7 @@ func (s OutputStub) Output() ([]byte, error) {
 	return s.Out, nil
 }
 
+// Run executes the OutputStub command.
 func (s OutputStub) Run() error {
 	if s.Error != nil {
 		return s.Error
@@ -40,6 +44,7 @@ func (s OutputStub) Run() error {
 	return nil
 }
 
+// T defines the interface for t.
 type T interface {
 	Helper()
 	Errorf(string, ...interface{})

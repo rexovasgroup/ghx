@@ -46,6 +46,7 @@ func None[T any]() Option[T] {
 	return Option[T]{}
 }
 
+// SomeIfNonZero is documented here.
 func SomeIfNonZero[T comparable](value T) Option[T] {
 	// value is a zero value then return a None
 	var zero T

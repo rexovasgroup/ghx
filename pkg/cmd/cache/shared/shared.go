@@ -10,6 +10,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 )
 
+// CacheFields defines the list of exportable cache field names.
 var CacheFields = []string{
 	"createdAt",
 	"id",
@@ -20,6 +21,7 @@ var CacheFields = []string{
 	"version",
 }
 
+// Cache represents a GitHub Actions cache entry.
 type Cache struct {
 	CreatedAt      time.Time `json:"created_at"`
 	Id             int       `json:"id"`
@@ -30,11 +32,13 @@ type Cache struct {
 	Version        string    `json:"version"`
 }
 
+// CachePayload holds the paginated response of cache entries.
 type CachePayload struct {
 	ActionsCaches []Cache `json:"actions_caches"`
 	TotalCount    int     `json:"total_count"`
 }
 
+// GetCachesOptions holds the options for the command.
 type GetCachesOptions struct {
 	Limit int
 	Order string
@@ -92,6 +96,7 @@ pagination:
 	return result, nil
 }
 
+// ExportData returns the requested fields as exportable data.
 func (c *Cache) ExportData(fields []string) map[string]interface{} {
 	return cmdutil.StructExportData(c, fields)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// SetOptions holds the options for the command.
 type SetOptions struct {
 	Config func() (gh.Config, error)
 	IO     *iostreams.IOStreams
@@ -26,6 +27,7 @@ type SetOptions struct {
 	validAliasExpansion func(string) bool
 }
 
+// NewCmdSet creates a new cobra command for the set subcommand.
 func NewCmdSet(f *cmdutil.Factory, runF func(*SetOptions) error) *cobra.Command {
 	opts := &SetOptions{
 		IO:     f.IOStreams,

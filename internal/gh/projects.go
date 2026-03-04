@@ -18,6 +18,8 @@ type projectsV1Unsupported struct{}
 func (projectsV1Unsupported) sealed() {}
 
 var (
+	// ProjectsV1Supported indicates the host supports classic projects.
 	ProjectsV1Supported   ProjectsV1Support = projectsV1Supported{}
+	// ProjectsV1Unsupported indicates the host does not support classic projects.
 	ProjectsV1Unsupported ProjectsV1Support = projectsV1Unsupported{}
 )

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdAlias creates a new cobra command for the alias subcommand.
 func NewCmdAlias(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "alias <command>",

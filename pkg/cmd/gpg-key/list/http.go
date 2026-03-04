@@ -21,6 +21,7 @@ type email struct {
 	Email string `json:"email"`
 }
 
+// String returns the string representation of emails.
 func (es emails) String() string {
 	s := []string{}
 	for _, e := range es {

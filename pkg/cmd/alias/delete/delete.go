@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// DeleteOptions holds the options for the command.
 type DeleteOptions struct {
 	Config func() (gh.Config, error)
 	IO     *iostreams.IOStreams
@@ -18,6 +19,7 @@ type DeleteOptions struct {
 	All  bool
 }
 
+// NewCmdDelete creates a new cobra command for the delete subcommand.
 func NewCmdDelete(f *cmdutil.Factory, runF func(*DeleteOptions) error) *cobra.Command {
 	opts := &DeleteOptions{
 		IO:     f.IOStreams,

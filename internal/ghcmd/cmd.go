@@ -39,6 +39,7 @@ const (
 	exitPending exitCode = 8
 )
 
+// Main is the entry point for the gh command.
 func Main() exitCode {
 	buildDate := build.Date
 	buildVersion := build.Version

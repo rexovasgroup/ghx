@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdOrg creates a new cobra command for the org subcommand.
 func NewCmdOrg(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "org <command>",

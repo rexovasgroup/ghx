@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdLabel creates a new cobra command for the label subcommand.
 func NewCmdLabel(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "label <command>",

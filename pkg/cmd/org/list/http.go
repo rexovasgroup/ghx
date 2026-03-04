@@ -6,12 +6,14 @@ import (
 	"github.com/cli/cli/v2/api"
 )
 
+// OrganizationList holds a paginated list of organizations.
 type OrganizationList struct {
 	Organizations []Organization
 	TotalCount    int
 	User          string
 }
 
+// Organization represents a GitHub organization.
 type Organization struct {
 	Login string
 }

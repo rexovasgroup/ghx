@@ -119,6 +119,7 @@ type cfg struct {
 	token string
 }
 
+// ActiveToken performs the ActiveToken operation on cfg.
 func (c cfg) ActiveToken(hostname string) (string, string) {
 	return c.token, "oauth_token"
 }

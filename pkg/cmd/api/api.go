@@ -33,6 +33,7 @@ const (
 	ttyIndent = "  "
 )
 
+// ApiOptions holds the options for the command.
 type ApiOptions struct {
 	AppVersion string
 	BaseRepo   func() (ghrepo.Interface, error)
@@ -60,6 +61,7 @@ type ApiOptions struct {
 	Verbose             bool
 }
 
+// NewCmdApi creates a new cobra command for the api subcommand.
 func NewCmdApi(f *cmdutil.Factory, runF func(*ApiOptions) error) *cobra.Command {
 	opts := ApiOptions{
 		AppVersion: f.AppVersion,

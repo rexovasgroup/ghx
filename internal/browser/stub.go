@@ -1,14 +1,17 @@
 package browser
 
+// Stub is a mock browser for testing.
 type Stub struct {
 	urls []string
 }
 
+// Browse opens the given URL in a browser.
 func (b *Stub) Browse(url string) error {
 	b.urls = append(b.urls, url)
 	return nil
 }
 
+// BrowsedURL returns the URL that was browsed.
 func (b *Stub) BrowsedURL() string {
 	if len(b.urls) > 0 {
 		return b.urls[0]
@@ -21,6 +24,7 @@ type _testing interface {
 	Helper()
 }
 
+// Verify asserts that the expected URL was browsed.
 func (b *Stub) Verify(t _testing, url string) {
 	t.Helper()
 	if url != "" {
