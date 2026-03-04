@@ -49,6 +49,7 @@ type errWithExitCode interface {
 	ExitCode() int
 }
 
+// Client provides methods for running git commands against a repository.
 type Client struct {
 	GhPath  string
 	RepoDir string
@@ -61,6 +62,7 @@ type Client struct {
 	mu             sync.Mutex
 }
 
+// Copy returns a shallow copy of the Client with the same configuration.
 func (c *Client) Copy() *Client {
 	return &Client{
 		GhPath:  c.GhPath,
@@ -74,6 +76,7 @@ func (c *Client) Copy() *Client {
 	}
 }
 
+// Command creates a new git Command with the given arguments.
 func (c *Client) Command(ctx context.Context, args ...string) (*Command, error) {
 	if c.RepoDir != "" {
 		args = append([]string{"-C", c.RepoDir}, args...)
@@ -161,6 +164,7 @@ func (c *Client) AuthenticatedCommand(ctx context.Context, credentialPattern Cre
 	return c.Command(ctx, args...)
 }
 
+// Remotes retrieves the list of git remotes for the repository.
 func (c *Client) Remotes(ctx context.Context) (RemoteSet, error) {
 	remoteArgs := []string{"remote", "-v"}
 	remoteCmd, err := c.Command(ctx, remoteArgs...)
@@ -192,6 +196,7 @@ func (c *Client) Remotes(ctx context.Context) (RemoteSet, error) {
 	return remotes, nil
 }
 
+// UpdateRemoteURL sets the URL of the named remote.
 func (c *Client) UpdateRemoteURL(ctx context.Context, name, url string) error {
 	args := []string{"remote", "set-url", name, url}
 	cmd, err := c.Command(ctx, args...)
@@ -205,6 +210,7 @@ func (c *Client) UpdateRemoteURL(ctx context.Context, name, url string) error {
 	return nil
 }
 
+// SetRemoteResolution stores the gh-resolved value for the named remote.
 func (c *Client) SetRemoteResolution(ctx context.Context, name, resolution string) error {
 	args := []string{"config", "--add", fmt.Sprintf("remote.%s.gh-resolved", name), resolution}
 	cmd, err := c.Command(ctx, args...)
@@ -263,6 +269,7 @@ func (c *Client) ShowRefs(ctx context.Context, refs []string) ([]Ref, error) {
 	return verified, err
 }
 
+// Config reads the value of a git configuration key.
 func (c *Client) Config(ctx context.Context, name string) (string, error) {
 	args := []string{"config", name}
 	cmd, err := c.Command(ctx, args...)
@@ -281,6 +288,7 @@ func (c *Client) Config(ctx context.Context, name string) (string, error) {
 	return firstLine(out), nil
 }
 
+// UncommittedChangeCount returns the number of uncommitted changes in the working tree.
 func (c *Client) UncommittedChangeCount(ctx context.Context) (int, error) {
 	args := []string{"status", "--porcelain"}
 	cmd, err := c.Command(ctx, args...)
@@ -301,6 +309,7 @@ func (c *Client) UncommittedChangeCount(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// Commits returns the list of commits between baseRef and headRef.
 func (c *Client) Commits(ctx context.Context, baseRef, headRef string) ([]*Commit, error) {
 	// The formatting directive %x00 indicates that git should include the null byte as a separator.
 	// We use this because it is not a valid character to include in a commit message. Previously,
@@ -346,6 +355,7 @@ func (c *Client) Commits(ctx context.Context, baseRef, headRef string) ([]*Commi
 	return commits, nil
 }
 
+// LastCommit returns the SHA and title of the most recent commit on HEAD.
 func (c *Client) LastCommit(ctx context.Context) (*Commit, error) {
 	output, err := c.lookupCommit(ctx, "HEAD", "%H,%s")
 	if err != nil {
@@ -358,6 +368,7 @@ func (c *Client) LastCommit(ctx context.Context) (*Commit, error) {
 	}, nil
 }
 
+// CommitBody returns the body text of the commit identified by sha.
 func (c *Client) CommitBody(ctx context.Context, sha string) (string, error) {
 	output, err := c.lookupCommit(ctx, sha, "%b")
 	return string(output), err
@@ -445,14 +456,21 @@ func (c *Client) SetBranchConfig(ctx context.Context, branch, name, value string
 type PushDefault string
 
 const (
-	PushDefaultNothing  PushDefault = "nothing"
-	PushDefaultCurrent  PushDefault = "current"
+	// PushDefaultNothing means git push will push nothing without an explicit refspec.
+	PushDefaultNothing PushDefault = "nothing"
+	// PushDefaultCurrent means git push will push the current branch to a same-named remote branch.
+	PushDefaultCurrent PushDefault = "current"
+	// PushDefaultUpstream means git push will push the current branch to its upstream branch.
 	PushDefaultUpstream PushDefault = "upstream"
+	// PushDefaultTracking is a deprecated synonym for PushDefaultUpstream.
 	PushDefaultTracking PushDefault = "tracking"
-	PushDefaultSimple   PushDefault = "simple"
+	// PushDefaultSimple means git push will push like upstream but refuse if the remote branch name differs.
+	PushDefaultSimple PushDefault = "simple"
+	// PushDefaultMatching means git push will push all matching branches.
 	PushDefaultMatching PushDefault = "matching"
 )
 
+// ParsePushDefault parses a string into a PushDefault value.
 func ParsePushDefault(s string) (PushDefault, error) {
 	validPushDefaults := map[string]struct{}{
 		string(PushDefaultNothing):  {},
@@ -512,6 +530,7 @@ type RemoteTrackingRef struct {
 	Branch string
 }
 
+// String returns the fully-qualified ref path for the RemoteTrackingRef.
 func (r RemoteTrackingRef) String() string {
 	return fmt.Sprintf("refs/remotes/%s/%s", r.Remote, r.Branch)
 }
@@ -589,6 +608,7 @@ func (c *Client) PushRevision(ctx context.Context, branch string) (RemoteTrackin
 	return ref, nil
 }
 
+// DeleteLocalTag deletes a tag from the local repository.
 func (c *Client) DeleteLocalTag(ctx context.Context, tag string) error {
 	args := []string{"tag", "-d", tag}
 	cmd, err := c.Command(ctx, args...)
@@ -602,6 +622,7 @@ func (c *Client) DeleteLocalTag(ctx context.Context, tag string) error {
 	return nil
 }
 
+// DeleteLocalBranch force-deletes a local branch.
 func (c *Client) DeleteLocalBranch(ctx context.Context, branch string) error {
 	args := []string{"branch", "-D", branch}
 	cmd, err := c.Command(ctx, args...)
@@ -615,6 +636,7 @@ func (c *Client) DeleteLocalBranch(ctx context.Context, branch string) error {
 	return nil
 }
 
+// CheckoutBranch switches the working tree to the given branch.
 func (c *Client) CheckoutBranch(ctx context.Context, branch string) error {
 	args := []string{"checkout", branch}
 	cmd, err := c.Command(ctx, args...)
@@ -628,6 +650,7 @@ func (c *Client) CheckoutBranch(ctx context.Context, branch string) error {
 	return nil
 }
 
+// CheckoutNewBranch creates and switches to a new branch tracking the given remote branch.
 func (c *Client) CheckoutNewBranch(ctx context.Context, remoteName, branch string) error {
 	track := fmt.Sprintf("%s/%s", remoteName, branch)
 	args := []string{"checkout", "-b", branch, "--track", track}
@@ -642,11 +665,13 @@ func (c *Client) CheckoutNewBranch(ctx context.Context, remoteName, branch strin
 	return nil
 }
 
+// HasLocalBranch reports whether the given local branch exists.
 func (c *Client) HasLocalBranch(ctx context.Context, branch string) bool {
 	_, err := c.revParse(ctx, "--verify", "refs/heads/"+branch)
 	return err == nil
 }
 
+// TrackingBranchNames returns the names of remote tracking branches, optionally filtered by prefix.
 func (c *Client) TrackingBranchNames(ctx context.Context, prefix string) []string {
 	args := []string{"branch", "-r", "--format", "%(refname:strip=3)"}
 	if prefix != "" {
@@ -672,6 +697,7 @@ func (c *Client) ToplevelDir(ctx context.Context) (string, error) {
 	return firstLine(out), nil
 }
 
+// GitDir returns the path to the .git directory of the current repository.
 func (c *Client) GitDir(ctx context.Context) (string, error) {
 	out, err := c.revParse(ctx, "--git-dir")
 	if err != nil {
@@ -701,6 +727,7 @@ func (c *Client) revParse(ctx context.Context, args ...string) ([]byte, error) {
 	return cmd.Output()
 }
 
+// IsLocalGitRepo reports whether the current directory is inside a git repository.
 func (c *Client) IsLocalGitRepo(ctx context.Context) (bool, error) {
 	_, err := c.GitDir(ctx)
 	if err != nil {
@@ -713,6 +740,7 @@ func (c *Client) IsLocalGitRepo(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// UnsetRemoteResolution removes the gh-resolved configuration for the named remote.
 func (c *Client) UnsetRemoteResolution(ctx context.Context, name string) error {
 	args := []string{"config", "--unset", fmt.Sprintf("remote.%s.gh-resolved", name)}
 	cmd, err := c.Command(ctx, args...)
@@ -726,6 +754,7 @@ func (c *Client) UnsetRemoteResolution(ctx context.Context, name string) error {
 	return nil
 }
 
+// SetRemoteBranches configures the tracking refspec for the named remote.
 func (c *Client) SetRemoteBranches(ctx context.Context, remote string, refspec string) error {
 	args := []string{"remote", "set-branches", remote, refspec}
 	cmd, err := c.Command(ctx, args...)
@@ -739,6 +768,7 @@ func (c *Client) SetRemoteBranches(ctx context.Context, remote string, refspec s
 	return nil
 }
 
+// AddRemote adds a new remote with the given name and URL, optionally tracking specific branches.
 func (c *Client) AddRemote(ctx context.Context, name, urlStr string, trackingBranches []string) (*Remote, error) {
 	args := []string{"remote", "add"}
 	for _, branch := range trackingBranches {
@@ -774,6 +804,7 @@ func (c *Client) AddRemote(ctx context.Context, name, urlStr string, trackingBra
 
 // Below are commands that make network calls and need authentication credentials supplied from gh.
 
+// Fetch downloads objects and refs from a remote repository.
 func (c *Client) Fetch(ctx context.Context, remote string, refspec string, mods ...CommandModifier) error {
 	args := []string{"fetch", remote}
 	if refspec != "" {
@@ -789,6 +820,7 @@ func (c *Client) Fetch(ctx context.Context, remote string, refspec string, mods 
 	return cmd.Run()
 }
 
+// Pull fetches from and integrates with a remote branch using fast-forward only.
 func (c *Client) Pull(ctx context.Context, remote, branch string, mods ...CommandModifier) error {
 	args := []string{"pull", "--ff-only"}
 	if remote != "" && branch != "" {
@@ -804,6 +836,7 @@ func (c *Client) Pull(ctx context.Context, remote, branch string, mods ...Comman
 	return cmd.Run()
 }
 
+// Push uploads local refs to a remote and sets the upstream tracking branch.
 func (c *Client) Push(ctx context.Context, remote string, ref string, mods ...CommandModifier) error {
 	args := []string{"push", "--set-upstream", remote, ref}
 	cmd, err := c.AuthenticatedCommand(ctx, AllMatchingCredentialsPattern, args...)
@@ -816,6 +849,7 @@ func (c *Client) Push(ctx context.Context, remote string, ref string, mods ...Co
 	return cmd.Run()
 }
 
+// Clone clones a remote repository and returns the directory it was cloned into.
 func (c *Client) Clone(ctx context.Context, cloneURL string, args []string, mods ...CommandModifier) (string, error) {
 	// Note that even if this is an SSH clone URL, we are setting the pattern anyway.
 	// We could write some code to prevent this, but it also doesn't seem harmful.

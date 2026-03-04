@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// IsURL reports whether the string looks like a git remote URL.
 func IsURL(u string) bool {
 	return strings.HasPrefix(u, "git@") || isSupportedProtocol(u)
 }

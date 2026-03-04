@@ -8,8 +8,13 @@ import (
 // RemoteSet is a slice of git remotes.
 type RemoteSet []*Remote
 
-func (r RemoteSet) Len() int      { return len(r) }
+// Len returns the number of remotes in the set.
+func (r RemoteSet) Len() int { return len(r) }
+
+// Swap exchanges the remotes at indices i and j.
 func (r RemoteSet) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+
+// Less reports whether the remote at index i should sort before the one at index j.
 func (r RemoteSet) Less(i, j int) bool {
 	return remoteNameSortScore(r[i].Name) > remoteNameSortScore(r[j].Name)
 }
@@ -35,10 +40,12 @@ type Remote struct {
 	PushURL  *url.URL
 }
 
+// String returns the name of the remote.
 func (r *Remote) String() string {
 	return r.Name
 }
 
+// NewRemote creates a Remote with the given name and URL for both fetch and push.
 func NewRemote(name string, u string) *Remote {
 	pu, _ := url.Parse(u)
 	return &Remote{
@@ -54,6 +61,7 @@ type Ref struct {
 	Name string
 }
 
+// Commit represents a git commit with its SHA, title, and body.
 type Commit struct {
 	Sha   string
 	Title string

@@ -12,10 +12,12 @@ import (
 
 type commandCtx = func(ctx context.Context, name string, args ...string) *exec.Cmd
 
+// Command wraps exec.Cmd with git-specific error handling.
 type Command struct {
 	*exec.Cmd
 }
 
+// Run executes the git command and returns a GitError on failure.
 func (gc *Command) Run() error {
 	stderr := &bytes.Buffer{}
 	if gc.Cmd.Stderr == nil {
@@ -35,6 +37,7 @@ func (gc *Command) Run() error {
 	return nil
 }
 
+// Output runs the git command and returns its standard output.
 func (gc *Command) Output() ([]byte, error) {
 	gc.Stdout = nil
 	gc.Stderr = nil
@@ -86,24 +89,28 @@ func (gc *Command) setRepoDir(repoDir string) {
 // Allow individual commands to be modified from the default client options.
 type CommandModifier func(*Command)
 
+// WithStderr returns a CommandModifier that sets the stderr writer.
 func WithStderr(stderr io.Writer) CommandModifier {
 	return func(gc *Command) {
 		gc.Stderr = stderr
 	}
 }
 
+// WithStdout returns a CommandModifier that sets the stdout writer.
 func WithStdout(stdout io.Writer) CommandModifier {
 	return func(gc *Command) {
 		gc.Stdout = stdout
 	}
 }
 
+// WithStdin returns a CommandModifier that sets the stdin reader.
 func WithStdin(stdin io.Reader) CommandModifier {
 	return func(gc *Command) {
 		gc.Stdin = stdin
 	}
 }
 
+// WithRepoDir returns a CommandModifier that overrides the repository directory.
 func WithRepoDir(repoDir string) CommandModifier {
 	return func(gc *Command) {
 		gc.setRepoDir(repoDir)
