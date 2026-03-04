@@ -14,6 +14,7 @@ linters:
     - gocheckcompilerdirectives # validates go compiler directive comments (//go:)
     - gochecksumtype # checks exhaustiveness on Go "sum types"
     - gocritic # provides diagnostics that check for bugs, performance and style issues
+    - godoclint # checks Go documentation practice
     - gomoddirectives # manages the use of 'replace', 'retract', and 'excludes' directives in go.mod
     - goprintffuncname # checks that printf-like functions are named with f at the end
     - govet # reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
@@ -35,6 +36,7 @@ linters:
       - path: _test\.go$
         linters:
           - bodyclose
+          - godoclint
           - gosec
   settings:
     gocritic:
@@ -42,6 +44,10 @@ linters:
         - appendAssign
       disabled-tags:
         - style
+    godoclint:
+      default: none
+      enable:
+        - require-doc
     gosec:
       excludes:
         - G110
