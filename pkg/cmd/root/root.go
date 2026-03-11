@@ -1,6 +1,7 @@
 package root
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -38,11 +39,13 @@ import (
 	runCmd "github.com/cli/cli/v2/pkg/cmd/run"
 	searchCmd "github.com/cli/cli/v2/pkg/cmd/search"
 	secretCmd "github.com/cli/cli/v2/pkg/cmd/secret"
+	sendTelemetryCmd "github.com/cli/cli/v2/pkg/cmd/send-telemetry"
 	sshKeyCmd "github.com/cli/cli/v2/pkg/cmd/ssh-key"
 	statusCmd "github.com/cli/cli/v2/pkg/cmd/status"
 	variableCmd "github.com/cli/cli/v2/pkg/cmd/variable"
 	versionCmd "github.com/cli/cli/v2/pkg/cmd/version"
 	workflowCmd "github.com/cli/cli/v2/pkg/cmd/workflow"
+	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/google/shlex"
 	"github.com/spf13/cobra"
@@ -88,6 +91,23 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 			}
 			return nil
 		},
+		PersistentPostRun: func(cmd *cobra.Command, args []string) {
+			if !telemetry.IsTelemetryEnabled(cmd) {
+				return
+			}
+
+			event := telemetry.BuildEventPayload(cmd, version)
+			if event == nil {
+				return
+			}
+
+			payloadJSON, err := json.Marshal(event)
+			if err != nil {
+				return
+			}
+
+			telemetry.SpawnSendTelemetry(f.Executable(), string(payloadJSON))
+		},
 	}
 
 	// cmd.SetOut(f.IOStreams.Out)    // can't use due to https://github.com/spf13/cobra/issues/1708
@@ -128,6 +148,7 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 	// Child commands
 	cmd.AddCommand(versionCmd.NewCmdVersion(f, version, buildDate))
 	cmd.AddCommand(accessibilityCmd.NewCmdAccessibility(f))
+	cmd.AddCommand(sendTelemetryCmd.NewCmdSendTelemetry(f))
 	cmd.AddCommand(actionsCmd.NewCmdActions(f))
 	cmd.AddCommand(aliasCmd.NewCmdAlias(f))
 	cmd.AddCommand(authCmd.NewCmdAuth(f))

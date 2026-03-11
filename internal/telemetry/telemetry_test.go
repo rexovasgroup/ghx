@@ -1,0 +1,222 @@
+package telemetry
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+)
+
+func stubDeviceID(id string) func() {
+	orig := deviceIDFunc
+	deviceIDFunc = func() (string, error) { return id, nil }
+	return func() { deviceIDFunc = orig }
+}
+
+func stubDeviceIDError() func() {
+	orig := deviceIDFunc
+	deviceIDFunc = func() (string, error) { return "", errors.New("no machine id") }
+	return func() { deviceIDFunc = orig }
+}
+
+func stubStateDir(dir string) func() {
+	orig := stateDirFunc
+	stateDirFunc = func() string { return dir }
+	return func() { stateDirFunc = orig }
+}
+
+func TestBuildEventPayloadNilCommand(t *testing.T) {
+	require.Nil(t, BuildEventPayload(nil, "2.0.0"), "expected nil for nil command")
+}
+
+func TestBuildEventPayloadPopulatesDimensions(t *testing.T) {
+	t.Cleanup(stubDeviceID("test-device-id"))
+
+	root := &cobra.Command{Use: "gh"}
+	pr := &cobra.Command{Use: "pr"}
+	create := &cobra.Command{Use: "create"}
+	root.AddCommand(pr)
+	pr.AddCommand(create)
+
+	event := BuildEventPayload(create, "2.45.0")
+
+	want := &Event{
+		EventType: "usage",
+		Dimensions: Dimensions{
+			Command:      "gh pr create",
+			DeviceID:     "test-device-id",
+			OS:           runtime.GOOS,
+			Architecture: runtime.GOARCH,
+			Version:      "2.45.0",
+		},
+	}
+	require.Equal(t, want, event)
+}
+
+func TestBuildEventPayloadStripsVersionPrefix(t *testing.T) {
+	t.Cleanup(stubDeviceID("test-device-id"))
+
+	cmd := &cobra.Command{Use: "gh"}
+	event := BuildEventPayload(cmd, "v2.45.0")
+	require.NotNil(t, event)
+	require.Equal(t, "2.45.0", event.Dimensions.Version)
+}
+
+func TestBuildEventPayloadReturnsNilWhenDeviceIDFails(t *testing.T) {
+	t.Cleanup(stubDeviceIDError())
+
+	cmd := &cobra.Command{Use: "gh"}
+	require.Nil(t, BuildEventPayload(cmd, "2.45.0"), "expected nil when device ID fails")
+}
+
+func TestBuildEventPayloadCommandPath(t *testing.T) {
+	t.Cleanup(stubDeviceID("test-device-id"))
+
+	tests := []struct {
+		name  string
+		setup func() *cobra.Command
+		want  string
+	}{
+		{
+			name: "subcommand",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "gh"}
+				issue := &cobra.Command{Use: "issue"}
+				list := &cobra.Command{Use: "list"}
+				root.AddCommand(issue)
+				issue.AddCommand(list)
+				return list
+			},
+			want: "gh issue list",
+		},
+		{
+			name: "top-level command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "gh"}
+				status := &cobra.Command{Use: "status"}
+				root.AddCommand(status)
+				return status
+			},
+			want: "gh status",
+		},
+		{
+			name: "root command itself",
+			setup: func() *cobra.Command {
+				return &cobra.Command{Use: "gh"}
+			},
+			want: "gh",
+		},
+		{
+			name: "flags are not included in command path",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "gh"}
+				pr := &cobra.Command{Use: "pr"}
+				list := &cobra.Command{Use: "list"}
+				list.Flags().StringP("state", "s", "open", "Filter by state")
+				root.AddCommand(pr)
+				pr.AddCommand(list)
+				// Simulate flag being set.
+				_ = list.Flags().Set("state", "closed")
+				return list
+			},
+			want: "gh pr list",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setup()
+			event := BuildEventPayload(cmd, "1.0.0")
+			require.NotNil(t, event)
+			require.Equal(t, tt.want, event.Dimensions.Command)
+		})
+	}
+}
+
+func TestMarshalRoundTrip(t *testing.T) {
+	event := Event{
+		EventType: "usage",
+		Dimensions: Dimensions{
+			Command:      "gh repo clone",
+			DeviceID:     "abc123hashed",
+			OS:           "linux",
+			Architecture: "amd64",
+			Version:      "2.44.0",
+		},
+	}
+
+	data, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	var decoded Event
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.Equal(t, event, decoded)
+}
+
+func TestGetOrCreateDeviceID(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Cleanup(stubStateDir(tmpDir))
+
+	t.Run("creates new ID on first call", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Cleanup(stubStateDir(tmpDir))
+
+		id, err := getOrCreateDeviceID()
+		require.NoError(t, err)
+		require.NotEmpty(t, id)
+
+		data, err := os.ReadFile(filepath.Join(tmpDir, deviceIDFileName))
+		require.NoError(t, err)
+		require.Equal(t, id, string(data))
+	})
+
+	t.Run("returns same ID on subsequent calls", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Cleanup(stubStateDir(tmpDir))
+
+		id1, err := getOrCreateDeviceID()
+		require.NoError(t, err)
+
+		id2, err := getOrCreateDeviceID()
+		require.NoError(t, err)
+
+		require.Equal(t, id1, id2, "IDs differ")
+	})
+
+	t.Run("trims whitespace from stored ID", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Cleanup(stubStateDir(tmpDir))
+
+		expected := "some-device-id"
+		err := os.WriteFile(filepath.Join(tmpDir, deviceIDFileName), []byte("  some-device-id\n"), 0o600)
+		require.NoError(t, err)
+
+		id, err := getOrCreateDeviceID()
+		require.NoError(t, err)
+		require.Equal(t, expected, id)
+	})
+
+	t.Run("returns error for non-ErrNotExist read failures", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Cleanup(stubStateDir(tmpDir))
+
+		// Create device-id as a directory so ReadFile fails with a non-ErrNotExist error.
+		err := os.Mkdir(filepath.Join(tmpDir, deviceIDFileName), 0o755)
+		require.NoError(t, err)
+
+		_, err = getOrCreateDeviceID()
+		require.Error(t, err)
+		require.False(t, errors.Is(err, os.ErrNotExist))
+	})
+}
+
+func TestIsTelemetryEnabledNilAnnotations(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	// Annotations is nil by default on a new command.
+	require.False(t, IsTelemetryEnabled(cmd))
+}
