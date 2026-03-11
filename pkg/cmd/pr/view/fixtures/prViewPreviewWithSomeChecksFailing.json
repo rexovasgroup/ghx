@@ -44,6 +44,19 @@
                 "oid": "abc",
                 "statusCheckRollup": {
                   "contexts": {
+                    "checkRunCount": 2,
+                    "checkRunCountsByState": [
+                      {
+                        "state": "SUCCESS",
+                        "count": 1
+                      },
+                      {
+                        "state": "FAILURE",
+                        "count": 1
+                      }
+                    ],
+                    "statusContextCount": 0,
+                    "statusContextCountsByState": [],
                     "nodes": [
                       {
                         "__typename": "CheckRun",

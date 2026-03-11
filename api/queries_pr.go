@@ -339,71 +339,29 @@ func (pr *PullRequest) ChecksStatus() PullRequestChecksStatus {
 
 	contexts := pr.StatusCheckRollup.Nodes[0].Commit.StatusCheckRollup.Contexts
 
-	// If this commit has counts by state then we can summarise check status from those
-	if len(contexts.CheckRunCountsByState) != 0 && len(contexts.StatusContextCountsByState) != 0 {
-		summary.Total = contexts.CheckRunCount + contexts.StatusContextCount
-		for _, countByState := range contexts.CheckRunCountsByState {
-			switch parseCheckStatusFromCheckRunState(countByState.State) {
-			case passing:
-				summary.Passing += countByState.Count
-			case failing:
-				summary.Failing += countByState.Count
-			case cancelled:
-				summary.Total -= countByState.Count
-			default:
-				summary.Pending += countByState.Count
-			}
+	summary.Total = contexts.CheckRunCount + contexts.StatusContextCount
+	for _, countByState := range contexts.CheckRunCountsByState {
+		switch parseCheckStatusFromCheckRunState(countByState.State) {
+		case passing:
+			summary.Passing += countByState.Count
+		case failing:
+			summary.Failing += countByState.Count
+		case cancelled:
+			summary.Total -= countByState.Count
+		default:
+			summary.Pending += countByState.Count
 		}
-
-		for _, countByState := range contexts.StatusContextCountsByState {
-			switch parseCheckStatusFromStatusState(countByState.State) {
-			case passing:
-				summary.Passing += countByState.Count
-			case failing:
-				summary.Failing += countByState.Count
-			default:
-				summary.Pending += countByState.Count
-			}
-		}
-
-		return summary
 	}
 
-	// If we don't have the counts by state, then we'll need to summarise by looking at the more detailed contexts
-	for _, c := range EliminateDuplicateChecks(contexts.Nodes) {
-		// Nodes are a discriminated union of CheckRun or StatusContext and we can match on
-		// the TypeName to narrow the type.
-		if c.TypeName == "CheckRun" {
-			// https://docs.github.com/en/graphql/reference/enums#checkstatusstate
-			// If the status is completed then we can check the conclusion field
-			if c.Status == "COMPLETED" {
-				switch parseCheckStatusFromCheckConclusionState(c.Conclusion) {
-				case passing:
-					summary.Passing++
-				case failing:
-					summary.Failing++
-				case cancelled:
-					continue
-				default:
-					summary.Pending++
-				}
-				// otherwise we're in some form of pending state:
-				// "COMPLETED", "IN_PROGRESS", "PENDING", "QUEUED", "REQUESTED", "WAITING" or otherwise unknown
-			} else {
-				summary.Pending++
-			}
-
-		} else { // c.TypeName == StatusContext
-			switch parseCheckStatusFromStatusState(c.State) {
-			case passing:
-				summary.Passing++
-			case failing:
-				summary.Failing++
-			default:
-				summary.Pending++
-			}
+	for _, countByState := range contexts.StatusContextCountsByState {
+		switch parseCheckStatusFromStatusState(countByState.State) {
+		case passing:
+			summary.Passing += countByState.Count
+		case failing:
+			summary.Failing += countByState.Count
+		default:
+			summary.Pending += countByState.Count
 		}
-		summary.Total++
 	}
 
 	return summary
@@ -444,24 +402,6 @@ func parseCheckStatusFromCheckRunState(state CheckRunState) checkStatus {
 		return cancelled
 	case CheckRunStateCompleted, CheckRunStateInProgress, CheckRunStatePending, CheckRunStateQueued,
 		CheckRunStateStale, CheckRunStateStartupFailure, CheckRunStateWaiting:
-		return pending
-	// Currently, we treat anything unknown as pending, which includes any future unknown
-	// states we might get back from the API. It might be interesting to do some work to add an additional
-	// unknown state.
-	default:
-		return pending
-	}
-}
-
-func parseCheckStatusFromCheckConclusionState(state CheckConclusionState) checkStatus {
-	switch state {
-	case CheckConclusionStateNeutral, CheckConclusionStateSkipped, CheckConclusionStateSuccess:
-		return passing
-	case CheckConclusionStateActionRequired, CheckConclusionStateFailure, CheckConclusionStateTimedOut:
-		return failing
-	case CheckConclusionStateCancelled:
-		return cancelled
-	case CheckConclusionStateStale, CheckConclusionStateStartupFailure:
 		return pending
 	// Currently, we treat anything unknown as pending, which includes any future unknown
 	// states we might get back from the API. It might be interesting to do some work to add an additional

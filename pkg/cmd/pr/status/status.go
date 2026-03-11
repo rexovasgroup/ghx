@@ -7,13 +7,11 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
-	"time"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/api"
 	ghContext "github.com/cli/cli/v2/context"
 	"github.com/cli/cli/v2/git"
-	fd "github.com/cli/cli/v2/internal/featuredetection"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/text"
@@ -35,8 +33,6 @@ type StatusOptions struct {
 	HasRepoOverride bool
 	Exporter        cmdutil.Exporter
 	ConflictStatus  bool
-
-	Detector fd.Detector
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
@@ -142,16 +138,6 @@ func statusRun(opts *StatusOptions) error {
 	if opts.Exporter != nil {
 		options.Fields = opts.Exporter.Fields()
 	}
-
-	if opts.Detector == nil {
-		cachedClient := api.NewCachedHTTPClient(httpClient, time.Hour*24)
-		opts.Detector = fd.NewDetector(cachedClient, baseRefRepo.RepoHost())
-	}
-	prFeatures, err := opts.Detector.PullRequestFeatures()
-	if err != nil {
-		return err
-	}
-	options.CheckRunAndStatusContextCountsSupported = prFeatures.CheckRunAndStatusContextCounts
 
 	prPayload, err := pullRequestStatus(httpClient, baseRefRepo, options)
 	if err != nil {

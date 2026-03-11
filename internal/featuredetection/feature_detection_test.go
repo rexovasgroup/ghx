@@ -87,19 +87,6 @@ func TestPullRequestFeatures(t *testing.T) {
 								{"name": "isMergeQueueEnabled"}
 							]
 						},
-						"StatusCheckRollupContextConnection": {
-							"fields": [
-								{"name": "checkRunCount"},
-								{"name": "checkRunCountsByState"},
-								{"name": "statusContextCount"},
-								{"name": "statusContextCountsByState"}
-							]
-						}
-					}
-				}`),
-				`query PullRequest_fields2\b`: heredoc.Doc(`
-				{
-					"data": {
 						"WorkflowRun": {
 							"fields": [
 								{"name": "event"}
@@ -109,9 +96,8 @@ func TestPullRequestFeatures(t *testing.T) {
 				}`),
 			},
 			wantFeatures: PullRequestFeatures{
-				MergeQueue:                     true,
-				CheckRunAndStatusContextCounts: true,
-				CheckRunEvent:                  true,
+				MergeQueue:    true,
+				CheckRunEvent: true,
 			},
 			wantErr: false,
 		},
@@ -125,19 +111,6 @@ func TestPullRequestFeatures(t *testing.T) {
 						"PullRequest": {
 							"fields": []
 						},
-						"StatusCheckRollupContextConnection": {
-							"fields": [
-								{"name": "checkRunCount"},
-								{"name": "checkRunCountsByState"},
-								{"name": "statusContextCount"},
-								{"name": "statusContextCountsByState"}
-							]
-						}
-					}
-				}`),
-				`query PullRequest_fields2\b`: heredoc.Doc(`
-				{
-					"data": {
 						"WorkflowRun": {
 							"fields": [
 								{"name": "event"}
@@ -147,9 +120,8 @@ func TestPullRequestFeatures(t *testing.T) {
 				}`),
 			},
 			wantFeatures: PullRequestFeatures{
-				MergeQueue:                     false,
-				CheckRunAndStatusContextCounts: true,
-				CheckRunEvent:                  true,
+				MergeQueue:    false,
+				CheckRunEvent: true,
 			},
 			wantErr: false,
 		},
@@ -166,19 +138,6 @@ func TestPullRequestFeatures(t *testing.T) {
 								{"name": "isMergeQueueEnabled"}
 							]
 						},
-						"StatusCheckRollupContextConnection": {
-							"fields": [
-								{"name": "checkRunCount"},
-								{"name": "checkRunCountsByState"},
-								{"name": "statusContextCount"},
-								{"name": "statusContextCountsByState"}
-							]
-						}
-					}
-				}`),
-				`query PullRequest_fields2\b`: heredoc.Doc(`
-				{
-					"data": {
 						"WorkflowRun": {
 							"fields": [
 								{"name": "event"}
@@ -188,9 +147,8 @@ func TestPullRequestFeatures(t *testing.T) {
 				}`),
 			},
 			wantFeatures: PullRequestFeatures{
-				MergeQueue:                     true,
-				CheckRunAndStatusContextCounts: true,
-				CheckRunEvent:                  true,
+				MergeQueue:    true,
+				CheckRunEvent: true,
 			},
 			wantErr: false,
 		},
@@ -204,14 +162,6 @@ func TestPullRequestFeatures(t *testing.T) {
 						"PullRequest": {
 							"fields": []
 						},
-						"StatusCheckRollupContextConnection": {
-							"fields": []
-						}
-					}
-				}`),
-				`query PullRequest_fields2\b`: heredoc.Doc(`
-				{
-					"data": {
 						"WorkflowRun": {
 							"fields": []
 						}
@@ -219,9 +169,8 @@ func TestPullRequestFeatures(t *testing.T) {
 				}`),
 			},
 			wantFeatures: PullRequestFeatures{
-				MergeQueue:                     false,
-				CheckRunAndStatusContextCounts: false,
-				CheckRunEvent:                  false,
+				MergeQueue:    false,
+				CheckRunEvent: false,
 			},
 			wantErr: false,
 		},

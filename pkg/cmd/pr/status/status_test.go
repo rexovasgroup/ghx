@@ -11,7 +11,6 @@ import (
 	"github.com/cli/cli/v2/context"
 	"github.com/cli/cli/v2/git"
 	"github.com/cli/cli/v2/internal/config"
-	fd "github.com/cli/cli/v2/internal/featuredetection"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/run"
@@ -24,10 +23,6 @@ import (
 )
 
 func runCommand(rt http.RoundTripper, branch string, isTTY bool, cli string) (*test.CmdOut, error) {
-	return runCommandWithDetector(rt, branch, isTTY, cli, &fd.DisabledDetectorMock{})
-}
-
-func runCommandWithDetector(rt http.RoundTripper, branch string, isTTY bool, cli string, detector fd.Detector) (*test.CmdOut, error) {
 	ios, _, stdout, stderr := iostreams.Test()
 	ios.SetStdoutTTY(isTTY)
 	ios.SetStdinTTY(isTTY)
@@ -61,12 +56,7 @@ func runCommandWithDetector(rt http.RoundTripper, branch string, isTTY bool, cli
 		GitClient: &git.Client{GitPath: "some/path/git"},
 	}
 
-	withProvidedDetector := func(opts *StatusOptions) error {
-		opts.Detector = detector
-		return statusRun(opts)
-	}
-
-	cmd := NewCmdStatus(factory, withProvidedDetector)
+	cmd := NewCmdStatus(factory, nil)
 	cmd.PersistentFlags().StringP("repo", "R", "", "")
 
 	argv, err := shlex.Split(cli)
@@ -125,40 +115,7 @@ func TestPRStatus(t *testing.T) {
 func TestPRStatus_reviewsAndChecks(t *testing.T) {
 	http := initFakeHTTP()
 	defer http.Verify(t)
-	// status,conclusion matches the old StatusContextRollup query
-	http.Register(httpmock.GraphQL(`status,conclusion`), httpmock.FileResponse("./fixtures/prStatusChecks.json"))
-
-	// stub successful git command
-	rs, cleanup := run.Stub()
-	defer cleanup(t)
-	rs.Register(`git config --get-regexp \^branch\\.`, 0, "")
-	rs.Register(`git config remote.pushDefault`, 0, "")
-	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
-	rs.Register(`git config push.default`, 1, "")
-
-	output, err := runCommand(http, "blueberries", true, "")
-	if err != nil {
-		t.Errorf("error running command `pr status`: %v", err)
-	}
-
-	expected := []string{
-		"✓ Checks passing + Changes requested ! Merge conflict status unknown",
-		"- Checks pending ✓ 2 Approved",
-		"× 1/3 checks failing - Review required ✓ No merge conflicts",
-		"✓ Checks passing × Merge conflicts",
-	}
-
-	for _, line := range expected {
-		if !strings.Contains(output.String(), line) {
-			t.Errorf("output did not contain %q: %q", line, output.String())
-		}
-	}
-}
-
-func TestPRStatus_reviewsAndChecksWithStatesByCount(t *testing.T) {
-	http := initFakeHTTP()
-	defer http.Verify(t)
-	// checkRunCount,checkRunCountsByState matches the new StatusContextRollup query
+	// checkRunCount,checkRunCountsByState matches the StatusContextRollup query
 	http.Register(httpmock.GraphQL(`checkRunCount,checkRunCountsByState`), httpmock.FileResponse("./fixtures/prStatusChecksWithStatesByCount.json"))
 
 	// stub successful git command
@@ -169,7 +126,7 @@ func TestPRStatus_reviewsAndChecksWithStatesByCount(t *testing.T) {
 	rs.Register(`git rev-parse --symbolic-full-name blueberries@{push}`, 128, "")
 	rs.Register(`git config push.default`, 1, "")
 
-	output, err := runCommandWithDetector(http, "blueberries", true, "", &fd.EnabledDetectorMock{})
+	output, err := runCommand(http, "blueberries", true, "")
 	if err != nil {
 		t.Errorf("error running command `pr status`: %v", err)
 	}

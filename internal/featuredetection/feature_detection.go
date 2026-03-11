@@ -6,7 +6,6 @@ import (
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/hashicorp/go-version"
-	"golang.org/x/sync/errgroup"
 
 	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 )
@@ -31,18 +30,13 @@ var allIssueFeatures = IssueFeatures{
 }
 
 type PullRequestFeatures struct {
-	MergeQueue bool
-	// CheckRunAndStatusContextCounts indicates whether the API supports
-	// the checkRunCount, checkRunCountsByState, statusContextCount and statusContextCountsByState
-	// fields on the StatusCheckRollupContextConnection
-	CheckRunAndStatusContextCounts bool
-	CheckRunEvent                  bool
+	MergeQueue    bool
+	CheckRunEvent bool
 }
 
 var allPullRequestFeatures = PullRequestFeatures{
-	MergeQueue:                     true,
-	CheckRunAndStatusContextCounts: true,
-	CheckRunEvent:                  true,
+	MergeQueue:    true,
+	CheckRunEvent: true,
 }
 
 type RepositoryFeatures struct {
@@ -154,16 +148,6 @@ func (d *detector) PullRequestFeatures() (PullRequestFeatures, error) {
 				Name string
 			} `graphql:"fields(includeDeprecated: true)"`
 		} `graphql:"PullRequest: __type(name: \"PullRequest\")"`
-		StatusCheckRollupContextConnection struct {
-			Fields []struct {
-				Name string
-			} `graphql:"fields(includeDeprecated: true)"`
-		} `graphql:"StatusCheckRollupContextConnection: __type(name: \"StatusCheckRollupContextConnection\")"`
-	}
-
-	// Break feature detection down into two separate queries because the platform
-	// only supports two `__type` expressions in one query.
-	var pullRequestFeatureDetection2 struct {
 		WorkflowRun struct {
 			Fields []struct {
 				Name string
@@ -173,14 +157,7 @@ func (d *detector) PullRequestFeatures() (PullRequestFeatures, error) {
 
 	gql := api.NewClientFromHTTP(d.httpClient)
 
-	var wg errgroup.Group
-	wg.Go(func() error {
-		return gql.Query(d.host, "PullRequest_fields", &pullRequestFeatureDetection, nil)
-	})
-	wg.Go(func() error {
-		return gql.Query(d.host, "PullRequest_fields2", &pullRequestFeatureDetection2, nil)
-	})
-	if err := wg.Wait(); err != nil {
+	if err := gql.Query(d.host, "PullRequest_fields", &pullRequestFeatureDetection, nil); err != nil {
 		return PullRequestFeatures{}, err
 	}
 
@@ -192,15 +169,7 @@ func (d *detector) PullRequestFeatures() (PullRequestFeatures, error) {
 		}
 	}
 
-	for _, field := range pullRequestFeatureDetection.StatusCheckRollupContextConnection.Fields {
-		// We only check for checkRunCount here but it, checkRunCountsByState, statusContextCount and statusContextCountsByState
-		// were all introduced in the same version of the API.
-		if field.Name == "checkRunCount" {
-			features.CheckRunAndStatusContextCounts = true
-		}
-	}
-
-	for _, field := range pullRequestFeatureDetection2.WorkflowRun.Fields {
+	for _, field := range pullRequestFeatureDetection.WorkflowRun.Fields {
 		if field.Name == "event" {
 			features.CheckRunEvent = true
 		}
