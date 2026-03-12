@@ -40,7 +40,7 @@ func newTestServer(t *testing.T, flags map[string]bool) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-func TestGetFeatureFlags_freshCache(t *testing.T) {
+func TestGet_freshCache(t *testing.T) {
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -57,12 +57,12 @@ func TestGetFeatureFlags_freshCache(t *testing.T) {
 	client := NewClient(cafeClient, cacheDir)
 	client.now = func() time.Time { return now }
 
-	flags, err := client.GetFeatureFlags(context.Background(), []string{"gh_cli_telemetry"})
+	ff, err := client.Get(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"gh_cli_telemetry": true}, flags)
+	assert.True(t, ff.Telemetry)
 }
 
-func TestGetFeatureFlags_staleCache(t *testing.T) {
+func TestGet_staleCache(t *testing.T) {
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -81,12 +81,12 @@ func TestGetFeatureFlags_staleCache(t *testing.T) {
 	client := NewClient(cafeClient, cacheDir)
 	client.now = func() time.Time { return now }
 
-	flags, err := client.GetFeatureFlags(context.Background(), []string{"gh_cli_telemetry"})
+	ff, err := client.Get(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"gh_cli_telemetry": true}, flags)
+	assert.True(t, ff.Telemetry)
 }
 
-func TestGetFeatureFlags_noCache(t *testing.T) {
+func TestGet_noCache(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": true})
@@ -95,19 +95,19 @@ func TestGetFeatureFlags_noCache(t *testing.T) {
 	cafeClient := cafe.NewClient(server.Client(), server.URL)
 	client := NewClient(cafeClient, cacheDir)
 
-	flags, err := client.GetFeatureFlags(context.Background(), []string{"gh_cli_telemetry"})
+	ff, err := client.Get(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"gh_cli_telemetry": true}, flags)
+	assert.True(t, ff.Telemetry)
 
 	// Verify cache was written
 	data, err := os.ReadFile(filepath.Join(cacheDir, cacheFileName))
 	require.NoError(t, err)
 	var written cache
 	require.NoError(t, json.Unmarshal(data, &written))
-	assert.Equal(t, map[string]bool{"gh_cli_telemetry": true}, written.Flags)
+	assert.Equal(t, true, written.Flags["gh_cli_telemetry"])
 }
 
-func TestGetFeatureFlags_cacheMissingRequestedFlag(t *testing.T) {
+func TestGet_cacheMissingRequestedFlag(t *testing.T) {
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -126,18 +126,32 @@ func TestGetFeatureFlags_cacheMissingRequestedFlag(t *testing.T) {
 	client := NewClient(cafeClient, cacheDir)
 	client.now = func() time.Time { return now }
 
-	flags, err := client.GetFeatureFlags(context.Background(), []string{"gh_cli_telemetry"})
+	ff, err := client.Get(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"gh_cli_telemetry": true}, flags)
+	assert.True(t, ff.Telemetry)
 }
 
-func TestGetFeatureFlags_cafeError(t *testing.T) {
+func TestGet_cafeError(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	cafeClient := cafe.NewClient(http.DefaultClient, "http://localhost:1")
 	client := NewClient(cafeClient, cacheDir)
 
-	_, err := client.GetFeatureFlags(context.Background(), []string{"gh_cli_telemetry"})
+	_, err := client.Get(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetching feature flags")
+}
+
+func TestGet_telemetryDisabled(t *testing.T) {
+	cacheDir := t.TempDir()
+
+	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": false})
+	defer server.Close()
+
+	cafeClient := cafe.NewClient(server.Client(), server.URL)
+	client := NewClient(cafeClient, cacheDir)
+
+	ff, err := client.Get(context.Background())
+	require.NoError(t, err)
+	assert.False(t, ff.Telemetry)
 }

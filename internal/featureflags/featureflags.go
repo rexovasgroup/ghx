@@ -13,9 +13,26 @@ import (
 )
 
 const (
-	cacheFileName    = "feature-flags.json"
-	defaultCacheTTL  = 30 * time.Minute
+	cacheFileName   = "feature-flags.json"
+	defaultCacheTTL = 30 * time.Minute
+
+	flagTelemetry = "gh_cli_telemetry"
 )
+
+// allFlagNames is the list of all flag names we request from CAFE.
+var allFlagNames = []string{flagTelemetry}
+
+// FeatureFlags holds the resolved state of all feature flags.
+type FeatureFlags struct {
+	Telemetry bool
+}
+
+// fromMap populates FeatureFlags from a raw flag map.
+func fromMap(flags map[string]bool) FeatureFlags {
+	return FeatureFlags{
+		Telemetry: flags[flagTelemetry],
+	}
+}
 
 // cache represents the on-disk feature flag cache.
 type cache struct {
@@ -41,22 +58,17 @@ func NewClient(cafeClient *cafe.Client, cacheDir string) *Client {
 	}
 }
 
-// GetFeatureFlags returns the enabled state of the requested flags.
-// It reads from disk cache first and only calls CAFE if the cache is stale or missing.
+// Get fetches all feature flags, using the disk cache when fresh.
 // On any error fetching from CAFE, it returns an error — callers decide fail-open/closed behavior.
-func (c *Client) GetFeatureFlags(ctx context.Context, flagNames []string) (map[string]bool, error) {
+func (c *Client) Get(ctx context.Context) (FeatureFlags, error) {
 	cached, err := c.readCache()
-	if err == nil && c.isCacheFresh(cached) && c.cacheHasAllFlags(cached, flagNames) {
-		result := make(map[string]bool, len(flagNames))
-		for _, name := range flagNames {
-			result[name] = cached.Flags[name]
-		}
-		return result, nil
+	if err == nil && c.isCacheFresh(cached) && c.cacheHasAllFlags(cached, allFlagNames) {
+		return fromMap(cached.Flags), nil
 	}
 
-	flags, err := c.cafe.GetFeatureFlags(ctx, flagNames)
+	flags, err := c.cafe.GetFeatureFlags(ctx, allFlagNames)
 	if err != nil {
-		return nil, fmt.Errorf("fetching feature flags: %w", err)
+		return FeatureFlags{}, fmt.Errorf("fetching feature flags: %w", err)
 	}
 
 	_ = c.writeCache(&cache{
@@ -64,7 +76,7 @@ func (c *Client) GetFeatureFlags(ctx context.Context, flagNames []string) (map[s
 		FetchedAt: c.now(),
 	})
 
-	return flags, nil
+	return fromMap(flags), nil
 }
 
 func (c *Client) isCacheFresh(cached *cache) bool {

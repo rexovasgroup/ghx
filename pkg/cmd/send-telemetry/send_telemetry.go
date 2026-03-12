@@ -140,17 +140,12 @@ func isTelemetryFlagEnabled(opts *SendTelemetryOptions) bool {
 	cafeClient := cafe.NewClient(httpClient, opts.FeatureFlagEndpointURL)
 	ffClient := featureflags.NewClient(cafeClient, opts.CacheDir)
 
-	flags, err := ffClient.GetFeatureFlags(context.Background(), []string{telemetryFeatureFlag})
+	ff, err := ffClient.Get(context.Background())
 	if err != nil {
 		return false // Fail closed — don't send telemetry if we can't check the flag.
 	}
 
-	enabled, ok := flags[telemetryFeatureFlag]
-	if !ok {
-		return false // Flag not in response — fail closed.
-	}
-
-	return enabled
+	return ff.Telemetry
 }
 
 type bearerTokenTransport struct {
