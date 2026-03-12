@@ -50,6 +50,7 @@ func TestBuildEventPayloadPopulatesDimensions(t *testing.T) {
 		Dimensions: Dimensions{
 			Command:      "gh pr create",
 			DeviceID:     "test-device-id",
+			Flags:        "",
 			OS:           runtime.GOOS,
 			Architecture: runtime.GOARCH,
 			Version:      "2.45.0",
@@ -120,8 +121,7 @@ func TestBuildEventPayloadCommandPath(t *testing.T) {
 				list.Flags().StringP("state", "s", "open", "Filter by state")
 				root.AddCommand(pr)
 				pr.AddCommand(list)
-				// Simulate flag being set.
-				_ = list.Flags().Set("state", "closed")
+				list.ParseFlags([]string{"--state", "closed"})
 				return list
 			},
 			want: "gh pr list",
@@ -138,12 +138,78 @@ func TestBuildEventPayloadCommandPath(t *testing.T) {
 	}
 }
 
+func TestBuildEventPayloadCollectsFlags(t *testing.T) {
+	t.Cleanup(stubDeviceID("test-device-id"))
+
+	tests := []struct {
+		name      string
+		setup     func() *cobra.Command
+		wantFlags string
+	}{
+		{
+			name: "no flags set",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "list"}
+				cmd.Flags().StringP("state", "s", "open", "Filter by state")
+				cmd.Flags().IntP("limit", "L", 30, "Maximum number of items")
+				return cmd
+			},
+			wantFlags: "",
+		},
+		{
+			name: "single flag set",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "list"}
+				cmd.Flags().StringP("state", "s", "open", "Filter by state")
+				cmd.Flags().IntP("limit", "L", 30, "Maximum number of items")
+				cmd.ParseFlags([]string{"--state", "closed"})
+				return cmd
+			},
+			wantFlags: "state",
+		},
+		{
+			name: "multiple flags set are sorted",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "list"}
+				cmd.Flags().StringP("state", "s", "open", "Filter by state")
+				cmd.Flags().IntP("limit", "L", 30, "Maximum number of items")
+				cmd.Flags().BoolP("web", "w", false, "Open in browser")
+				cmd.ParseFlags([]string{"--web", "--limit", "10", "--state", "closed"})
+				return cmd
+			},
+			wantFlags: "limit,state,web",
+		},
+		{
+			name: "only explicitly set flags are included",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "list"}
+				cmd.Flags().StringP("state", "s", "open", "Filter by state")
+				cmd.Flags().IntP("limit", "L", 30, "Maximum number of items")
+				cmd.Flags().BoolP("web", "w", false, "Open in browser")
+				cmd.ParseFlags([]string{"--limit", "10"})
+				return cmd
+			},
+			wantFlags: "limit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setup()
+			event := BuildEventPayload(cmd, "1.0.0")
+			require.NotNil(t, event)
+			require.Equal(t, tt.wantFlags, event.Dimensions.Flags)
+		})
+	}
+}
+
 func TestMarshalRoundTrip(t *testing.T) {
 	event := Event{
 		EventType: "usage",
 		Dimensions: Dimensions{
 			Command:      "gh repo clone",
 			DeviceID:     "abc123hashed",
+			Flags:        "depth,upstream-remote-name",
 			OS:           "linux",
 			Architecture: "amd64",
 			Version:      "2.44.0",

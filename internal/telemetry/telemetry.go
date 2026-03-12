@@ -18,11 +18,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const deviceIDFileName = "device-id"
@@ -70,6 +72,9 @@ type Dimensions struct {
 	Command string `json:"command"`
 	// DeviceID is the UUID associated with the user/device combination, e.g. "1e9a73a6-c8bd-4e1e-be02-78f4b11de4e1".
 	DeviceID string `json:"device_id"`
+	// Flags is a comma-separated sorted list of flag names that were explicitly provided, e.g. "draft,limit,state".
+	// Only flag names are recorded, never values.
+	Flags string `json:"flags"`
 	// OS is the operating system name from runtime.GOOS, e.g. "linux", "darwin", or "windows".
 	OS string `json:"os"`
 	// Architecture is the CPU architecture from runtime.GOARCH, e.g. "amd64" or "arm64".
@@ -90,11 +95,18 @@ func BuildEventPayload(cmd *cobra.Command, version string) *Event {
 		return nil
 	}
 
+	var flags []string
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flags = append(flags, f.Name)
+	})
+	slices.Sort(flags)
+
 	return &Event{
 		EventType: "usage",
 		Dimensions: Dimensions{
 			Command:      cmd.CommandPath(),
 			DeviceID:     deviceID,
+			Flags:        strings.Join(flags, ","),
 			OS:           runtime.GOOS,
 			Architecture: runtime.GOARCH,
 			Version:      strings.TrimPrefix(version, "v"),

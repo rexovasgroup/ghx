@@ -45,7 +45,9 @@ repositories are generally safe and do not require confirmation.
 
 1. Build the `gh` binary from source: `go build -o /tmp/gh-acceptance-test ./cmd/gh/`
 2. Confirm the build succeeded before proceeding.
-3. Check if `asciinema` is available on PATH for recordings.
+3. Check if `asciinema` is available on PATH. If it is, you **must** record each
+   scenario and include the asciicast badge link in the output. The pull-request-author
+   skill depends on these recordings being present in the acceptance criteria.
 
 ### Running gh commands
 

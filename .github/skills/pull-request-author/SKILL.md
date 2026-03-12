@@ -114,6 +114,8 @@ output with Given/When/Then blocks, evidence, and the summary table.>
 - Always run the acceptance-tester skill fresh. Do not copy stale results.
 - Include the **complete** output from the acceptance-tester skill, including
   asciinema recording links (asciicast badges). Do not strip or summarize them.
+  If the acceptance-tester produced recordings, each scenario **must** have its
+  asciicast badge in the PR description.
 - If no acceptance scenarios are defined in the project, note that:
   "No acceptance scenarios defined for this change."
 - If scenarios fail, include the failures — do not hide them.

@@ -43,6 +43,10 @@ completions: bin/gh$(EXE)
 test:
 	go test ./...
 
+.PHONY: lint
+lint:
+	golangci-lint run
+
 # For more information, see https://github.com/cli/cli/blob/trunk/acceptance/README.md
 .PHONY: acceptance
 acceptance:

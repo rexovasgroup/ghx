@@ -18,6 +18,7 @@ Each time certain commands complete successfully, a single event is sent contain
   "dimensions": {
     "command": "<command (no arguments), e.g. gh pr create>",
     "device_id": "<random UUID, generated once per user/device combination>",
+    "flags": "<comma-separated flag names that were explicitly provided, e.g. draft,title>",
     "os": "<operating system>",
     "architecture": "<CPU architecture>",
     "version": "<gh version string>"
@@ -29,13 +30,15 @@ Each time certain commands complete successfully, a single event is sent contain
 |-------|-------------|
 | `command` | The command that was invoked (e.g. `gh pr create`, `gh issue list`). Does **not** include flags, arguments, or any user-provided input. |
 | `device_id` | A random identifier generated once and stored locally per user/device combination. This is **not** a machine ID — different users on the same machine get different identifiers. See [Deleting your device ID](#deleting-your-device-id) below. |
+| `flags` | A comma-separated sorted list of flag names that were explicitly provided (e.g. `draft,limit,state`). Only flag **names** are recorded, never flag **values**. If no flags were provided, this is an empty string. |
 | `os` | The operating system (`darwin`, `linux`, `windows`). |
 | `architecture` | The CPU architecture (`amd64`, `arm64`, etc.). |
 | `version` | The `gh` version string. |
 
 ### What is NOT collected
 
-- **No flags or arguments** — we record `gh pr create`, not `gh pr create --title "my secret project"`
+- **No flag values** — we record that `--title` was used, not what the title was
+- **No arguments** — we record `gh pr create`, not `gh pr create my-branch`
 - **No repository names or URLs**
 - **No usernames or authentication tokens**
 - **No file contents or paths**
@@ -50,7 +53,7 @@ After a command completes successfully, a background process sends the usage eve
 
 During the initial rollout, only a subset of commands send usage data. Over time, we plan to expand coverage.
 
-The full implementation can be found in [`https://github.com/cli/cli/tree/trunk/internal/telemetry/`](internal/telemetry/) and [`pkg/cmd/send-telemetry/`](https://github.com/cli/cli/tree/trunk/pkg/cmd/send-telemetry/).
+The full implementation can be found in [`internal/telemetry/`](https://github.com/cli/cli/tree/trunk/internal/telemetry/) and [`pkg/cmd/send-telemetry/`](https://github.com/cli/cli/tree/trunk/pkg/cmd/send-telemetry/).
 
 ## Privacy
 

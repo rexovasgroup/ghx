@@ -68,7 +68,7 @@ func newCmdSendTelemetry(f *cmdutil.Factory, runF func(*SendTelemetryOptions) er
 func runSendTelemetry(opts *SendTelemetryOptions) error {
 	var event telemetry.Event
 	if err := json.Unmarshal([]byte(opts.PayloadJSON), &event); err != nil {
-		return nil //nolint:nilerr // Best effort telemetry.
+		return nil // Best effort telemetry.
 	}
 
 	client := &http.Client{
@@ -81,13 +81,13 @@ func runSendTelemetry(opts *SendTelemetryOptions) error {
 
 	req, err := http.NewRequest(http.MethodPost, opts.CentralEndpointURL, strings.NewReader(opts.PayloadJSON))
 	if err != nil {
-		return nil //nolint:nilerr // Best effort telemetry.
+		return nil // Best effort telemetry.
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil //nolint:nilerr // Best effort telemetry.
+		return nil // Best effort telemetry.
 	}
 	defer resp.Body.Close()
 
