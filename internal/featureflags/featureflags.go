@@ -26,16 +26,16 @@ type cache struct {
 // Client fetches and caches feature flags from the CAFE service.
 type Client struct {
 	cafe     *cafe.Client
-	stateDir string
+	cacheDir string
 	cacheTTL time.Duration
 	now      func() time.Time
 }
 
 // NewClient creates a feature flag client.
-func NewClient(cafeClient *cafe.Client, stateDir string) *Client {
+func NewClient(cafeClient *cafe.Client, cacheDir string) *Client {
 	return &Client{
 		cafe:     cafeClient,
-		stateDir: stateDir,
+		cacheDir: cacheDir,
 		cacheTTL: defaultCacheTTL,
 		now:      time.Now,
 	}
@@ -81,7 +81,7 @@ func (c *Client) cacheHasAllFlags(cached *cache, flagNames []string) bool {
 }
 
 func (c *Client) cachePath() string {
-	return filepath.Join(c.stateDir, cacheFileName)
+	return filepath.Join(c.cacheDir, cacheFileName)
 }
 
 func (c *Client) readCache() (*cache, error) {
@@ -101,7 +101,7 @@ func (c *Client) writeCache(cached *cache) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(c.stateDir, 0o755); err != nil {
+	if err := os.MkdirAll(c.cacheDir, 0o755); err != nil {
 		return err
 	}
 	return os.WriteFile(c.cachePath(), data, 0o600)

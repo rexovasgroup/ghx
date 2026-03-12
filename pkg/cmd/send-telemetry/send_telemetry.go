@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/internal/featureflags"
 	"github.com/cli/cli/v2/internal/featureflags/cafe"
 	"github.com/cli/cli/v2/internal/telemetry"
@@ -33,7 +32,7 @@ type SendTelemetryOptions struct {
 	PayloadJSON            string
 	HTTPUnixSocket         string
 	AuthToken              string
-	StateDir               string
+	CacheDir               string
 	IsEnterprise           bool
 }
 
@@ -71,7 +70,7 @@ func newCmdSendTelemetry(f *cmdutil.Factory, runF func(*SendTelemetryOptions) er
 				// plumbing through the host from the parent process, which is often non-trivial. In the case this doesn't work, we'll silently fail.
 				HTTPUnixSocket: cfg.HTTPUnixSocket("").Value,
 				AuthToken:      token,
-				StateDir:       config.StateDir(),
+				CacheDir:       cfg.CacheDir(),
 				IsEnterprise:   ghauth.IsEnterprise(host),
 			}
 
@@ -139,7 +138,7 @@ func isTelemetryFlagEnabled(opts *SendTelemetryOptions) bool {
 	}
 
 	cafeClient := cafe.NewClient(httpClient, opts.FeatureFlagEndpointURL)
-	ffClient := featureflags.NewClient(cafeClient, opts.StateDir)
+	ffClient := featureflags.NewClient(cafeClient, opts.CacheDir)
 
 	flags, err := ffClient.GetFeatureFlags(context.Background(), []string{telemetryFeatureFlag})
 	if err != nil {

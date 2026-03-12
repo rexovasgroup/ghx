@@ -204,7 +204,7 @@ func TestRunSendTelemetry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.opts.StateDir = t.TempDir()
+			tt.opts.CacheDir = t.TempDir()
 
 			if tt.setupCAFE {
 				cafe := cafeEnabledServer(t)
@@ -321,7 +321,7 @@ func TestIsTelemetryFlagEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.opts.StateDir = t.TempDir()
+			tt.opts.CacheDir = t.TempDir()
 
 			if tt.cafeServer != nil {
 				server := tt.cafeServer(t)
@@ -363,7 +363,7 @@ func TestRunSendTelemetry_featureFlagGating(t *testing.T) {
 			FeatureFlagEndpointURL: cafeServer.URL,
 			PayloadJSON:            validPayload,
 			AuthToken:              "token123",
-			StateDir:               t.TempDir(),
+			CacheDir:               t.TempDir(),
 		}
 
 		err := runSendTelemetry(opts)
@@ -387,7 +387,7 @@ func TestRunSendTelemetry_featureFlagGating(t *testing.T) {
 			FeatureFlagEndpointURL: cafeServer.URL,
 			PayloadJSON:            validPayload,
 			AuthToken:              "token123",
-			StateDir:               t.TempDir(),
+			CacheDir:               t.TempDir(),
 		}
 
 		err := runSendTelemetry(opts)
@@ -407,7 +407,7 @@ func TestRunSendTelemetry_featureFlagGating(t *testing.T) {
 			CentralEndpointURL: centralServer.URL + "/api/usage/github-cli",
 			PayloadJSON:        validPayload,
 			IsEnterprise:       true,
-			StateDir:           t.TempDir(),
+			CacheDir:           t.TempDir(),
 		}
 
 		err := runSendTelemetry(opts)
