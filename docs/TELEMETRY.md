@@ -45,13 +45,13 @@ Each time certain commands complete successfully, a single event is sent contain
 - **No environment variables**
 - **No IP-based geolocation**
 
-The usage data request is **unauthenticated** — no GitHub tokens or credentials are included in the request. A separate, authenticated request may be made to determine whether telemetry collection is enabled, but this request does not contain any usage data.
+The telemetry request is **unauthenticated** — no GitHub tokens or credentials are included in the request.
 
 ## How it works
 
 After a command completes successfully, a background process sends the usage event independently so it doesn't slow down the CLI. If the command fails, is interrupted (e.g. Ctrl+C), or the device ID cannot be created, no data is sent.
 
-During the initial rollout, only a subset of commands send usage data and telemetry may be gated by a server-side feature flag. Over time, we plan to expand coverage.
+During the initial rollout, only a subset of commands send usage data. Over time, we plan to expand coverage.
 
 The full implementation can be found in [`internal/telemetry/`](https://github.com/cli/cli/tree/trunk/internal/telemetry/) and [`pkg/cmd/send-telemetry/`](https://github.com/cli/cli/tree/trunk/pkg/cmd/send-telemetry/).
 
