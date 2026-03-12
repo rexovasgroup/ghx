@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	cacheFileName   = "feature-flags.json"
 	defaultCacheTTL = 30 * time.Minute
 
 	flagTelemetry = "gh_cli_telemetry"
@@ -44,15 +43,19 @@ type cache struct {
 type Client struct {
 	cafe     *cafe.Client
 	cacheDir string
+	cacheKey string
 	cacheTTL time.Duration
 	now      func() time.Time
 }
 
 // NewClient creates a feature flag client.
-func NewClient(cafeClient *cafe.Client, cacheDir string) *Client {
+// The host and user parameters scope the disk cache so that different accounts
+// don't share cached flag values.
+func NewClient(cafeClient *cafe.Client, cacheDir, host, user string) *Client {
 	return &Client{
 		cafe:     cafeClient,
 		cacheDir: cacheDir,
+		cacheKey: host + "-" + user,
 		cacheTTL: defaultCacheTTL,
 		now:      time.Now,
 	}
@@ -93,7 +96,7 @@ func (c *Client) cacheHasAllFlags(cached *cache, flagNames []string) bool {
 }
 
 func (c *Client) cachePath() string {
-	return filepath.Join(c.cacheDir, cacheFileName)
+	return filepath.Join(c.cacheDir, c.cacheKey+"-feature-flags.json")
 }
 
 func (c *Client) readCache() (*cache, error) {

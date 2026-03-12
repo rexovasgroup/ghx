@@ -105,6 +105,7 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 				return
 			}
 
+			host, _ := cfg.Authentication().DefaultHost()
 			event := telemetry.BuildEventPayload(cmd, version)
 			if event == nil {
 				return
@@ -115,7 +116,7 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 				return
 			}
 
-			telemetry.SpawnSendTelemetry(f.Executable(), string(payloadJSON))
+			telemetry.SpawnSendTelemetry(f.Executable(), string(payloadJSON), host)
 		},
 	}
 

@@ -50,11 +50,11 @@ func TestGet_freshCache(t *testing.T) {
 	}
 	data, err := json.Marshal(cached)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, cacheFileName), data, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"), data, 0o600))
 
 	// No server needed — cache should be used
 	cafeClient := cafe.NewClient(http.DefaultClient, "http://localhost:1")
-	client := NewClient(cafeClient, cacheDir)
+	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 	client.now = func() time.Time { return now }
 
 	ff, err := client.Get(context.Background())
@@ -72,13 +72,13 @@ func TestGet_staleCache(t *testing.T) {
 	}
 	data, err := json.Marshal(cached)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, cacheFileName), data, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"), data, 0o600))
 
 	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": true})
 	defer server.Close()
 
 	cafeClient := cafe.NewClient(server.Client(), server.URL)
-	client := NewClient(cafeClient, cacheDir)
+	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 	client.now = func() time.Time { return now }
 
 	ff, err := client.Get(context.Background())
@@ -93,14 +93,14 @@ func TestGet_noCache(t *testing.T) {
 	defer server.Close()
 
 	cafeClient := cafe.NewClient(server.Client(), server.URL)
-	client := NewClient(cafeClient, cacheDir)
+	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 
 	ff, err := client.Get(context.Background())
 	require.NoError(t, err)
 	assert.True(t, ff.Telemetry)
 
 	// Verify cache was written
-	data, err := os.ReadFile(filepath.Join(cacheDir, cacheFileName))
+	data, err := os.ReadFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"))
 	require.NoError(t, err)
 	var written cache
 	require.NoError(t, json.Unmarshal(data, &written))
@@ -117,13 +117,13 @@ func TestGet_cacheMissingRequestedFlag(t *testing.T) {
 	}
 	data, err := json.Marshal(cached)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, cacheFileName), data, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"), data, 0o600))
 
 	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": true})
 	defer server.Close()
 
 	cafeClient := cafe.NewClient(server.Client(), server.URL)
-	client := NewClient(cafeClient, cacheDir)
+	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 	client.now = func() time.Time { return now }
 
 	ff, err := client.Get(context.Background())
@@ -135,7 +135,7 @@ func TestGet_cafeError(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	cafeClient := cafe.NewClient(http.DefaultClient, "http://localhost:1")
-	client := NewClient(cafeClient, cacheDir)
+	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 
 	_, err := client.Get(context.Background())
 	require.Error(t, err)
@@ -149,7 +149,7 @@ func TestGet_telemetryDisabled(t *testing.T) {
 	defer server.Close()
 
 	cafeClient := cafe.NewClient(server.Client(), server.URL)
-	client := NewClient(cafeClient, cacheDir)
+	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 
 	ff, err := client.Get(context.Background())
 	require.NoError(t, err)

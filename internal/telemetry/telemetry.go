@@ -20,12 +20,31 @@ import (
 	"strings"
 
 	"github.com/cli/cli/v2/internal/config"
+	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 const deviceIDFileName = "device-id"
+
+// Host type constants used in the HostType dimension.
+const (
+	HostTypeDotcom     = "dotcom"
+	HostTypeTenant     = "tenant"
+	HostTypeEnterprise = "enterprise"
+)
+
+// ClassifyHost returns the host type for a given hostname.
+func ClassifyHost(host string) string {
+	if ghauth.IsTenancy(host) {
+		return HostTypeTenant
+	}
+	if ghauth.IsEnterprise(host) {
+		return HostTypeEnterprise
+	}
+	return HostTypeDotcom
+}
 
 // stateDirFunc returns the state directory path. Can be replaced in tests.
 var stateDirFunc = config.StateDir
@@ -113,12 +132,15 @@ func BuildEventPayload(cmd *cobra.Command, version string) *Event {
 }
 
 // SpawnSendTelemetry spawns a subprocess to send telemetry via stdin.
+// The host parameter is passed to the subprocess via GH_HOST so it resolves
+// the correct auth token and feature flag behavior for the targeted host.
 // All errors are silently ignored since telemetry is best-effort.
-func SpawnSendTelemetry(executable, payloadJSON string) {
+func SpawnSendTelemetry(executable, payloadJSON, host string) {
 	cmd := exec.Command(executable, "send-telemetry")
 	cmd.Stdin = strings.NewReader(payloadJSON)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
+	cmd.Env = append(os.Environ(), "GH_HOST="+host)
 	if err := cmd.Start(); err != nil {
 		return
 	}

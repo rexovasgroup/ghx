@@ -16,7 +16,6 @@ import (
 	"github.com/cli/cli/v2/internal/featureflags/cafe"
 	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/pkg/cmdutil"
-	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +32,9 @@ type SendTelemetryOptions struct {
 	HTTPUnixSocket         string
 	AuthToken              string
 	CacheDir               string
-	IsEnterprise           bool
+	Host                   string
+	User                   string
+	HostType               string
 }
 
 func NewCmdSendTelemetry(f *cmdutil.Factory) *cobra.Command {
@@ -57,9 +58,12 @@ func newCmdSendTelemetry(f *cmdutil.Factory, runF func(*SendTelemetryOptions) er
 				return nil //nolint:nilerr // Best effort telemetry.
 			}
 
+			// The parent process sets GH_HOST to the targeted host, so DefaultHost()
+			// resolves the correct host for auth token lookup and feature flag behavior.
 			authCfg := cfg.Authentication()
 			host, _ := authCfg.DefaultHost()
 			token, _ := authCfg.ActiveToken(host)
+			user, _ := authCfg.ActiveUser(host)
 
 			opts := &SendTelemetryOptions{
 				CentralEndpointURL:     cmp.Or(os.Getenv("CENTRAL_ENDPOINT_URL"), defaultCentralEndpointURL),
@@ -71,7 +75,9 @@ func newCmdSendTelemetry(f *cmdutil.Factory, runF func(*SendTelemetryOptions) er
 				HTTPUnixSocket: cfg.HTTPUnixSocket("").Value,
 				AuthToken:      token,
 				CacheDir:       cfg.CacheDir(),
-				IsEnterprise:   ghauth.IsEnterprise(host),
+				Host:           host,
+				User:           user,
+				HostType:       telemetry.ClassifyHost(host),
 			}
 
 			if runF != nil {
@@ -120,11 +126,11 @@ func runSendTelemetry(opts *SendTelemetryOptions) error {
 }
 
 // isTelemetryFlagEnabled checks whether the gh_cli_telemetry feature flag is enabled.
-// For GHES hosts, feature flags default to off (no telemetry).
+// For non-dotcom hosts, feature flags default to off (no telemetry).
 // For github.com, it fetches from CAFE with disk caching.
 // On any error fetching flags, it fails closed (telemetry is NOT sent).
 func isTelemetryFlagEnabled(opts *SendTelemetryOptions) bool {
-	if opts.IsEnterprise {
+	if opts.HostType != telemetry.HostTypeDotcom {
 		return false
 	}
 
@@ -138,7 +144,7 @@ func isTelemetryFlagEnabled(opts *SendTelemetryOptions) bool {
 	}
 
 	cafeClient := cafe.NewClient(httpClient, opts.FeatureFlagEndpointURL)
-	ffClient := featureflags.NewClient(cafeClient, opts.CacheDir)
+	ffClient := featureflags.NewClient(cafeClient, opts.CacheDir, opts.Host, opts.User)
 
 	ff, err := ffClient.Get(context.Background())
 	if err != nil {

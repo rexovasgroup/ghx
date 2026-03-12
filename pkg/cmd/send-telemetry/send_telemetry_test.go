@@ -161,6 +161,9 @@ func TestRunSendTelemetry(t *testing.T) {
 					},
 				}),
 				AuthToken: "test-token",
+				HostType:  telemetry.HostTypeDotcom,
+				Host:      "github.com",
+				User:      "testuser",
 			},
 			setupCAFE: true,
 			handler: func(w http.ResponseWriter, r *http.Request) {
@@ -194,6 +197,9 @@ func TestRunSendTelemetry(t *testing.T) {
 					},
 				}),
 				AuthToken: "test-token",
+				HostType:  telemetry.HostTypeDotcom,
+				Host:      "github.com",
+				User:      "testuser",
 			},
 			setupCAFE: true,
 			handler: func(w http.ResponseWriter, r *http.Request) {
@@ -260,24 +266,24 @@ func TestIsTelemetryFlagEnabled(t *testing.T) {
 		{
 			name: "enterprise host returns false",
 			opts: &SendTelemetryOptions{
-				IsEnterprise: true,
-				AuthToken:    "token123",
+				HostType:  telemetry.HostTypeEnterprise,
+				AuthToken: "token123",
 			},
 			wantEnabled: false,
 		},
 		{
 			name: "no auth token fails closed",
 			opts: &SendTelemetryOptions{
-				IsEnterprise: false,
-				AuthToken:    "",
+				HostType:  telemetry.HostTypeDotcom,
+				AuthToken: "",
 			},
 			wantEnabled: false,
 		},
 		{
 			name: "flag enabled returns true",
 			opts: &SendTelemetryOptions{
-				IsEnterprise: false,
-				AuthToken:    "token123",
+				HostType:  telemetry.HostTypeDotcom,
+				AuthToken: "token123",
 			},
 			cafeServer: func(t *testing.T) *httptest.Server {
 				return newCAFEServerWithFlags(t, &cafe.FeatureFlag{Name: telemetryFeatureFlag, IsEnabled: true})
@@ -287,8 +293,8 @@ func TestIsTelemetryFlagEnabled(t *testing.T) {
 		{
 			name: "flag disabled returns false",
 			opts: &SendTelemetryOptions{
-				IsEnterprise: false,
-				AuthToken:    "token123",
+				HostType:  telemetry.HostTypeDotcom,
+				AuthToken: "token123",
 			},
 			cafeServer: func(t *testing.T) *httptest.Server {
 				return newCAFEServerWithFlags(t, &cafe.FeatureFlag{Name: telemetryFeatureFlag, IsEnabled: false})
@@ -298,8 +304,8 @@ func TestIsTelemetryFlagEnabled(t *testing.T) {
 		{
 			name: "CAFE error fails closed",
 			opts: &SendTelemetryOptions{
-				IsEnterprise: false,
-				AuthToken:    "token123",
+				HostType:  telemetry.HostTypeDotcom,
+				AuthToken: "token123",
 			},
 			cafeServer: func(t *testing.T) *httptest.Server {
 				return newCAFEServer(t, &fakeViewerAPI{stubbedErr: assert.AnError})
@@ -309,8 +315,8 @@ func TestIsTelemetryFlagEnabled(t *testing.T) {
 		{
 			name: "flag missing from response fails closed",
 			opts: &SendTelemetryOptions{
-				IsEnterprise: false,
-				AuthToken:    "token123",
+				HostType:  telemetry.HostTypeDotcom,
+				AuthToken: "token123",
 			},
 			cafeServer: func(t *testing.T) *httptest.Server {
 				return newCAFEServerWithFlags(t)
@@ -322,14 +328,20 @@ func TestIsTelemetryFlagEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.opts.CacheDir = t.TempDir()
+			if tt.opts.Host == "" {
+				tt.opts.Host = "github.com"
+			}
+			if tt.opts.User == "" {
+				tt.opts.User = "testuser"
+			}
 
 			if tt.cafeServer != nil {
 				server := tt.cafeServer(t)
 				defer server.Close()
 				tt.opts.FeatureFlagEndpointURL = server.URL
-			} else if !tt.opts.IsEnterprise && tt.opts.AuthToken == "" {
+			} else if tt.opts.HostType == telemetry.HostTypeDotcom && tt.opts.AuthToken == "" {
 				// No server needed for these cases
-			} else if !tt.opts.IsEnterprise {
+			} else if tt.opts.HostType == telemetry.HostTypeDotcom {
 				tt.opts.FeatureFlagEndpointURL = "http://localhost:1"
 			}
 
@@ -364,6 +376,9 @@ func TestRunSendTelemetry_featureFlagGating(t *testing.T) {
 			PayloadJSON:            validPayload,
 			AuthToken:              "token123",
 			CacheDir:               t.TempDir(),
+			Host:                   "github.com",
+			User:                   "testuser",
+			HostType:               telemetry.HostTypeDotcom,
 		}
 
 		err := runSendTelemetry(opts)
@@ -388,6 +403,9 @@ func TestRunSendTelemetry_featureFlagGating(t *testing.T) {
 			PayloadJSON:            validPayload,
 			AuthToken:              "token123",
 			CacheDir:               t.TempDir(),
+			Host:                   "github.com",
+			User:                   "testuser",
+			HostType:               telemetry.HostTypeDotcom,
 		}
 
 		err := runSendTelemetry(opts)
@@ -406,7 +424,7 @@ func TestRunSendTelemetry_featureFlagGating(t *testing.T) {
 		opts := &SendTelemetryOptions{
 			CentralEndpointURL: centralServer.URL + "/api/usage/github-cli",
 			PayloadJSON:        validPayload,
-			IsEnterprise:       true,
+			HostType:           telemetry.HostTypeEnterprise,
 			CacheDir:           t.TempDir(),
 		}
 
