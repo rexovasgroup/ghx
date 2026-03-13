@@ -41,6 +41,7 @@ func newTestServer(t *testing.T, flags map[string]bool) *httptest.Server {
 }
 
 func TestGet_freshCache(t *testing.T) {
+	// Given a cache with data newer than the TTL
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -62,13 +63,17 @@ func TestGet_freshCache(t *testing.T) {
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 	client.now = func() time.Time { return now }
 
+	// When I fetch the feature flags
 	ff, err := client.Get(context.Background())
+
+	// Then it should succeed and return the cached value without calling CAFE
 	require.NoError(t, err)
 	assert.True(t, ff.Telemetry)
 	assert.False(t, cafeHit, "CAFE should not be called when cache is fresh")
 }
 
 func TestGet_staleCache(t *testing.T) {
+	// Given a cache with data older than the TTL
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -80,6 +85,7 @@ func TestGet_staleCache(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"), data, 0o600))
 
+	// And a CAFE server returning the flag as enabled
 	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": true})
 	defer server.Close()
 
@@ -87,25 +93,33 @@ func TestGet_staleCache(t *testing.T) {
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 	client.now = func() time.Time { return now }
 
+	// When I fetch the feature flags
 	ff, err := client.Get(context.Background())
+
+	// Then it should return the fresh value from CAFE, not the stale cache
 	require.NoError(t, err)
 	assert.True(t, ff.Telemetry)
 }
 
 func TestGet_noCache(t *testing.T) {
+	// Given no cache exists
 	cacheDir := t.TempDir()
 
+	// And a CAFE server returning the flag as enabled
 	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": true})
 	defer server.Close()
 
 	cafeClient := cafe.NewClient(server.Client(), cafe.WithBaseURL(server.URL))
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 
+	// When I fetch the feature flags
 	ff, err := client.Get(context.Background())
+
+	// Then it should return the value from CAFE
 	require.NoError(t, err)
 	assert.True(t, ff.Telemetry)
 
-	// Verify cache was written
+	// And the cache should be written to disk
 	data, err := os.ReadFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"))
 	require.NoError(t, err)
 	var written cache
@@ -114,6 +128,7 @@ func TestGet_noCache(t *testing.T) {
 }
 
 func TestGet_cacheMissingRequestedFlag(t *testing.T) {
+	// Given a fresh cache that does not contain the requested flag
 	cacheDir := t.TempDir()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -125,6 +140,7 @@ func TestGet_cacheMissingRequestedFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"), data, 0o600))
 
+	// And a CAFE server returning the flag as enabled
 	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": true})
 	defer server.Close()
 
@@ -132,23 +148,31 @@ func TestGet_cacheMissingRequestedFlag(t *testing.T) {
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 	client.now = func() time.Time { return now }
 
+	// When I fetch the feature flags
 	ff, err := client.Get(context.Background())
+
+	// Then it should fetch from CAFE and return the flag value
 	require.NoError(t, err)
 	assert.True(t, ff.Telemetry)
 }
 
 func TestGet_cafeError(t *testing.T) {
+	// Given no cache exists and CAFE is unreachable
 	cacheDir := t.TempDir()
 
 	cafeClient := cafe.NewClient(http.DefaultClient, cafe.WithBaseURL("http://localhost:1"))
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 
+	// When I fetch the feature flags
 	_, err := client.Get(context.Background())
+
+	// Then it should return an error
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetching feature flags")
 }
 
 func TestGet_telemetryDisabled(t *testing.T) {
+	// Given no cache exists and CAFE returns the telemetry flag as disabled
 	cacheDir := t.TempDir()
 
 	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": false})
@@ -157,7 +181,10 @@ func TestGet_telemetryDisabled(t *testing.T) {
 	cafeClient := cafe.NewClient(server.Client(), cafe.WithBaseURL(server.URL))
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 
+	// When I fetch the feature flags
 	ff, err := client.Get(context.Background())
+
+	// Then Telemetry should be false
 	require.NoError(t, err)
 	assert.False(t, ff.Telemetry)
 }
