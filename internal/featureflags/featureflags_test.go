@@ -52,14 +52,20 @@ func TestGet_freshCache(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"), data, 0o600))
 
-	// No server needed — cache should be used
-	cafeClient := cafe.NewClient(http.DefaultClient, cafe.WithBaseURL("http://localhost:1"))
+	var cafeHit bool
+	spy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cafeHit = true
+	}))
+	defer spy.Close()
+
+	cafeClient := cafe.NewClient(spy.Client(), cafe.WithBaseURL(spy.URL))
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 	client.now = func() time.Time { return now }
 
 	ff, err := client.Get(context.Background())
 	require.NoError(t, err)
 	assert.True(t, ff.Telemetry)
+	assert.False(t, cafeHit, "CAFE should not be called when cache is fresh")
 }
 
 func TestGet_staleCache(t *testing.T) {
