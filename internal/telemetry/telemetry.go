@@ -132,23 +132,32 @@ func BuildEventPayload(cmd *cobra.Command, version string) *Event {
 }
 
 // SpawnSendTelemetry spawns a subprocess to send telemetry via stdin.
-// The host parameter is passed to the subprocess via GH_HOST so it resolves
-// the correct auth token and feature flag behavior for the targeted host.
 // All errors are silently ignored since telemetry is best-effort.
-func SpawnSendTelemetry(executable, payloadJSON, host string) {
+func SpawnSendTelemetry(executable, payloadJSON string) {
 	cmd := exec.Command(executable, "send-telemetry")
 	cmd.Stdin = strings.NewReader(payloadJSON)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		return
+	}
+	_ = cmd.Process.Release() //nolint:errcheck // Best effort telemetry.
+}
+
+// SpawnFetchFeatureFlags spawns a subprocess to fetch feature flags from CAFE.
+// The host parameter is passed via GH_HOST so the subprocess resolves the
+// correct auth token and cache scope for the targeted host.
+// All errors are silently ignored since this is best-effort.
+func SpawnFetchFeatureFlags(executable, host string) {
+	cmd := exec.Command(executable, "fetch-feature-flags")
+	cmd.Stdin = nil
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	cmd.Env = append(os.Environ(), "GH_HOST="+host)
 	if err := cmd.Start(); err != nil {
 		return
 	}
-	_ = cmd.Process.Release() //nolint:errcheck // Best effort telemetry.
-	// Currently, we do not detach the child process session (e.g. via syscall.SysProcAttr{Setsid: true}).
-	// This means that if the parent is terminated via SIGINT (Ctrl-C), the child also terminates rather than orphaning.
-	// We may change this in future, but it requires additional platform-specific handling and testing,
-	// so for now we accept the limitation that telemetry may not be sent on interrupted commands.
+	_ = cmd.Process.Release() //nolint:errcheck // Best effort.
 }
 
 const telemetryAnnotation = "telemetry"

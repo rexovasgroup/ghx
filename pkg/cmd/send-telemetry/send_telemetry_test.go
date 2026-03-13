@@ -2,7 +2,6 @@ package sendtelemetry
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/cli/cli/v2/internal/config"
-	"github.com/cli/cli/v2/internal/featureflags/cafe"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/pkg/cmdutil"
@@ -18,36 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// fakeViewerAPI implements cafe.ViewerAPI for test CAFE servers.
-type fakeViewerAPI struct {
-	flags      []*cafe.FeatureFlag
-	stubbedErr error
-}
-
-func (f *fakeViewerAPI) GetDetails(context.Context, *cafe.GetDetailsRequest) (*cafe.GetDetailsResponse, error) {
-	return nil, nil
-}
-
-func (f *fakeViewerAPI) GetFeatureFlags(_ context.Context, _ *cafe.GetFeatureFlagsRequest) (*cafe.GetFeatureFlagsResponse, error) {
-	if f.stubbedErr != nil {
-		return nil, f.stubbedErr
-	}
-	return &cafe.GetFeatureFlagsResponse{FeatureFlags: f.flags}, nil
-}
-
-func newCAFEServer(t *testing.T, api cafe.ViewerAPI) *httptest.Server {
-	t.Helper()
-	handler := cafe.NewViewerAPIServer(api)
-	mux := http.NewServeMux()
-	mux.Handle(handler.PathPrefix(), handler)
-	return httptest.NewServer(mux)
-}
-
-func newCAFEServerWithFlags(t *testing.T, flags ...*cafe.FeatureFlag) *httptest.Server {
-	t.Helper()
-	return newCAFEServer(t, &fakeViewerAPI{flags: flags})
-}
 
 func TestNewCmdSendTelemetry(t *testing.T) {
 	tests := []struct {
@@ -60,9 +28,8 @@ func TestNewCmdSendTelemetry(t *testing.T) {
 			name:  "reads payload from stdin",
 			stdin: `{"eventType":"usage","dimensions":{"command":"gh pr list"}}`,
 			wantOpts: SendTelemetryOptions{
-				CentralEndpointURL:     defaultCentralEndpointURL,
-				FeatureFlagEndpointURL: defaultFeatureFlagEndpointURL,
-				PayloadJSON:            `{"eventType":"usage","dimensions":{"command":"gh pr list"}}`,
+				CentralEndpointURL: defaultCentralEndpointURL,
+				PayloadJSON:        `{"eventType":"usage","dimensions":{"command":"gh pr list"}}`,
 			},
 		},
 		{
@@ -70,28 +37,16 @@ func TestNewCmdSendTelemetry(t *testing.T) {
 			stdin: `{"eventType":"usage"}`,
 			env:   map[string]string{"CENTRAL_ENDPOINT_URL": "https://custom.endpoint/api"},
 			wantOpts: SendTelemetryOptions{
-				CentralEndpointURL:     "https://custom.endpoint/api",
-				FeatureFlagEndpointURL: defaultFeatureFlagEndpointURL,
-				PayloadJSON:            `{"eventType":"usage"}`,
-			},
-		},
-		{
-			name:  "uses FEATURE_FLAG_ENDPOINT_URL env var",
-			stdin: `{}`,
-			env:   map[string]string{"FEATURE_FLAG_ENDPOINT_URL": "https://custom.cafe/api"},
-			wantOpts: SendTelemetryOptions{
-				CentralEndpointURL:     defaultCentralEndpointURL,
-				FeatureFlagEndpointURL: "https://custom.cafe/api",
-				PayloadJSON:            `{}`,
+				CentralEndpointURL: "https://custom.endpoint/api",
+				PayloadJSON:        `{"eventType":"usage"}`,
 			},
 		},
 		{
 			name:  "defaults endpoint when env var not set",
 			stdin: `{}`,
 			wantOpts: SendTelemetryOptions{
-				CentralEndpointURL:     defaultCentralEndpointURL,
-				FeatureFlagEndpointURL: defaultFeatureFlagEndpointURL,
-				PayloadJSON:            `{}`,
+				CentralEndpointURL: defaultCentralEndpointURL,
+				PayloadJSON:        `{}`,
 			},
 		},
 	}
@@ -125,7 +80,6 @@ func TestNewCmdSendTelemetry(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, gotOpts)
 			assert.Equal(t, tt.wantOpts.CentralEndpointURL, gotOpts.CentralEndpointURL)
-			assert.Equal(t, tt.wantOpts.FeatureFlagEndpointURL, gotOpts.FeatureFlagEndpointURL)
 			assert.Equal(t, tt.wantOpts.PayloadJSON, gotOpts.PayloadJSON)
 			assert.Equal(t, tt.wantOpts.HTTPUnixSocket, gotOpts.HTTPUnixSocket)
 		})
@@ -133,18 +87,11 @@ func TestNewCmdSendTelemetry(t *testing.T) {
 }
 
 func TestRunSendTelemetry(t *testing.T) {
-	// Helper to create a CAFE server that returns the flag as enabled
-	cafeEnabledServer := func(t *testing.T) *httptest.Server {
-		t.Helper()
-		return newCAFEServerWithFlags(t, &cafe.FeatureFlag{Name: telemetryFeatureFlag, IsEnabled: true})
-	}
-
 	tests := []struct {
 		name       string
 		opts       *SendTelemetryOptions
 		handler    http.HandlerFunc
 		wantErr    bool
-		setupCAFE  bool
 		assertFunc func(t *testing.T, receivedBody []byte, receivedContentType string, receivedPath string)
 	}{
 		{
@@ -160,12 +107,7 @@ func TestRunSendTelemetry(t *testing.T) {
 						Version:      "2.45.0",
 					},
 				}),
-				AuthToken: "test-token",
-				HostType:  telemetry.HostTypeDotcom,
-				Host:      "github.com",
-				User:      "testuser",
 			},
-			setupCAFE: true,
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			},
@@ -182,12 +124,6 @@ func TestRunSendTelemetry(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid JSON is silently ignored",
-			opts: &SendTelemetryOptions{
-				PayloadJSON: "not valid json",
-			},
-		},
-		{
 			name: "server error is silently ignored",
 			opts: &SendTelemetryOptions{
 				PayloadJSON: mustMarshal(t, &telemetry.Event{
@@ -196,12 +132,7 @@ func TestRunSendTelemetry(t *testing.T) {
 						Command: "gh pr list",
 					},
 				}),
-				AuthToken: "test-token",
-				HostType:  telemetry.HostTypeDotcom,
-				Host:      "github.com",
-				User:      "testuser",
 			},
-			setupCAFE: true,
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
@@ -210,14 +141,6 @@ func TestRunSendTelemetry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.opts.CacheDir = t.TempDir()
-
-			if tt.setupCAFE {
-				cafe := cafeEnabledServer(t)
-				defer cafe.Close()
-				tt.opts.FeatureFlagEndpointURL = cafe.URL
-			}
-
 			var receivedBody []byte
 			var receivedContentType string
 			var receivedPath string
@@ -254,182 +177,4 @@ func mustMarshal(t *testing.T, v any) string {
 	data, err := json.Marshal(v)
 	require.NoError(t, err)
 	return string(data)
-}
-
-func TestIsTelemetryFlagEnabled(t *testing.T) {
-	tests := []struct {
-		name        string
-		opts        *SendTelemetryOptions
-		cafeServer  func(t *testing.T) *httptest.Server
-		wantEnabled bool
-	}{
-		{
-			name: "enterprise host returns false",
-			opts: &SendTelemetryOptions{
-				HostType:  telemetry.HostTypeEnterprise,
-				AuthToken: "token123",
-			},
-			wantEnabled: false,
-		},
-		{
-			name: "no auth token fails closed",
-			opts: &SendTelemetryOptions{
-				HostType:  telemetry.HostTypeDotcom,
-				AuthToken: "",
-			},
-			wantEnabled: false,
-		},
-		{
-			name: "flag enabled returns true",
-			opts: &SendTelemetryOptions{
-				HostType:  telemetry.HostTypeDotcom,
-				AuthToken: "token123",
-			},
-			cafeServer: func(t *testing.T) *httptest.Server {
-				return newCAFEServerWithFlags(t, &cafe.FeatureFlag{Name: telemetryFeatureFlag, IsEnabled: true})
-			},
-			wantEnabled: true,
-		},
-		{
-			name: "flag disabled returns false",
-			opts: &SendTelemetryOptions{
-				HostType:  telemetry.HostTypeDotcom,
-				AuthToken: "token123",
-			},
-			cafeServer: func(t *testing.T) *httptest.Server {
-				return newCAFEServerWithFlags(t, &cafe.FeatureFlag{Name: telemetryFeatureFlag, IsEnabled: false})
-			},
-			wantEnabled: false,
-		},
-		{
-			name: "CAFE error fails closed",
-			opts: &SendTelemetryOptions{
-				HostType:  telemetry.HostTypeDotcom,
-				AuthToken: "token123",
-			},
-			cafeServer: func(t *testing.T) *httptest.Server {
-				return newCAFEServer(t, &fakeViewerAPI{stubbedErr: assert.AnError})
-			},
-			wantEnabled: false,
-		},
-		{
-			name: "flag missing from response fails closed",
-			opts: &SendTelemetryOptions{
-				HostType:  telemetry.HostTypeDotcom,
-				AuthToken: "token123",
-			},
-			cafeServer: func(t *testing.T) *httptest.Server {
-				return newCAFEServerWithFlags(t)
-			},
-			wantEnabled: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.opts.CacheDir = t.TempDir()
-			if tt.opts.Host == "" {
-				tt.opts.Host = "github.com"
-			}
-			if tt.opts.User == "" {
-				tt.opts.User = "testuser"
-			}
-
-			if tt.cafeServer != nil {
-				server := tt.cafeServer(t)
-				defer server.Close()
-				tt.opts.FeatureFlagEndpointURL = server.URL
-			} else if tt.opts.HostType == telemetry.HostTypeDotcom && tt.opts.AuthToken == "" {
-				// No server needed for these cases
-			} else if tt.opts.HostType == telemetry.HostTypeDotcom {
-				tt.opts.FeatureFlagEndpointURL = "http://localhost:1"
-			}
-
-			got := isTelemetryFlagEnabled(tt.opts)
-			assert.Equal(t, tt.wantEnabled, got)
-		})
-	}
-}
-
-func TestRunSendTelemetry_featureFlagGating(t *testing.T) {
-	validPayload := mustMarshal(t, &telemetry.Event{
-		EventType: "usage",
-		Dimensions: telemetry.Dimensions{
-			Command: "gh pr list",
-		},
-	})
-
-	t.Run("sends telemetry when flag enabled", func(t *testing.T) {
-		var centralReceived bool
-		centralServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			centralReceived = true
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer centralServer.Close()
-
-		cafeServer := newCAFEServerWithFlags(t, &cafe.FeatureFlag{Name: telemetryFeatureFlag, IsEnabled: true})
-		defer cafeServer.Close()
-
-		opts := &SendTelemetryOptions{
-			CentralEndpointURL:     centralServer.URL + "/api/usage/github-cli",
-			FeatureFlagEndpointURL: cafeServer.URL,
-			PayloadJSON:            validPayload,
-			AuthToken:              "token123",
-			CacheDir:               t.TempDir(),
-			Host:                   "github.com",
-			User:                   "testuser",
-			HostType:               telemetry.HostTypeDotcom,
-		}
-
-		err := runSendTelemetry(opts)
-		require.NoError(t, err)
-		assert.True(t, centralReceived, "expected telemetry to be sent to Central")
-	})
-
-	t.Run("skips telemetry when flag disabled", func(t *testing.T) {
-		var centralReceived bool
-		centralServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			centralReceived = true
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer centralServer.Close()
-
-		cafeServer := newCAFEServerWithFlags(t, &cafe.FeatureFlag{Name: telemetryFeatureFlag, IsEnabled: false})
-		defer cafeServer.Close()
-
-		opts := &SendTelemetryOptions{
-			CentralEndpointURL:     centralServer.URL + "/api/usage/github-cli",
-			FeatureFlagEndpointURL: cafeServer.URL,
-			PayloadJSON:            validPayload,
-			AuthToken:              "token123",
-			CacheDir:               t.TempDir(),
-			Host:                   "github.com",
-			User:                   "testuser",
-			HostType:               telemetry.HostTypeDotcom,
-		}
-
-		err := runSendTelemetry(opts)
-		require.NoError(t, err)
-		assert.False(t, centralReceived, "expected telemetry NOT to be sent to Central")
-	})
-
-	t.Run("skips telemetry for enterprise host", func(t *testing.T) {
-		var centralReceived bool
-		centralServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			centralReceived = true
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer centralServer.Close()
-
-		opts := &SendTelemetryOptions{
-			CentralEndpointURL: centralServer.URL + "/api/usage/github-cli",
-			PayloadJSON:        validPayload,
-			HostType:           telemetry.HostTypeEnterprise,
-			CacheDir:           t.TempDir(),
-		}
-
-		err := runSendTelemetry(opts)
-		require.NoError(t, err)
-		assert.False(t, centralReceived, "expected telemetry NOT to be sent for enterprise host")
-	})
 }

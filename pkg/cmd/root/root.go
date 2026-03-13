@@ -23,6 +23,7 @@ import (
 	copilotCmd "github.com/cli/cli/v2/pkg/cmd/copilot"
 	extensionCmd "github.com/cli/cli/v2/pkg/cmd/extension"
 	"github.com/cli/cli/v2/pkg/cmd/factory"
+	fetchFeatureFlagsCmd "github.com/cli/cli/v2/pkg/cmd/fetch-feature-flags"
 	gistCmd "github.com/cli/cli/v2/pkg/cmd/gist"
 	gpgKeyCmd "github.com/cli/cli/v2/pkg/cmd/gpg-key"
 	issueCmd "github.com/cli/cli/v2/pkg/cmd/issue"
@@ -46,6 +47,7 @@ import (
 	versionCmd "github.com/cli/cli/v2/pkg/cmd/version"
 	workflowCmd "github.com/cli/cli/v2/pkg/cmd/workflow"
 
+	"github.com/cli/cli/v2/internal/featureflags"
 	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/google/shlex"
@@ -66,6 +68,10 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read configuration: %s\n", err)
 	}
+
+	// flagSnapshot holds the immutable feature flag state for this invocation,
+	// set during PersistentPreRunE and read during PersistentPostRun.
+	var flagSnapshot featureflags.FlagState
 
 	cmd := &cobra.Command{
 		Use:   "gh <command> <subcommand> [flags]",
@@ -90,6 +96,29 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 				}
 				return &AuthError{}
 			}
+
+			if !telemetry.IsTelemetryEnabled(cmd) {
+				return nil
+			}
+
+			var configNoTelemetry string
+			if entry := cfg.GetOrDefault("", "no_telemetry"); entry.IsSome() {
+				configNoTelemetry = entry.Unwrap().Value
+			}
+			if telemetry.IsOptedOut(configNoTelemetry) {
+				return nil
+			}
+
+			// Snapshot flags from cache — this is immutable for the rest of this invocation.
+			host, _ := cfg.Authentication().DefaultHost()
+			user, _ := cfg.Authentication().ActiveUser(host)
+			flagSnapshot = featureflags.ReadCachedFlags(cfg.CacheDir(), host, user)
+
+			// If the cache is stale, spawn a background refresh for the next invocation.
+			if featureflags.IsCacheStale(cfg.CacheDir(), host, user) {
+				telemetry.SpawnFetchFeatureFlags(f.Executable(), host)
+			}
+
 			return nil
 		},
 		PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -105,7 +134,11 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 				return
 			}
 
-			host, _ := cfg.Authentication().DefaultHost()
+			// Use the snapshot from PreRunE — never re-read the cache.
+			if !flagSnapshot.Telemetry {
+				return
+			}
+
 			event := telemetry.BuildEventPayload(cmd, version)
 			if event == nil {
 				return
@@ -116,7 +149,7 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 				return
 			}
 
-			telemetry.SpawnSendTelemetry(f.Executable(), string(payloadJSON), host)
+			telemetry.SpawnSendTelemetry(f.Executable(), string(payloadJSON))
 		},
 	}
 
@@ -159,6 +192,7 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 	cmd.AddCommand(versionCmd.NewCmdVersion(f, version, buildDate))
 	cmd.AddCommand(accessibilityCmd.NewCmdAccessibility(f))
 	cmd.AddCommand(sendTelemetryCmd.NewCmdSendTelemetry(f))
+	cmd.AddCommand(fetchFeatureFlagsCmd.NewCmdFetchFeatureFlags(f))
 	cmd.AddCommand(actionsCmd.NewCmdActions(f))
 	cmd.AddCommand(aliasCmd.NewCmdAlias(f))
 	cmd.AddCommand(authCmd.NewCmdAuth(f))
