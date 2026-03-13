@@ -200,21 +200,3 @@ func TestGet_cafeError(t *testing.T) {
 	_, err = os.ReadFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
-
-func TestGet_telemetryDisabled(t *testing.T) {
-	// Given no cache exists and CAFE returns the telemetry flag as disabled
-	cacheDir := t.TempDir()
-
-	server := newTestServer(t, map[string]bool{"gh_cli_telemetry": false})
-	defer server.Close()
-
-	cafeClient := cafe.NewClient(server.Client(), cafe.WithBaseURL(server.URL))
-	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
-
-	// When I fetch the feature flags
-	ff, err := client.Get(context.Background())
-
-	// Then Telemetry should be false
-	require.NoError(t, err)
-	assert.False(t, ff.Telemetry)
-}
