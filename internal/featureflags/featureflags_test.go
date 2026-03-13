@@ -99,6 +99,14 @@ func TestGet_staleCache(t *testing.T) {
 	// Then it should return the fresh value from CAFE, not the stale cache
 	require.NoError(t, err)
 	assert.True(t, ff.Telemetry)
+
+	// And the cache on disk should be updated with the new value
+	updatedData, err := os.ReadFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"))
+	require.NoError(t, err)
+	var updated cache
+	require.NoError(t, json.Unmarshal(updatedData, &updated))
+	assert.Equal(t, true, updated.Flags["gh_cli_telemetry"])
+	assert.Equal(t, now, updated.FetchedAt.UTC())
 }
 
 func TestGet_noCache(t *testing.T) {
