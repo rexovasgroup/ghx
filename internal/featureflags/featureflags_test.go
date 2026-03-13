@@ -30,11 +30,11 @@ func (f *fakeViewerAPI) GetFeatureFlags(_ context.Context, _ *cafe.GetFeatureFla
 
 func newTestServer(t *testing.T, flags map[string]bool) *httptest.Server {
 	t.Helper()
-	var protoFlags []*cafe.FeatureFlag
+	var cafeFlags []*cafe.FeatureFlag
 	for name, enabled := range flags {
-		protoFlags = append(protoFlags, &cafe.FeatureFlag{Name: name, IsEnabled: enabled})
+		cafeFlags = append(cafeFlags, &cafe.FeatureFlag{Name: name, IsEnabled: enabled})
 	}
-	handler := cafe.NewViewerAPIServer(&fakeViewerAPI{flags: protoFlags})
+	handler := cafe.NewViewerAPIServer(&fakeViewerAPI{flags: cafeFlags})
 	mux := http.NewServeMux()
 	mux.Handle(handler.PathPrefix(), handler)
 	return httptest.NewServer(mux)
