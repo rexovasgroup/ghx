@@ -119,7 +119,7 @@ func TestRunFetchFeatureFlags_fromCache(t *testing.T) {
 
 	// Then it should print the cached flag state
 	require.NoError(t, err)
-	assert.Contains(t, stdout.String(), "Telemetry:true")
+	assert.Contains(t, stdout.String(), `"Telemetry": true`)
 }
 
 func TestNewCmdFetchFeatureFlags(t *testing.T) {

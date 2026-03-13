@@ -117,13 +117,17 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 				return
 			}
 
-			flagState, _ := f.FeatureFlags(cmd)
+			flagState, err := f.FeatureFlags(cmd)
+			if err != nil {
+				return
+			}
+
 			if !flagState.Telemetry {
 				return
 			}
 
-			event := telemetry.BuildEventPayload(cmd, version)
-			if event == nil {
+			event, err := telemetry.BuildEventPayload(cmd, version)
+			if err != nil {
 				return
 			}
 

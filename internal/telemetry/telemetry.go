@@ -101,15 +101,11 @@ type Dimensions struct {
 }
 
 // BuildEventPayload constructs the event payload for tracking a command invocation.
-// Returns nil if cmd is nil or the device ID cannot be determined.
-func BuildEventPayload(cmd *cobra.Command, version string) *Event {
-	if cmd == nil {
-		return nil
-	}
-
+// Returns nil if device ID cannot be determined.
+func BuildEventPayload(cmd *cobra.Command, version string) (Event, error) {
 	deviceID, err := deviceIDFunc()
 	if err != nil {
-		return nil
+		return Event{}, err
 	}
 
 	var flags []string
@@ -118,7 +114,7 @@ func BuildEventPayload(cmd *cobra.Command, version string) *Event {
 	})
 	slices.Sort(flags)
 
-	return &Event{
+	return Event{
 		EventType: "usage",
 		Dimensions: Dimensions{
 			Command:      cmd.CommandPath(),
@@ -128,7 +124,7 @@ func BuildEventPayload(cmd *cobra.Command, version string) *Event {
 			Architecture: runtime.GOARCH,
 			Version:      strings.TrimPrefix(version, "v"),
 		},
-	}
+	}, nil
 }
 
 // SpawnSendTelemetry spawns a subprocess to send telemetry via stdin.

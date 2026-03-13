@@ -31,7 +31,7 @@ func stubStateDir(dir string) func() {
 }
 
 func TestBuildEventPayloadNilCommand(t *testing.T) {
-	require.Nil(t, BuildEventPayload(nil, "2.0.0"), "expected nil for nil command")
+	// BuildEventPayload no longer accepts nil cmd — that case is handled by the caller.
 }
 
 func TestBuildEventPayloadPopulatesDimensions(t *testing.T) {
@@ -43,9 +43,10 @@ func TestBuildEventPayloadPopulatesDimensions(t *testing.T) {
 	root.AddCommand(pr)
 	pr.AddCommand(create)
 
-	event := BuildEventPayload(create, "2.45.0")
+	event, err := BuildEventPayload(create, "2.45.0")
+	require.NoError(t, err)
 
-	want := &Event{
+	want := Event{
 		EventType: "usage",
 		Dimensions: Dimensions{
 			Command:      "gh pr create",
@@ -63,7 +64,8 @@ func TestBuildEventPayloadStripsVersionPrefix(t *testing.T) {
 	t.Cleanup(stubDeviceID("test-device-id"))
 
 	cmd := &cobra.Command{Use: "gh"}
-	event := BuildEventPayload(cmd, "v2.45.0")
+	event, err := BuildEventPayload(cmd, "v2.45.0")
+	require.NoError(t, err)
 	require.NotNil(t, event)
 	require.Equal(t, "2.45.0", event.Dimensions.Version)
 }
@@ -72,7 +74,8 @@ func TestBuildEventPayloadReturnsNilWhenDeviceIDFails(t *testing.T) {
 	t.Cleanup(stubDeviceIDError())
 
 	cmd := &cobra.Command{Use: "gh"}
-	require.Nil(t, BuildEventPayload(cmd, "2.45.0"), "expected nil when device ID fails")
+	_, err := BuildEventPayload(cmd, "2.45.0")
+	require.Error(t, err)
 }
 
 func TestBuildEventPayloadCommandPath(t *testing.T) {
@@ -131,7 +134,8 @@ func TestBuildEventPayloadCommandPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := tt.setup()
-			event := BuildEventPayload(cmd, "1.0.0")
+			event, err := BuildEventPayload(cmd, "1.0.0")
+			require.NoError(t, err)
 			require.NotNil(t, event)
 			require.Equal(t, tt.want, event.Dimensions.Command)
 		})
@@ -196,7 +200,8 @@ func TestBuildEventPayloadCollectsFlags(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := tt.setup()
-			event := BuildEventPayload(cmd, "1.0.0")
+			event, err := BuildEventPayload(cmd, "1.0.0")
+			require.NoError(t, err)
 			require.NotNil(t, event)
 			require.Equal(t, tt.wantFlags, event.Dimensions.Flags)
 		})

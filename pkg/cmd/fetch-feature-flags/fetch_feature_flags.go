@@ -3,6 +3,7 @@ package fetchfeatureflags
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -89,7 +90,11 @@ func newCmdFetchFeatureFlags(f *cmdutil.Factory, runF func(*FetchFeatureFlagsOpt
 func runFetchFeatureFlags(opts *FetchFeatureFlagsOptions) error {
 	if opts.FromCache {
 		flags := featureflags.Fetch(opts.CacheDir, opts.Host, opts.User, "")
-		fmt.Fprintf(opts.IO.Out, "%+v", flags)
+		flagStr, err := json.MarshalIndent(flags, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(opts.IO.Out, "%s\n", flagStr)
 		return nil
 	}
 
