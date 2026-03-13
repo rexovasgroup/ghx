@@ -2,7 +2,6 @@ package sendtelemetry
 
 import (
 	"cmp"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -30,21 +29,16 @@ func newCmdSendTelemetry(f *cmdutil.Factory, runF func(*SendTelemetryOptions) er
 		Use:    "send-telemetry",
 		Short:  "Send telemetry event to Central",
 		Hidden: true,
-		Args:   cobra.NoArgs,
+		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := f.Config()
 			if err != nil {
 				return err
 			}
 
-			payload, err := io.ReadAll(f.IOStreams.In)
-			if err != nil {
-				return err
-			}
-
 			opts := &SendTelemetryOptions{
 				CentralEndpointURL: cmp.Or(os.Getenv("CENTRAL_ENDPOINT_URL"), defaultCentralEndpointURL),
-				PayloadJSON:        string(payload),
+				PayloadJSON:        args[0],
 				// This is a best effort to use a Unix Socket if configured. In most cases, if there is one configured
 				// it will be at the global level. However, since Central is not related to a specific host, we can't
 				// know that the socket we choose will work.

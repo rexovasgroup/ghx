@@ -20,30 +20,39 @@ import (
 func TestNewCmdSendTelemetry(t *testing.T) {
 	tests := []struct {
 		name     string
-		stdin    string
+		payload  string
 		env      map[string]string
 		wantOpts SendTelemetryOptions
 	}{
 		{
-			name:  "reads payload from stdin",
-			stdin: `{"eventType":"usage","dimensions":{"command":"gh pr list"}}`,
+			// Given a telemetry payload as an argument
+			// When I run send-telemetry
+			// Then the payload is passed through to the options
+			name:    "reads payload from argument",
+			payload: `{"eventType":"usage","dimensions":{"command":"gh pr list"}}`,
 			wantOpts: SendTelemetryOptions{
 				CentralEndpointURL: defaultCentralEndpointURL,
 				PayloadJSON:        `{"eventType":"usage","dimensions":{"command":"gh pr list"}}`,
 			},
 		},
 		{
-			name:  "uses CENTRAL_ENDPOINT_URL env var",
-			stdin: `{"eventType":"usage"}`,
-			env:   map[string]string{"CENTRAL_ENDPOINT_URL": "https://custom.endpoint/api"},
+			// Given CENTRAL_ENDPOINT_URL is set
+			// When I run send-telemetry
+			// Then the custom endpoint is used
+			name:    "uses CENTRAL_ENDPOINT_URL env var",
+			payload: `{"eventType":"usage"}`,
+			env:     map[string]string{"CENTRAL_ENDPOINT_URL": "https://custom.endpoint/api"},
 			wantOpts: SendTelemetryOptions{
 				CentralEndpointURL: "https://custom.endpoint/api",
 				PayloadJSON:        `{"eventType":"usage"}`,
 			},
 		},
 		{
-			name:  "defaults endpoint when env var not set",
-			stdin: `{}`,
+			// Given no CENTRAL_ENDPOINT_URL is set
+			// When I run send-telemetry
+			// Then the default endpoint is used
+			name:    "defaults endpoint when env var not set",
+			payload: `{}`,
 			wantOpts: SendTelemetryOptions{
 				CentralEndpointURL: defaultCentralEndpointURL,
 				PayloadJSON:        `{}`,
@@ -57,8 +66,7 @@ func TestNewCmdSendTelemetry(t *testing.T) {
 				t.Setenv(k, v)
 			}
 
-			ios, stdin, _, _ := iostreams.Test()
-			stdin.WriteString(tt.stdin)
+			ios, _, _, _ := iostreams.Test()
 			f := &cmdutil.Factory{
 				IOStreams: ios,
 				Config: func() (gh.Config, error) {
@@ -71,7 +79,7 @@ func TestNewCmdSendTelemetry(t *testing.T) {
 				gotOpts = opts
 				return nil
 			})
-			cmd.SetArgs([]string{})
+			cmd.SetArgs([]string{tt.payload})
 			cmd.SetIn(&bytes.Buffer{})
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
@@ -95,6 +103,9 @@ func TestRunSendTelemetry(t *testing.T) {
 		assertFunc func(t *testing.T, receivedBody []byte, receivedContentType string, receivedPath string)
 	}{
 		{
+			// Given a valid telemetry payload
+			// When I send telemetry
+			// Then it should POST to the endpoint with the correct content type
 			name: "posts event to endpoint",
 			opts: &SendTelemetryOptions{
 				PayloadJSON: mustMarshal(t, &telemetry.Event{
@@ -124,6 +135,9 @@ func TestRunSendTelemetry(t *testing.T) {
 			},
 		},
 		{
+			// Given a server that returns an error
+			// When I send telemetry
+			// Then the error should be silently ignored
 			name: "server error is silently ignored",
 			opts: &SendTelemetryOptions{
 				PayloadJSON: mustMarshal(t, &telemetry.Event{

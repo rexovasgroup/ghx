@@ -130,8 +130,8 @@ func BuildEventPayload(cmd *cobra.Command, version string) (Event, error) {
 // SpawnSendTelemetry spawns a subprocess to send telemetry via stdin.
 // All errors are silently ignored since telemetry is best-effort.
 func SpawnSendTelemetry(executable, payloadJSON string) {
-	cmd := exec.Command(executable, "send-telemetry")
-	cmd.Stdin = strings.NewReader(payloadJSON)
+	cmd := exec.Command(executable, "send-telemetry", payloadJSON)
+	cmd.Stdin = nil
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
