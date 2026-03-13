@@ -17,7 +17,8 @@ import (
 
 // fakeViewerAPI implements cafe.ViewerAPI for testing.
 type fakeViewerAPI struct {
-	flags []*cafe.FeatureFlag
+	flags      []*cafe.FeatureFlag
+	stubbedErr error
 }
 
 func (f *fakeViewerAPI) GetDetails(context.Context, *cafe.GetDetailsRequest) (*cafe.GetDetailsResponse, error) {
@@ -25,6 +26,9 @@ func (f *fakeViewerAPI) GetDetails(context.Context, *cafe.GetDetailsRequest) (*c
 }
 
 func (f *fakeViewerAPI) GetFeatureFlags(_ context.Context, _ *cafe.GetFeatureFlagsRequest) (*cafe.GetFeatureFlagsResponse, error) {
+	if f.stubbedErr != nil {
+		return nil, f.stubbedErr
+	}
 	return &cafe.GetFeatureFlagsResponse{FeatureFlags: f.flags}, nil
 }
 
@@ -173,10 +177,16 @@ func TestGet_cacheMissingRequestedFlag(t *testing.T) {
 }
 
 func TestGet_cafeError(t *testing.T) {
-	// Given no cache exists and CAFE is unreachable
+	// Given no cache exists and CAFE returns an error
 	cacheDir := t.TempDir()
 
-	cafeClient := cafe.NewClient(http.DefaultClient, cafe.WithBaseURL("http://localhost:1"))
+	handler := cafe.NewViewerAPIServer(&fakeViewerAPI{stubbedErr: assert.AnError})
+	mux := http.NewServeMux()
+	mux.Handle(handler.PathPrefix(), handler)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	cafeClient := cafe.NewClient(server.Client(), cafe.WithBaseURL(server.URL))
 	client := NewClient(cafeClient, cacheDir, "github.com", "testuser")
 
 	// When I fetch the feature flags
@@ -185,6 +195,10 @@ func TestGet_cafeError(t *testing.T) {
 	// Then it should return an error
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetching feature flags")
+
+	// And no cache file should be written
+	_, err = os.ReadFile(filepath.Join(cacheDir, "github.com-testuser-feature-flags.json"))
+	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestGet_telemetryDisabled(t *testing.T) {
