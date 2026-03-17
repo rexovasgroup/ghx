@@ -93,7 +93,7 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) (*cobra.Command, 
 			}
 
 			if telemetry.IsTelemetryEnabled(cmd) {
-				// Snapshot feature flags — this triggers a background refresh if stale.
+				// Snapshot feature flags; this triggers a background refresh if stale.
 				// The snapshot is memoized in the factory for the rest of this invocation.
 				// This is just a temporary state while we roll out feature flagging, because
 				// we don't want to overwhelm the CAFE baristas!
