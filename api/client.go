@@ -36,7 +36,7 @@ type Client struct {
 	http *http.Client
 }
 
-func (c *Client) HTTP() *http.Client {
+func (c Client) HTTP() *http.Client {
 	return c.http
 }
 

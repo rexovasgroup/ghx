@@ -225,7 +225,7 @@ func (e Editable) MilestoneId() (*string, error) {
 
 // Clone creates a mostly-shallow copy of Editable suitable for use in parallel
 // go routines. Fields that would be mutated will be copied.
-func (e *Editable) Clone() Editable {
+func (e Editable) Clone() Editable {
 	return Editable{
 		Title:     e.Title.clone(),
 		Body:      e.Body.clone(),
