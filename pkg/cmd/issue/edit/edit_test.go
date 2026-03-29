@@ -368,6 +368,14 @@ func TestNewCmdEdit(t *testing.T) {
 				AddBlocking: []string{"300", "301"},
 			},
 		},
+		{
+			name:  "remove-blocking flag",
+			input: "23 --remove-blocking 300",
+			output: EditOptions{
+				IssueNumbers:   []int{23},
+				RemoveBlocking: []string{"300"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1088,6 +1096,38 @@ func Test_editRun(t *testing.T) {
 					{ "data": { "addBlockedBy": { "blockedIssue": { "id": "BLOCKED_300_ID" } } } }`,
 						func(inputs map[string]interface{}) {
 							// --add-blocking swaps: OTHER issue is blocked BY this issue
+							assert.Equal(t, "BLOCKED_300_ID", inputs["issueId"])
+							assert.Equal(t, "123", inputs["blockingIssueId"])
+						}),
+				)
+			},
+			stdout: "https://github.com/OWNER/REPO/issue/123\n",
+		},
+		{
+			name: "edit remove blocking swaps args",
+			input: &EditOptions{
+				Detector:       &fd.EnabledDetectorMock{},
+				IssueNumbers:   []int{123},
+				Interactive:    false,
+				RemoveBlocking: []string{"300"},
+				FetchOptions: func(_ *api.Client, _ ghrepo.Interface, _ *prShared.Editable, _ gh.ProjectsV1Support) error {
+					return nil
+				},
+			},
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				mockIssueGet(t, reg)
+				reg.Register(
+					httpmock.GraphQL(`query IssueNodeID\b`),
+					httpmock.StringResponse(`
+					{ "data": { "repository": { "issue": { "id": "BLOCKED_300_ID" } } } }
+					`),
+				)
+				reg.Register(
+					httpmock.GraphQL(`mutation RemoveBlockedBy\b`),
+					httpmock.GraphQLMutation(`
+					{ "data": { "removeBlockedBy": { "blockedIssue": { "id": "BLOCKED_300_ID" } } } }`,
+						func(inputs map[string]interface{}) {
+							// --remove-blocking swaps: OTHER issue is no longer blocked BY this issue
 							assert.Equal(t, "BLOCKED_300_ID", inputs["issueId"])
 							assert.Equal(t, "123", inputs["blockingIssueId"])
 						}),

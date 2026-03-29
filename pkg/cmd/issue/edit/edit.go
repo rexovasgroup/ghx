@@ -42,6 +42,7 @@ type EditOptions struct {
 	AddBlockedBy    []string
 	RemoveBlockedBy []string
 	AddBlocking     []string
+	RemoveBlocking  []string
 
 	prShared.Editable
 }
@@ -184,7 +185,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 			// but still need to prevent interactive mode.
 			hasRelationshipFlags := len(opts.AddSubIssues) > 0 || len(opts.RemoveSubIssues) > 0 ||
 				len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 ||
-				len(opts.AddBlocking) > 0
+				len(opts.AddBlocking) > 0 || len(opts.RemoveBlocking) > 0
 
 			if !opts.Editable.Dirty() && !hasRelationshipFlags {
 				opts.Interactive = true
@@ -225,6 +226,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 	cmd.Flags().StringSliceVar(&opts.AddBlockedBy, "add-blocked-by", nil, "Add 'blocked by' relationships by issue `number` or URL")
 	cmd.Flags().StringSliceVar(&opts.RemoveBlockedBy, "remove-blocked-by", nil, "Remove 'blocked by' relationships by issue `number` or URL")
 	cmd.Flags().StringSliceVar(&opts.AddBlocking, "add-blocking", nil, "Add 'blocking' relationships by issue `number` or URL")
+	cmd.Flags().StringSliceVar(&opts.RemoveBlocking, "remove-blocking", nil, "Remove 'blocking' relationships by issue `number` or URL")
 
 	return cmd
 }
@@ -501,7 +503,8 @@ func applyEditSubIssues(client *api.Client, baseRepo ghrepo.Interface, issue *ap
 }
 
 func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *EditOptions, features fd.IssueFeatures) error {
-	hasRelationshipFlags := len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 || len(opts.AddBlocking) > 0
+	hasRelationshipFlags := len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 ||
+		len(opts.AddBlocking) > 0 || len(opts.RemoveBlocking) > 0
 	if !hasRelationshipFlags {
 		return nil
 	}
@@ -540,6 +543,17 @@ func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue
 			return fmt.Errorf("resolving --add-blocking reference %q: %w", ref, err)
 		}
 		if err := api.AddBlockedBy(client, hostname, blockedID, issue.ID); err != nil {
+			return err
+		}
+	}
+
+	for _, ref := range opts.RemoveBlocking {
+		// --remove-blocking swaps args: the OTHER issue is no longer blocked by THIS issue
+		blockedID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --remove-blocking reference %q: %w", ref, err)
+		}
+		if err := api.RemoveBlockedBy(client, hostname, blockedID, issue.ID); err != nil {
 			return err
 		}
 	}
