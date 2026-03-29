@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/MakeNowJust/heredoc"
@@ -452,22 +451,9 @@ func applyIssueTypes(client *api.Client, baseRepo ghrepo.Interface, issue *api.I
 		return nil
 	}
 
-	issueTypes, err := api.RepoIssueTypes(client, baseRepo)
+	issueTypeID, err := issueShared.ResolveIssueTypeName(client, baseRepo, opts.IssueType)
 	if err != nil {
 		return err
-	}
-
-	issueTypeID := ""
-	typeNames := make([]string, len(issueTypes))
-	for i, t := range issueTypes {
-		typeNames[i] = t.Name
-		if strings.EqualFold(t.Name, opts.IssueType) {
-			issueTypeID = t.ID
-		}
-	}
-
-	if issueTypeID == "" {
-		return fmt.Errorf("type %q not found; available types: %s", opts.IssueType, strings.Join(typeNames, ", "))
 	}
 
 	return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, issueTypeID)
@@ -479,7 +465,7 @@ func applyParent(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue
 		return nil
 	}
 
-	parentID, err := resolveIssueRef(client, baseRepo, opts.Parent)
+	parentID, err := issueShared.ResolveIssueRef(client, baseRepo, opts.Parent)
 	if err != nil {
 		return fmt.Errorf("resolving parent: %w", err)
 	}
@@ -492,7 +478,7 @@ func applyRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *ap
 	hostname := baseRepo.RepoHost()
 
 	for _, ref := range opts.BlockedBy {
-		blockingID, err := resolveIssueRef(client, baseRepo, ref)
+		blockingID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
 		if err != nil {
 			return fmt.Errorf("resolving --blocked-by reference %q: %w", ref, err)
 		}
@@ -503,7 +489,7 @@ func applyRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *ap
 
 	for _, ref := range opts.Blocking {
 		// --blocking swaps the args: the OTHER issue is blocked by THIS issue
-		blockedID, err := resolveIssueRef(client, baseRepo, ref)
+		blockedID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
 		if err != nil {
 			return fmt.Errorf("resolving --blocking reference %q: %w", ref, err)
 		}
@@ -513,19 +499,4 @@ func applyRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *ap
 	}
 
 	return nil
-}
-
-// resolveIssueRef parses an issue reference (number or URL) and returns its node ID.
-func resolveIssueRef(client *api.Client, baseRepo ghrepo.Interface, ref string) (string, error) {
-	number, repo, err := issueShared.ParseIssueFromArg(ref)
-	if err != nil {
-		return "", err
-	}
-
-	targetRepo := baseRepo
-	if r, ok := repo.Value(); ok {
-		targetRepo = r
-	}
-
-	return api.IssueNodeID(client, targetRepo, number)
 }

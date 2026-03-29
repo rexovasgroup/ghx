@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -448,20 +447,11 @@ func editRun(opts *EditOptions) error {
 }
 
 func applyEditIssueType(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, typeName string) error {
-	issueTypes, err := api.RepoIssueTypes(client, baseRepo)
+	issueTypeID, err := issueShared.ResolveIssueTypeName(client, baseRepo, typeName)
 	if err != nil {
 		return err
 	}
-
-	typeNames := make([]string, len(issueTypes))
-	for i, t := range issueTypes {
-		typeNames[i] = t.Name
-		if strings.EqualFold(t.Name, typeName) {
-			return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, t.ID)
-		}
-	}
-
-	return fmt.Errorf("type %q not found; available types: %s", typeName, strings.Join(typeNames, ", "))
+	return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, issueTypeID)
 }
 
 func applyEditParent(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, parentRef string) error {
@@ -488,7 +478,7 @@ func applyEditParent(client *api.Client, baseRepo ghrepo.Interface, issue *api.I
 	}
 
 	// Set parent with replaceParent=true
-	parentID, err := resolveIssueRef(client, baseRepo, parentRef)
+	parentID, err := issueShared.ResolveIssueRef(client, baseRepo, parentRef)
 	if err != nil {
 		return fmt.Errorf("resolving parent: %w", err)
 	}
@@ -499,7 +489,7 @@ func applyEditSubIssues(client *api.Client, baseRepo ghrepo.Interface, issue *ap
 	hostname := baseRepo.RepoHost()
 
 	for _, ref := range opts.AddSubIssues {
-		subID, err := resolveIssueRef(client, baseRepo, ref)
+		subID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
 		if err != nil {
 			return fmt.Errorf("resolving --add-sub-issue reference %q: %w", ref, err)
 		}
@@ -509,7 +499,7 @@ func applyEditSubIssues(client *api.Client, baseRepo ghrepo.Interface, issue *ap
 	}
 
 	for _, ref := range opts.RemoveSubIssues {
-		subID, err := resolveIssueRef(client, baseRepo, ref)
+		subID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
 		if err != nil {
 			return fmt.Errorf("resolving --remove-sub-issue reference %q: %w", ref, err)
 		}
@@ -535,7 +525,7 @@ func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue
 	hostname := baseRepo.RepoHost()
 
 	for _, ref := range opts.AddBlockedBy {
-		blockingID, err := resolveIssueRef(client, baseRepo, ref)
+		blockingID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
 		if err != nil {
 			return fmt.Errorf("resolving --add-blocked-by reference %q: %w", ref, err)
 		}
@@ -545,7 +535,7 @@ func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue
 	}
 
 	for _, ref := range opts.RemoveBlockedBy {
-		blockingID, err := resolveIssueRef(client, baseRepo, ref)
+		blockingID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
 		if err != nil {
 			return fmt.Errorf("resolving --remove-blocked-by reference %q: %w", ref, err)
 		}
@@ -556,7 +546,7 @@ func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue
 
 	for _, ref := range opts.AddBlocking {
 		// --add-blocking swaps args: the OTHER issue is blocked by THIS issue
-		blockedID, err := resolveIssueRef(client, baseRepo, ref)
+		blockedID, err := issueShared.ResolveIssueRef(client, baseRepo, ref)
 		if err != nil {
 			return fmt.Errorf("resolving --add-blocking reference %q: %w", ref, err)
 		}
@@ -566,19 +556,4 @@ func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue
 	}
 
 	return nil
-}
-
-// resolveIssueRef parses an issue reference (number or URL) and returns its node ID.
-func resolveIssueRef(client *api.Client, baseRepo ghrepo.Interface, ref string) (string, error) {
-	number, repo, err := issueShared.ParseIssueFromArg(ref)
-	if err != nil {
-		return "", err
-	}
-
-	targetRepo := baseRepo
-	if r, ok := repo.Value(); ok {
-		targetRepo = r
-	}
-
-	return api.IssueNodeID(client, targetRepo, number)
 }
