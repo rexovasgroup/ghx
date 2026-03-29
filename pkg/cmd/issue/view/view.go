@@ -92,6 +92,7 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 var defaultFields = []string{
 	"number", "url", "state", "createdAt", "title", "body", "author", "milestone",
 	"assignees", "labels", "reactionGroups", "lastComment", "stateReason",
+	"issueType", "parent", "subIssues", "subIssuesSummary", "blockedBy", "blocking",
 }
 
 func viewRun(opts *ViewOptions) error {
@@ -219,9 +220,15 @@ func printHumanIssuePreview(opts *ViewOptions, baseRepo ghrepo.Interface, issue 
 
 	// Header (Title and State)
 	fmt.Fprintf(out, "%s %s#%d\n", cs.Bold(issue.Title), ghrepo.FullName(baseRepo), issue.Number)
+
+	// State line — include issue type prefix when present
+	stateLine := issueStateTitleWithColor(cs, issue)
+	if issue.IssueType != nil {
+		stateLine = cs.Muted(issue.IssueType.Name) + " · " + stateLine
+	}
 	fmt.Fprintf(out,
-		"%s • %s opened %s • %s\n",
-		issueStateTitleWithColor(cs, issue),
+		"%s · %s opened %s · %s\n",
+		stateLine,
 		issue.Author.DisplayName(),
 		text.FuzzyAgo(opts.Now(), issue.CreatedAt),
 		text.Pluralize(issue.Comments.TotalCount, "comment"),
@@ -241,6 +248,22 @@ func printHumanIssuePreview(opts *ViewOptions, baseRepo ghrepo.Interface, issue 
 	if labels := issueLabelList(issue, cs); labels != "" {
 		fmt.Fprint(out, cs.Bold("Labels: "))
 		fmt.Fprintln(out, labels)
+	}
+	if issue.IssueType != nil {
+		fmt.Fprint(out, cs.Bold("Type: "))
+		fmt.Fprintln(out, issue.IssueType.Name)
+	}
+	if issue.Parent != nil {
+		fmt.Fprint(out, cs.Bold("Parent: "))
+		fmt.Fprintln(out, formatLinkedIssueRef(baseRepo, issue.Parent)+" "+issue.Parent.Title)
+	}
+	if blockedBy := formatLinkedIssueList(baseRepo, issue.BlockedBy.Nodes); blockedBy != "" {
+		fmt.Fprint(out, cs.Bold("Blocked by: "))
+		fmt.Fprintln(out, blockedBy)
+	}
+	if blocking := formatLinkedIssueList(baseRepo, issue.Blocking.Nodes); blocking != "" {
+		fmt.Fprint(out, cs.Bold("Blocking: "))
+		fmt.Fprintln(out, blocking)
 	}
 	if projects := issueProjectList(*issue); projects != "" {
 		fmt.Fprint(out, cs.Bold("Projects: "))
@@ -266,6 +289,30 @@ func printHumanIssuePreview(opts *ViewOptions, baseRepo ghrepo.Interface, issue 
 	}
 	fmt.Fprintf(out, "\n%s\n", md)
 
+	// Sub-issues section
+	if issue.SubIssuesSummary.Total > 0 {
+		fmt.Fprintf(out, "%s · %d/%d (%d%%)\n",
+			cs.Bold("Sub-issues"),
+			issue.SubIssuesSummary.Completed,
+			issue.SubIssuesSummary.Total,
+			int(issue.SubIssuesSummary.PercentCompleted),
+		)
+		for _, sub := range issue.SubIssues.Nodes {
+			stateColor := cs.Green
+			stateLabel := "Open"
+			if sub.State == "CLOSED" {
+				stateColor = cs.Magenta
+				stateLabel = "Closed"
+			}
+			fmt.Fprintf(out, "%s %s %s\n",
+				stateColor(stateLabel),
+				formatLinkedIssueRef(baseRepo, &sub),
+				sub.Title,
+			)
+		}
+		fmt.Fprintln(out)
+	}
+
 	// Comments
 	if issue.Comments.TotalCount > 0 {
 		preview := !opts.Comments
@@ -280,6 +327,27 @@ func printHumanIssuePreview(opts *ViewOptions, baseRepo ghrepo.Interface, issue 
 	fmt.Fprintf(out, cs.Muted("View this issue on GitHub: %s\n"), issue.URL)
 
 	return nil
+}
+
+// formatLinkedIssueRef formats an issue reference, using just #N for same-repo
+// or owner/repo#N for cross-repo references.
+func formatLinkedIssueRef(baseRepo ghrepo.Interface, issue *api.LinkedIssue) string {
+	if issue.Repository.NameWithOwner != "" && issue.Repository.NameWithOwner != ghrepo.FullName(baseRepo) {
+		return fmt.Sprintf("%s#%d", issue.Repository.NameWithOwner, issue.Number)
+	}
+	return fmt.Sprintf("%s#%d", ghrepo.FullName(baseRepo), issue.Number)
+}
+
+// formatLinkedIssueList formats a comma-separated list of linked issue references with titles.
+func formatLinkedIssueList(baseRepo ghrepo.Interface, issues []api.LinkedIssue) string {
+	if len(issues) == 0 {
+		return ""
+	}
+	parts := make([]string, len(issues))
+	for i, issue := range issues {
+		parts[i] = formatLinkedIssueRef(baseRepo, &issue) + " " + issue.Title
+	}
+	return strings.Join(parts, ", ")
 }
 
 func issueStateTitleWithColor(cs *iostreams.ColorScheme, issue *api.Issue) string {

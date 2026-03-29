@@ -46,6 +46,12 @@ func TestJSONFields(t *testing.T) {
 		"url",
 		"isPinned",
 		"stateReason",
+		"issueType",
+		"parent",
+		"subIssues",
+		"subIssuesSummary",
+		"blockedBy",
+		"blocking",
 	})
 }
 
