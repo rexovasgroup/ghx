@@ -38,6 +38,7 @@ type EditableString struct {
 	Default string
 	Options []string
 	Edited  bool
+	Allowed bool
 }
 
 type EditableSlice struct {
@@ -307,6 +308,7 @@ func (es *EditableString) clone() EditableString {
 		Value:   es.Value,
 		Default: es.Default,
 		Edited:  es.Edited,
+		Allowed: es.Allowed,
 		// Shallow copies since no mutation.
 		Options: es.Options,
 	}
@@ -490,7 +492,14 @@ func FieldsToEditSurvey(p EditPrompter, editable *Editable) error {
 	if editable.Reviewers.Allowed {
 		opts = append(opts, "Reviewers")
 	}
-	opts = append(opts, "Assignees", "Labels", "Type", "Parent", "Projects", "Milestone")
+	opts = append(opts, "Assignees", "Labels")
+	if editable.IssueType.Allowed {
+		opts = append(opts, "Type")
+	}
+	if editable.Parent.Allowed {
+		opts = append(opts, "Parent")
+	}
+	opts = append(opts, "Projects", "Milestone")
 	results, err := multiSelectSurvey(p, "What would you like to edit?", []string{}, opts)
 	if err != nil {
 		return err

@@ -424,6 +424,7 @@ func TestNewCmdEdit(t *testing.T) {
 			assert.Equal(t, tt.output.AddBlockedBy, gotOpts.AddBlockedBy)
 			assert.Equal(t, tt.output.RemoveBlockedBy, gotOpts.RemoveBlockedBy)
 			assert.Equal(t, tt.output.AddBlocking, gotOpts.AddBlocking)
+			assert.Equal(t, tt.output.RemoveBlocking, gotOpts.RemoveBlocking)
 			if tt.expectedBaseRepo != nil {
 				baseRepo, err := gotOpts.BaseRepo()
 				require.NoError(t, err)

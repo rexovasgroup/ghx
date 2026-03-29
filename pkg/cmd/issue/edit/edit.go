@@ -244,6 +244,8 @@ func editRun(opts *EditOptions) error {
 
 	// Prompt the user which fields they'd like to edit.
 	editable := opts.Editable
+	editable.IssueType.Allowed = true
+	editable.Parent.Allowed = true
 	if opts.Interactive {
 		err = opts.FieldsToEditSurvey(opts.Prompter, &editable)
 		if err != nil {

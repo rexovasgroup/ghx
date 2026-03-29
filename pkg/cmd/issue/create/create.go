@@ -49,8 +49,9 @@ type CreateOptions struct {
 	Milestone string
 	Template  string
 
-	IssueType string
-	Parent    string
+	IssueType   string
+	issueTypeID string // resolved during interactive flow to avoid double API call
+	Parent      string
 	BlockedBy []string
 	Blocking  []string
 }
@@ -317,6 +318,7 @@ func createRun(opts *CreateOptions) (err error) {
 					return
 				}
 				opts.IssueType = typeNames[selected]
+				opts.issueTypeID = issueTypes[selected].ID
 			}
 		}
 
@@ -411,7 +413,7 @@ func createRun(opts *CreateOptions) (err error) {
 		}
 
 		// Post-creation mutations for Issues 2.0 fields
-		err = applyIssueTypes(apiClient, baseRepo, newIssue, opts)
+		err = applyIssueType(apiClient, baseRepo, newIssue, opts)
 		if err != nil {
 			return
 		}
@@ -445,18 +447,23 @@ func generatePreviewURL(apiClient *api.Client, baseRepo ghrepo.Interface, tb prS
 	return prShared.WithPrAndIssueQueryParams(apiClient, baseRepo, openURL, tb, projectsV1Support)
 }
 
-// applyIssueTypes resolves the --type flag and sets the issue type via mutation.
-func applyIssueTypes(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *CreateOptions) error {
+// applyIssueType resolves the --type flag and sets the issue type via mutation.
+func applyIssueType(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *CreateOptions) error {
 	if opts.IssueType == "" {
 		return nil
 	}
 
-	issueTypeID, err := issueShared.ResolveIssueTypeName(client, baseRepo, opts.IssueType)
-	if err != nil {
-		return err
+	// Use pre-resolved ID from interactive flow if available
+	typeID := opts.issueTypeID
+	if typeID == "" {
+		var err error
+		typeID, err = issueShared.ResolveIssueTypeName(client, baseRepo, opts.IssueType)
+		if err != nil {
+			return err
+		}
 	}
 
-	return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, issueTypeID)
+	return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, typeID)
 }
 
 // applyParent resolves the --parent flag and adds the issue as a sub-issue.

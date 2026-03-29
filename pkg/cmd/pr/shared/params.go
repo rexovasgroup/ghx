@@ -246,7 +246,11 @@ func SearchQueryBuild(options FilterOptions, advancedIssueSearchSyntax bool) str
 		if searchTerms != "" {
 			searchTerms += " "
 		}
-		searchTerms += "type:" + options.IssueType
+		if strings.Contains(options.IssueType, " ") {
+			searchTerms += fmt.Sprintf(`type:"%s"`, options.IssueType)
+		} else {
+			searchTerms += "type:" + options.IssueType
+		}
 	}
 
 	query := search.Query{
