@@ -21,6 +21,8 @@ type Editable struct {
 	Labels             EditableSlice
 	Projects           EditableProjects
 	Milestone          EditableString
+	IssueType          EditableString
+	Parent             EditableString
 	Metadata           api.RepoMetadataResult
 
 	// TODO ApiActorsSupported
@@ -75,7 +77,9 @@ func (e Editable) Dirty() bool {
 		e.Assignees.Edited ||
 		e.Labels.Edited ||
 		e.Projects.Edited ||
-		e.Milestone.Edited
+		e.Milestone.Edited ||
+		e.IssueType.Edited ||
+		e.Parent.Edited
 }
 
 func (e Editable) TitleValue() *string {
@@ -290,6 +294,8 @@ func (e *Editable) Clone() Editable {
 		Labels:             e.Labels.clone(),
 		Projects:           e.Projects.clone(),
 		Milestone:          e.Milestone.clone(),
+		IssueType:          e.IssueType.clone(),
+		Parent:             e.Parent.clone(),
 		ApiActorsSupported: e.ApiActorsSupported,
 		// Shallow copy since no mutation.
 		Metadata: e.Metadata,
@@ -443,6 +449,22 @@ func EditFieldsSurvey(p EditPrompter, editable *Editable, editorCommand string) 
 			return err
 		}
 	}
+	if editable.IssueType.Edited {
+		if len(editable.IssueType.Options) > 0 {
+			var selected int
+			selected, err = p.Select("Type", editable.IssueType.Default, editable.IssueType.Options)
+			if err != nil {
+				return err
+			}
+			editable.IssueType.Value = editable.IssueType.Options[selected]
+		}
+	}
+	if editable.Parent.Edited {
+		editable.Parent.Value, err = p.Input("Parent (issue number or URL, leave empty to remove)", editable.Parent.Default)
+		if err != nil {
+			return err
+		}
+	}
 	confirm, err := p.Confirm("Submit?", true)
 	if err != nil {
 		return err
@@ -468,7 +490,7 @@ func FieldsToEditSurvey(p EditPrompter, editable *Editable) error {
 	if editable.Reviewers.Allowed {
 		opts = append(opts, "Reviewers")
 	}
-	opts = append(opts, "Assignees", "Labels", "Projects", "Milestone")
+	opts = append(opts, "Assignees", "Labels", "Type", "Parent", "Projects", "Milestone")
 	results, err := multiSelectSurvey(p, "What would you like to edit?", []string{}, opts)
 	if err != nil {
 		return err
@@ -488,6 +510,12 @@ func FieldsToEditSurvey(p EditPrompter, editable *Editable) error {
 	}
 	if contains(results, "Labels") {
 		editable.Labels.Edited = true
+	}
+	if contains(results, "Type") {
+		editable.IssueType.Edited = true
+	}
+	if contains(results, "Parent") {
+		editable.Parent.Edited = true
 	}
 	if contains(results, "Projects") {
 		editable.Projects.Edited = true
@@ -591,6 +619,18 @@ func FetchOptions(client *api.Client, repo ghrepo.Interface, editable *Editable,
 	editable.Labels.Options = labels
 	editable.Projects.Options = projects
 	editable.Milestone.Options = milestones
+
+	// Fetch issue types if editing type
+	if editable.IssueType.Edited {
+		issueTypes, err := api.RepoIssueTypes(client, repo)
+		if err == nil {
+			typeNames := make([]string, len(issueTypes))
+			for i, t := range issueTypes {
+				typeNames[i] = t.Name
+			}
+			editable.IssueType.Options = typeNames
+		}
+	}
 
 	return nil
 }

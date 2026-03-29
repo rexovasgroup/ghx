@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/text"
-	shared "github.com/cli/cli/v2/pkg/cmd/issue/shared"
+	issueShared "github.com/cli/cli/v2/pkg/cmd/issue/shared"
 	prShared "github.com/cli/cli/v2/pkg/cmd/pr/shared"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
@@ -34,6 +35,14 @@ type EditOptions struct {
 
 	IssueNumbers []int
 	Interactive  bool
+
+	SetParent       string
+	RemoveParent    bool
+	AddSubIssues    []string
+	RemoveSubIssues []string
+	AddBlockedBy    []string
+	RemoveBlockedBy []string
+	AddBlocking     []string
 
 	prShared.Editable
 }
@@ -76,10 +85,15 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 			$ gh issue edit 23 --remove-milestone
 			$ gh issue edit 23 --body-file body.txt
 			$ gh issue edit 23 34 --add-label "help wanted"
+			$ gh issue edit 23 --type Bug
+			$ gh issue edit 23 --set-parent 100
+			$ gh issue edit 23 --remove-parent
+			$ gh issue edit 100 --add-sub-issue 123,124
+			$ gh issue edit 123 --add-blocked-by 200 --add-blocking 300,301
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issueNumbers, baseRepo, err := shared.ParseIssuesFromArgs(args)
+			issueNumbers, baseRepo, err := issueShared.ParseIssuesFromArgs(args)
 			if err != nil {
 				return err
 			}
@@ -127,6 +141,14 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 				return err
 			}
 
+			if err := cmdutil.MutuallyExclusive(
+				"specify only one of --set-parent or --remove-parent",
+				flags.Changed("set-parent"),
+				opts.RemoveParent,
+			); err != nil {
+				return err
+			}
+
 			if flags.Changed("title") {
 				opts.Editable.Title.Edited = true
 			}
@@ -147,8 +169,23 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 				// which results in milestone association removal. For reference,
 				// see the `Editable.MilestoneId` method.
 			}
+			if flags.Changed("type") {
+				opts.Editable.IssueType.Edited = true
+			}
+			if flags.Changed("set-parent") || opts.RemoveParent {
+				opts.Editable.Parent.Edited = true
+				if opts.RemoveParent {
+					opts.Editable.Parent.Value = ""
+				}
+			}
 
-			if !opts.Editable.Dirty() {
+			// Sub-issue and relationship flags are outside the Editable pattern
+			// but still need to prevent interactive mode.
+			hasRelationshipFlags := len(opts.AddSubIssues) > 0 || len(opts.RemoveSubIssues) > 0 ||
+				len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 ||
+				len(opts.AddBlocking) > 0
+
+			if !opts.Editable.Dirty() && !hasRelationshipFlags {
 				opts.Interactive = true
 			}
 
@@ -179,6 +216,14 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 	cmd.Flags().StringSliceVar(&opts.Editable.Projects.Remove, "remove-project", nil, "Remove the issue from projects by `title`")
 	cmd.Flags().StringVarP(&opts.Editable.Milestone.Value, "milestone", "m", "", "Edit the milestone the issue belongs to by `name`")
 	cmd.Flags().BoolVar(&removeMilestone, "remove-milestone", false, "Remove the milestone association from the issue")
+	cmd.Flags().StringVar(&opts.Editable.IssueType.Value, "type", "", "Set the issue type by `name`")
+	cmd.Flags().StringVar(&opts.SetParent, "set-parent", "", "Set the parent issue by `number` or URL")
+	cmd.Flags().BoolVar(&opts.RemoveParent, "remove-parent", false, "Remove the parent issue")
+	cmd.Flags().StringSliceVar(&opts.AddSubIssues, "add-sub-issue", nil, "Add sub-issues by `number` or URL")
+	cmd.Flags().StringSliceVar(&opts.RemoveSubIssues, "remove-sub-issue", nil, "Remove sub-issues by `number` or URL")
+	cmd.Flags().StringSliceVar(&opts.AddBlockedBy, "add-blocked-by", nil, "Add 'blocked by' relationships by issue `number` or URL")
+	cmd.Flags().StringSliceVar(&opts.RemoveBlockedBy, "remove-blocked-by", nil, "Remove 'blocked by' relationships by issue `number` or URL")
+	cmd.Flags().StringSliceVar(&opts.AddBlocking, "add-blocking", nil, "Add 'blocking' relationships by issue `number` or URL")
 
 	return cmd
 }
@@ -239,9 +284,15 @@ func editRun(opts *EditOptions) error {
 	if editable.Milestone.Edited {
 		lookupFields = append(lookupFields, "milestone")
 	}
+	if editable.IssueType.Edited {
+		lookupFields = append(lookupFields, "issueType")
+	}
+	if editable.Parent.Edited || opts.RemoveParent {
+		lookupFields = append(lookupFields, "parent")
+	}
 
 	// Get all specified issues and make sure they are within the same repo.
-	issues, err := shared.FindIssuesOrPRs(httpClient, baseRepo, opts.IssueNumbers, lookupFields)
+	issues, err := issueShared.FindIssuesOrPRs(httpClient, baseRepo, opts.IssueNumbers, lookupFields)
 	if err != nil {
 		return err
 	}
@@ -297,6 +348,12 @@ func editRun(opts *EditOptions) error {
 		if issue.Milestone != nil {
 			editable.Milestone.Default = issue.Milestone.Title
 		}
+		if issue.IssueType != nil {
+			editable.IssueType.Default = issue.IssueType.Name
+		}
+		if issue.Parent != nil {
+			editable.Parent.Default = fmt.Sprintf("#%d", issue.Parent.Number)
+		}
 
 		// Allow interactive prompts for one issue; failed earlier if multiple issues specified.
 		if opts.Interactive {
@@ -317,6 +374,34 @@ func editRun(opts *EditOptions) error {
 			err := prShared.UpdateIssue(httpClient, baseRepo, issue.ID, issue.IsPullRequest(), editable)
 			if err != nil {
 				failedIssueChan <- fmt.Sprintf("failed to update %s: %s", issue.URL, err)
+				return
+			}
+
+			// Issue type mutation
+			if editable.IssueType.Edited && editable.IssueType.Value != "" {
+				if err := applyEditIssueType(apiClient, baseRepo, issue, editable.IssueType.Value); err != nil {
+					failedIssueChan <- fmt.Sprintf("failed to update type for %s: %s", issue.URL, err)
+					return
+				}
+			}
+
+			// Parent mutation
+			if editable.Parent.Edited {
+				if err := applyEditParent(apiClient, baseRepo, issue, editable.Parent.Value); err != nil {
+					failedIssueChan <- fmt.Sprintf("failed to update parent for %s: %s", issue.URL, err)
+					return
+				}
+			}
+
+			// Sub-issue mutations
+			if err := applyEditSubIssues(apiClient, baseRepo, issue, opts); err != nil {
+				failedIssueChan <- fmt.Sprintf("failed to update sub-issues for %s: %s", issue.URL, err)
+				return
+			}
+
+			// Relationship mutations
+			if err := applyEditRelationships(apiClient, baseRepo, issue, opts, issueFeatures); err != nil {
+				failedIssueChan <- fmt.Sprintf("failed to update relationships for %s: %s", issue.URL, err)
 				return
 			}
 
@@ -358,4 +443,140 @@ func editRun(opts *EditOptions) error {
 	}
 
 	return nil
+}
+
+func applyEditIssueType(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, typeName string) error {
+	issueTypes, err := api.RepoIssueTypes(client, baseRepo)
+	if err != nil {
+		return err
+	}
+
+	typeNames := make([]string, len(issueTypes))
+	for i, t := range issueTypes {
+		typeNames[i] = t.Name
+		if strings.EqualFold(t.Name, typeName) {
+			return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, t.ID)
+		}
+	}
+
+	return fmt.Errorf("type %q not found; available types: %s", typeName, strings.Join(typeNames, ", "))
+}
+
+func applyEditParent(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, parentRef string) error {
+	hostname := baseRepo.RepoHost()
+
+	if parentRef == "" {
+		// Remove parent — need to know the current parent's ID
+		if issue.Parent == nil {
+			return nil // no parent to remove
+		}
+		parentRepo := baseRepo
+		if issue.Parent.Repository.NameWithOwner != "" && issue.Parent.Repository.NameWithOwner != ghrepo.FullName(baseRepo) {
+			var err error
+			parentRepo, err = ghrepo.FromFullNameWithHost(issue.Parent.Repository.NameWithOwner, hostname)
+			if err != nil {
+				return err
+			}
+		}
+		parentID, err := api.IssueNodeID(client, parentRepo, issue.Parent.Number)
+		if err != nil {
+			return err
+		}
+		return api.RemoveSubIssue(client, hostname, parentID, issue.ID)
+	}
+
+	// Set parent with replaceParent=true
+	parentID, err := resolveIssueRef(client, baseRepo, parentRef)
+	if err != nil {
+		return fmt.Errorf("resolving parent: %w", err)
+	}
+	return api.AddSubIssue(client, hostname, parentID, issue.ID, true)
+}
+
+func applyEditSubIssues(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *EditOptions) error {
+	hostname := baseRepo.RepoHost()
+
+	for _, ref := range opts.AddSubIssues {
+		subID, err := resolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --add-sub-issue reference %q: %w", ref, err)
+		}
+		if err := api.AddSubIssue(client, hostname, issue.ID, subID, false); err != nil {
+			return err
+		}
+	}
+
+	for _, ref := range opts.RemoveSubIssues {
+		subID, err := resolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --remove-sub-issue reference %q: %w", ref, err)
+		}
+		if err := api.RemoveSubIssue(client, hostname, issue.ID, subID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *EditOptions, features fd.IssueFeatures) error {
+	hasRelationshipFlags := len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 || len(opts.AddBlocking) > 0
+	if !hasRelationshipFlags {
+		return nil
+	}
+
+	// TODO IssueRelationshipsCleanup
+	if !features.IssueRelationshipsSupported {
+		return fmt.Errorf("issue relationships are not supported on this GitHub Enterprise Server version")
+	}
+
+	hostname := baseRepo.RepoHost()
+
+	for _, ref := range opts.AddBlockedBy {
+		blockingID, err := resolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --add-blocked-by reference %q: %w", ref, err)
+		}
+		if err := api.AddBlockedBy(client, hostname, issue.ID, blockingID); err != nil {
+			return err
+		}
+	}
+
+	for _, ref := range opts.RemoveBlockedBy {
+		blockingID, err := resolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --remove-blocked-by reference %q: %w", ref, err)
+		}
+		if err := api.RemoveBlockedBy(client, hostname, issue.ID, blockingID); err != nil {
+			return err
+		}
+	}
+
+	for _, ref := range opts.AddBlocking {
+		// --add-blocking swaps args: the OTHER issue is blocked by THIS issue
+		blockedID, err := resolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --add-blocking reference %q: %w", ref, err)
+		}
+		if err := api.AddBlockedBy(client, hostname, blockedID, issue.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// resolveIssueRef parses an issue reference (number or URL) and returns its node ID.
+func resolveIssueRef(client *api.Client, baseRepo ghrepo.Interface, ref string) (string, error) {
+	number, repo, err := issueShared.ParseIssueFromArg(ref)
+	if err != nil {
+		return "", err
+	}
+
+	targetRepo := baseRepo
+	if r, ok := repo.Value(); ok {
+		targetRepo = r
+	}
+
+	return api.IssueNodeID(client, targetRepo, number)
 }
