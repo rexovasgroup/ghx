@@ -176,6 +176,8 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 				opts.Editable.Parent.Edited = true
 				if opts.RemoveParent {
 					opts.Editable.Parent.Value = ""
+				} else {
+					opts.Editable.Parent.Value = opts.SetParent
 				}
 			}
 

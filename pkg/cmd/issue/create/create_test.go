@@ -1262,6 +1262,348 @@ func TestIssueCreate_projectsV2(t *testing.T) {
 
 // TODO projectsV1Deprecation
 // Remove this test.
+func TestNewCmdCreate_issuesV2Flags(t *testing.T) {
+	tests := []struct {
+		name          string
+		cli           string
+		wantsErr      bool
+		wantsType     string
+		wantsParent   string
+		wantsBlocking []string
+		wantsBlockBy  []string
+	}{
+		{
+			name:      "type flag",
+			cli:       `-t mytitle -b mybody --type Bug`,
+			wantsType: "Bug",
+		},
+		{
+			name:        "parent flag with number",
+			cli:         `-t mytitle -b mybody --parent 100`,
+			wantsParent: "100",
+		},
+		{
+			name:        "parent flag with URL",
+			cli:         `-t mytitle -b mybody --parent https://github.com/cli/go-gh/issues/42`,
+			wantsParent: "https://github.com/cli/go-gh/issues/42",
+		},
+		{
+			name:         "blocked-by flag",
+			cli:          `-t mytitle -b mybody --blocked-by 200,201`,
+			wantsBlockBy: []string{"200", "201"},
+		},
+		{
+			name:          "blocking flag",
+			cli:           `-t mytitle -b mybody --blocking 300`,
+			wantsBlocking: []string{"300"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ios, _, _, _ := iostreams.Test()
+
+			f := &cmdutil.Factory{
+				IOStreams: ios,
+				Config: func() (gh.Config, error) {
+					return config.NewBlankConfig(), nil
+				},
+			}
+
+			var opts *CreateOptions
+			cmd := NewCmdCreate(f, func(o *CreateOptions) error {
+				opts = o
+				return nil
+			})
+
+			args, err := shlex.Split(tt.cli)
+			require.NoError(t, err)
+			cmd.SetArgs(args)
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+			_, err = cmd.ExecuteC()
+			if tt.wantsErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantsType, opts.IssueType)
+			assert.Equal(t, tt.wantsParent, opts.Parent)
+			assert.Equal(t, tt.wantsBlocking, opts.Blocking)
+			assert.Equal(t, tt.wantsBlockBy, opts.BlockedBy)
+		})
+	}
+}
+
+func Test_createRun_issuesV2(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        CreateOptions
+		httpStubs   func(*testing.T, *httpmock.Registry)
+		wantsStdout string
+		wantsStderr string
+		wantsErr    string
+	}{
+		{
+			name: "create with type",
+			opts: CreateOptions{
+				Detector:  &fd.EnabledDetectorMock{},
+				Title:     "bug title",
+				Body:      "bug body",
+				IssueType: "Bug",
+			},
+			httpStubs: func(t *testing.T, r *httpmock.Registry) {
+				r.Register(
+					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": {
+							"id": "REPOID",
+							"hasIssuesEnabled": true
+						} } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation IssueCreate\b`),
+					httpmock.StringResponse(`
+						{ "data": { "createIssue": { "issue": {
+							"id": "ISSUE_ID_123",
+							"URL": "https://github.com/OWNER/REPO/issues/123"
+						} } } }`))
+				r.Register(
+					httpmock.GraphQL(`query RepositoryIssueTypes\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": { "issueTypes": { "nodes": [
+							{ "id": "IT_1", "name": "Bug", "description": "", "color": "d73a4a" },
+							{ "id": "IT_2", "name": "Feature", "description": "", "color": "0075ca" },
+							{ "id": "IT_3", "name": "Task", "description": "", "color": "e4e669" }
+						] } } } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation UpdateIssueIssueType\b`),
+					httpmock.GraphQLMutation(`
+						{ "data": { "updateIssueIssueType": { "issue": { "id": "ISSUE_ID_123" } } } }`,
+						func(inputs map[string]interface{}) {
+							assert.Equal(t, "ISSUE_ID_123", inputs["issueId"])
+							assert.Equal(t, "IT_1", inputs["issueTypeId"])
+						}))
+			},
+			wantsStdout: "https://github.com/OWNER/REPO/issues/123\n",
+			wantsStderr: "\nCreating issue in OWNER/REPO\n\n",
+		},
+		{
+			name: "create with type not found",
+			opts: CreateOptions{
+				Detector:  &fd.EnabledDetectorMock{},
+				Title:     "bug title",
+				Body:      "bug body",
+				IssueType: "Bugz",
+			},
+			httpStubs: func(t *testing.T, r *httpmock.Registry) {
+				r.Register(
+					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": {
+							"id": "REPOID",
+							"hasIssuesEnabled": true
+						} } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation IssueCreate\b`),
+					httpmock.StringResponse(`
+						{ "data": { "createIssue": { "issue": {
+							"id": "ISSUE_ID_123",
+							"URL": "https://github.com/OWNER/REPO/issues/123"
+						} } } }`))
+				r.Register(
+					httpmock.GraphQL(`query RepositoryIssueTypes\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": { "issueTypes": { "nodes": [
+							{ "id": "IT_1", "name": "Bug", "description": "", "color": "d73a4a" },
+							{ "id": "IT_2", "name": "Feature", "description": "", "color": "0075ca" },
+							{ "id": "IT_3", "name": "Task", "description": "", "color": "e4e669" }
+						] } } } }`))
+			},
+			wantsErr: `type "Bugz" not found; available types: Bug, Feature, Task`,
+		},
+		{
+			name: "create with parent",
+			opts: CreateOptions{
+				Detector: &fd.EnabledDetectorMock{},
+				Title:    "child issue",
+				Body:     "child body",
+				Parent:   "100",
+			},
+			httpStubs: func(t *testing.T, r *httpmock.Registry) {
+				r.Register(
+					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": {
+							"id": "REPOID",
+							"hasIssuesEnabled": true
+						} } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation IssueCreate\b`),
+					httpmock.StringResponse(`
+						{ "data": { "createIssue": { "issue": {
+							"id": "ISSUE_ID_123",
+							"URL": "https://github.com/OWNER/REPO/issues/123"
+						} } } }`))
+				r.Register(
+					httpmock.GraphQL(`query IssueNodeID\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": { "issue": { "id": "PARENT_ID_100" } } } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation AddSubIssue\b`),
+					httpmock.GraphQLMutation(`
+						{ "data": { "addSubIssue": { "issue": { "id": "PARENT_ID_100" } } } }`,
+						func(inputs map[string]interface{}) {
+							assert.Equal(t, "PARENT_ID_100", inputs["issueId"])
+							assert.Equal(t, "ISSUE_ID_123", inputs["subIssueId"])
+							assert.Equal(t, false, inputs["replaceParent"])
+						}))
+			},
+			wantsStdout: "https://github.com/OWNER/REPO/issues/123\n",
+			wantsStderr: "\nCreating issue in OWNER/REPO\n\n",
+		},
+		{
+			name: "create with blocked-by and blocking",
+			opts: CreateOptions{
+				Detector:  &fd.EnabledDetectorMock{},
+				Title:     "blocked issue",
+				Body:      "blocked body",
+				BlockedBy: []string{"200"},
+				Blocking:  []string{"300"},
+			},
+			httpStubs: func(t *testing.T, r *httpmock.Registry) {
+				r.Register(
+					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": {
+							"id": "REPOID",
+							"hasIssuesEnabled": true
+						} } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation IssueCreate\b`),
+					httpmock.StringResponse(`
+						{ "data": { "createIssue": { "issue": {
+							"id": "ISSUE_ID_123",
+							"URL": "https://github.com/OWNER/REPO/issues/123"
+						} } } }`))
+				// IssueNodeID for --blocked-by 200
+				r.Register(
+					httpmock.GraphQL(`query IssueNodeID\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": { "issue": { "id": "BLOCKER_ID_200" } } } }`))
+				// AddBlockedBy for --blocked-by: new issue is blocked by #200
+				r.Register(
+					httpmock.GraphQL(`mutation AddBlockedBy\b`),
+					httpmock.GraphQLMutation(`
+						{ "data": { "addBlockedBy": { "blockedIssue": { "id": "ISSUE_ID_123" } } } }`,
+						func(inputs map[string]interface{}) {
+							assert.Equal(t, "ISSUE_ID_123", inputs["issueId"])
+							assert.Equal(t, "BLOCKER_ID_200", inputs["blockingIssueId"])
+						}))
+				// IssueNodeID for --blocking 300
+				r.Register(
+					httpmock.GraphQL(`query IssueNodeID\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": { "issue": { "id": "BLOCKED_ID_300" } } } }`))
+				// AddBlockedBy for --blocking: #300 is blocked by new issue (swapped args)
+				r.Register(
+					httpmock.GraphQL(`mutation AddBlockedBy\b`),
+					httpmock.GraphQLMutation(`
+						{ "data": { "addBlockedBy": { "blockedIssue": { "id": "BLOCKED_ID_300" } } } }`,
+						func(inputs map[string]interface{}) {
+							assert.Equal(t, "BLOCKED_ID_300", inputs["issueId"])
+							assert.Equal(t, "ISSUE_ID_123", inputs["blockingIssueId"])
+						}))
+			},
+			wantsStdout: "https://github.com/OWNER/REPO/issues/123\n",
+			wantsStderr: "\nCreating issue in OWNER/REPO\n\n",
+		},
+		{
+			name: "blocked-by unsupported on GHES",
+			opts: CreateOptions{
+				Detector:  &fd.DisabledDetectorMock{},
+				Title:     "blocked issue",
+				Body:      "blocked body",
+				BlockedBy: []string{"200"},
+			},
+			httpStubs: func(t *testing.T, r *httpmock.Registry) {
+				r.Register(
+					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": {
+							"id": "REPOID",
+							"hasIssuesEnabled": true
+						} } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation IssueCreate\b`),
+					httpmock.StringResponse(`
+						{ "data": { "createIssue": { "issue": {
+							"id": "ISSUE_ID_123",
+							"URL": "https://github.com/OWNER/REPO/issues/123"
+						} } } }`))
+			},
+			wantsErr: "issue relationships are not supported on this GitHub Enterprise Server version",
+		},
+		{
+			name: "blocking unsupported on GHES",
+			opts: CreateOptions{
+				Detector: &fd.DisabledDetectorMock{},
+				Title:    "blocking issue",
+				Body:     "blocking body",
+				Blocking: []string{"300"},
+			},
+			httpStubs: func(t *testing.T, r *httpmock.Registry) {
+				r.Register(
+					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": {
+							"id": "REPOID",
+							"hasIssuesEnabled": true
+						} } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation IssueCreate\b`),
+					httpmock.StringResponse(`
+						{ "data": { "createIssue": { "issue": {
+							"id": "ISSUE_ID_123",
+							"URL": "https://github.com/OWNER/REPO/issues/123"
+						} } } }`))
+			},
+			wantsErr: "issue relationships are not supported on this GitHub Enterprise Server version",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			httpReg := &httpmock.Registry{}
+			defer httpReg.Verify(t)
+			if tt.httpStubs != nil {
+				tt.httpStubs(t, httpReg)
+			}
+
+			ios, _, stdout, stderr := iostreams.Test()
+			ios.SetStdoutTTY(true)
+			opts := &tt.opts
+			opts.IO = ios
+			opts.HttpClient = func() (*http.Client, error) {
+				return &http.Client{Transport: httpReg}, nil
+			}
+			opts.BaseRepo = func() (ghrepo.Interface, error) {
+				return ghrepo.New("OWNER", "REPO"), nil
+			}
+			opts.Browser = &browser.Stub{}
+
+			err := createRun(opts)
+			if tt.wantsErr == "" {
+				require.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.wantsErr)
+				return
+			}
+
+			assert.Equal(t, tt.wantsStdout, stdout.String())
+			assert.Equal(t, tt.wantsStderr, stderr.String())
+		})
+	}
+}
+
 func TestProjectsV1Deprecation(t *testing.T) {
 
 	t.Run("non-interactive submission", func(t *testing.T) {
