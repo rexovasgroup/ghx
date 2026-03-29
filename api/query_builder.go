@@ -445,7 +445,7 @@ func IssueGraphQL(fields []string) string {
 		case "issueType":
 			q = append(q, `issueType{id,name,description,color}`)
 		case "parent":
-			q = append(q, `parent{number,title,url,state,repository{nameWithOwner}}`)
+			q = append(q, `parent{id,number,title,url,state,repository{nameWithOwner}}`)
 		case "subIssues":
 			q = append(q, `subIssues(first:50){nodes{number,title,url,state,repository{nameWithOwner}},totalCount}`)
 		case "subIssuesSummary":

@@ -916,6 +916,7 @@ func Test_editRun(t *testing.T) {
 						"number": 123,
 						"url": "https://github.com/OWNER/REPO/issue/123",
 						"parent": {
+							"id": "PARENT_100_ID",
 							"number": 100,
 							"title": "Parent Issue",
 							"url": "https://github.com/OWNER/REPO/issues/100",
@@ -923,12 +924,6 @@ func Test_editRun(t *testing.T) {
 							"repository": { "nameWithOwner": "OWNER/REPO" }
 						}
 					} } } }
-					`),
-				)
-				reg.Register(
-					httpmock.GraphQL(`query IssueNodeID\b`),
-					httpmock.StringResponse(`
-					{ "data": { "repository": { "issue": { "id": "PARENT_100_ID" } } } }
 					`),
 				)
 				reg.Register(
@@ -1117,24 +1112,16 @@ func Test_editRun(t *testing.T) {
 				},
 			},
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query RepositoryIssueTypes\b`),
+					httpmock.StringResponse(`
+					{ "data": { "repository": { "issueTypes": { "nodes": [
+						{ "id": "BUG_TYPE_ID", "name": "Bug", "description": "", "color": "" }
+					] } } } }
+					`),
+				)
 				mockIssueNumberGet(t, reg, 123)
 				mockIssueNumberGet(t, reg, 456)
-				reg.Register(
-					httpmock.GraphQL(`query RepositoryIssueTypes\b`),
-					httpmock.StringResponse(`
-					{ "data": { "repository": { "issueTypes": { "nodes": [
-						{ "id": "BUG_TYPE_ID", "name": "Bug", "description": "", "color": "" }
-					] } } } }
-					`),
-				)
-				reg.Register(
-					httpmock.GraphQL(`query RepositoryIssueTypes\b`),
-					httpmock.StringResponse(`
-					{ "data": { "repository": { "issueTypes": { "nodes": [
-						{ "id": "BUG_TYPE_ID", "name": "Bug", "description": "", "color": "" }
-					] } } } }
-					`),
-				)
 				reg.Register(
 					httpmock.GraphQL(`mutation UpdateIssueIssueType\b`),
 					httpmock.GraphQLMutation(`

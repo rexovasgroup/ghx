@@ -66,6 +66,7 @@ type IssueType struct {
 
 // LinkedIssue represents a related issue (parent, sub-issue, or relationship target).
 type LinkedIssue struct {
+	ID         string `json:"id"`
 	Number     int    `json:"number"`
 	Title      string `json:"title"`
 	URL        string `json:"url"`

@@ -324,6 +324,15 @@ func editRun(opts *EditOptions) error {
 		opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Updating %d issues", len(issues)))
 	}
 
+	// Resolve issue type ID once for all issues to avoid redundant API calls.
+	var issueTypeID string
+	if editable.IssueType.Edited && editable.IssueType.Value != "" {
+		issueTypeID, err = issueShared.ResolveIssueTypeName(apiClient, baseRepo, editable.IssueType.Value)
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, issue := range issues {
 		// Copy variables to capture in the go routine below.
 		editable := editable.Clone()
@@ -380,7 +389,7 @@ func editRun(opts *EditOptions) error {
 
 			// Issue type mutation
 			if editable.IssueType.Edited && editable.IssueType.Value != "" {
-				if err := applyEditIssueType(apiClient, baseRepo, issue, editable.IssueType.Value); err != nil {
+				if err := api.UpdateIssueIssueType(apiClient, baseRepo.RepoHost(), issue.ID, issueTypeID); err != nil {
 					failedIssueChan <- fmt.Sprintf("failed to update type for %s: %s", issue.URL, err)
 					return
 				}
@@ -446,35 +455,15 @@ func editRun(opts *EditOptions) error {
 	return nil
 }
 
-func applyEditIssueType(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, typeName string) error {
-	issueTypeID, err := issueShared.ResolveIssueTypeName(client, baseRepo, typeName)
-	if err != nil {
-		return err
-	}
-	return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, issueTypeID)
-}
-
 func applyEditParent(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, parentRef string) error {
 	hostname := baseRepo.RepoHost()
 
 	if parentRef == "" {
-		// Remove parent — need to know the current parent's ID
+		// Remove parent — use the parent's ID from the fetched issue data
 		if issue.Parent == nil {
 			return nil // no parent to remove
 		}
-		parentRepo := baseRepo
-		if issue.Parent.Repository.NameWithOwner != "" && issue.Parent.Repository.NameWithOwner != ghrepo.FullName(baseRepo) {
-			var err error
-			parentRepo, err = ghrepo.FromFullNameWithHost(issue.Parent.Repository.NameWithOwner, hostname)
-			if err != nil {
-				return err
-			}
-		}
-		parentID, err := api.IssueNodeID(client, parentRepo, issue.Parent.Number)
-		if err != nil {
-			return err
-		}
-		return api.RemoveSubIssue(client, hostname, parentID, issue.ID)
+		return api.RemoveSubIssue(client, hostname, issue.Parent.ID, issue.ID)
 	}
 
 	// Set parent with replaceParent=true

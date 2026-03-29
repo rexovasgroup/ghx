@@ -91,7 +91,7 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 var defaultFields = []string{
 	"number", "url", "state", "createdAt", "title", "body", "author", "milestone",
 	"assignees", "labels", "reactionGroups", "lastComment", "stateReason",
-	"issueType", "parent", "subIssues", "subIssuesSummary", "blockedBy", "blocking",
+	"issueType", "parent", "subIssues", "subIssuesSummary",
 }
 
 func viewRun(opts *ViewOptions) error {
@@ -128,6 +128,12 @@ func viewRun(opts *ViewOptions) error {
 		projectsV1Support := opts.Detector.ProjectsV1()
 		if projectsV1Support == gh.ProjectsV1Supported {
 			lookupFields.Add("projectCards")
+		}
+
+		// TODO IssueRelationshipsCleanup
+		issueFeatures, issueErr := opts.Detector.IssueFeatures()
+		if issueErr == nil && issueFeatures.IssueRelationshipsSupported {
+			lookupFields.AddValues([]string{"blockedBy", "blocking"})
 		}
 	}
 
@@ -226,7 +232,7 @@ func printHumanIssuePreview(opts *ViewOptions, baseRepo ghrepo.Interface, issue 
 		stateLine = cs.Muted(issue.IssueType.Name) + " · " + stateLine
 	}
 	fmt.Fprintf(out,
-		"%s · %s opened %s · %s\n",
+		"%s • %s opened %s • %s\n",
 		stateLine,
 		issue.Author.DisplayName(),
 		text.FuzzyAgo(opts.Now(), issue.CreatedAt),
@@ -328,8 +334,9 @@ func printHumanIssuePreview(opts *ViewOptions, baseRepo ghrepo.Interface, issue 
 	return nil
 }
 
-// formatLinkedIssueRef formats an issue reference, using just #N for same-repo
-// or owner/repo#N for cross-repo references.
+// formatLinkedIssueRef formats an issue reference as owner/repo#N.
+// Cross-repo references use the issue's own repository; same-repo
+// references use the base repo name for consistency.
 func formatLinkedIssueRef(baseRepo ghrepo.Interface, issue *api.LinkedIssue) string {
 	if issue.Repository.NameWithOwner != "" && issue.Repository.NameWithOwner != ghrepo.FullName(baseRepo) {
 		return fmt.Sprintf("%s#%d", issue.Repository.NameWithOwner, issue.Number)
