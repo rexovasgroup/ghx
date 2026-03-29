@@ -340,6 +340,12 @@ var issueOnlyFields = []string{
 	"isPinned",
 	"stateReason",
 	"closedByPullRequestsReferences",
+	"issueType",
+	"parent",
+	"subIssues",
+	"subIssuesSummary",
+	"blockedBy",
+	"blocking",
 }
 
 var IssueFields = append(sharedIssuePRFields, issueOnlyFields...)
@@ -436,6 +442,18 @@ func IssueGraphQL(fields []string) string {
 			q = append(q, prClosingIssuesReferences)
 		case "closedByPullRequestsReferences":
 			q = append(q, issueClosedByPullRequestsReferences)
+		case "issueType":
+			q = append(q, `issueType{id,name,description,color}`)
+		case "parent":
+			q = append(q, `parent{number,title,url,state,repository{nameWithOwner}}`)
+		case "subIssues":
+			q = append(q, `subIssues(first:50){nodes{number,title,url,state,repository{nameWithOwner}},totalCount}`)
+		case "subIssuesSummary":
+			q = append(q, `subIssuesSummary{total,completed,percentCompleted}`)
+		case "blockedBy":
+			q = append(q, `blockedBy(first:50){nodes{number,title,url,state,repository{nameWithOwner}}}`)
+		case "blocking":
+			q = append(q, `blocking(first:50){nodes{number,title,url,state,repository{nameWithOwner}}}`)
 		default:
 			q = append(q, field)
 		}

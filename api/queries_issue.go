@@ -46,7 +46,51 @@ type Issue struct {
 	ReactionGroups   ReactionGroups
 	IsPinned         bool
 
+	IssueType        *IssueType
+	Parent           *LinkedIssue
+	SubIssues        SubIssues
+	SubIssuesSummary SubIssuesSummary
+	BlockedBy        LinkedIssueConnection
+	Blocking         LinkedIssueConnection
+
 	ClosedByPullRequestsReferences ClosedByPullRequestsReferences
+}
+
+// IssueType represents an issue type configured for a repository.
+type IssueType struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Color       string `json:"color"`
+}
+
+// LinkedIssue represents a related issue (parent, sub-issue, or relationship target).
+type LinkedIssue struct {
+	Number     int    `json:"number"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	State      string `json:"state"`
+	Repository struct {
+		NameWithOwner string `json:"nameWithOwner"`
+	} `json:"repository"`
+}
+
+// SubIssues is a connection of sub-issues with a total count.
+type SubIssues struct {
+	Nodes      []LinkedIssue
+	TotalCount int
+}
+
+// SubIssuesSummary contains completion stats for sub-issues.
+type SubIssuesSummary struct {
+	Total            int     `json:"total"`
+	Completed        int     `json:"completed"`
+	PercentCompleted float64 `json:"percentCompleted"`
+}
+
+// LinkedIssueConnection is a connection of related issues (blocked-by or blocking).
+type LinkedIssueConnection struct {
+	Nodes []LinkedIssue
 }
 
 type ClosedByPullRequestsReferences struct {
@@ -430,4 +474,175 @@ func (i Issue) Identifier() string {
 
 func (i Issue) CurrentUserComments() []Comment {
 	return i.Comments.CurrentUserComments()
+}
+
+// UpdateIssueIssueType sets the issue type on an issue.
+func UpdateIssueIssueType(client *Client, hostname string, issueID string, issueTypeID string) error {
+	query := `
+	mutation UpdateIssueIssueType($input: UpdateIssueIssueTypeInput!) {
+		updateIssueIssueType(input: $input) {
+			issue { id }
+		}
+	}`
+	variables := map[string]interface{}{
+		"input": map[string]interface{}{
+			"issueId":     issueID,
+			"issueTypeId": issueTypeID,
+		},
+	}
+	var result struct {
+		UpdateIssueIssueType struct {
+			Issue struct{ ID string }
+		}
+	}
+	return client.GraphQL(hostname, query, variables, &result)
+}
+
+// AddSubIssue adds a sub-issue to a parent issue.
+func AddSubIssue(client *Client, hostname string, parentID string, subIssueID string, replaceParent bool) error {
+	query := `
+	mutation AddSubIssue($input: AddSubIssueInput!) {
+		addSubIssue(input: $input) {
+			issue { id }
+		}
+	}`
+	variables := map[string]interface{}{
+		"input": map[string]interface{}{
+			"issueId":       parentID,
+			"subIssueId":    subIssueID,
+			"replaceParent": replaceParent,
+		},
+	}
+	var result struct {
+		AddSubIssue struct {
+			Issue struct{ ID string }
+		}
+	}
+	return client.GraphQL(hostname, query, variables, &result)
+}
+
+// RemoveSubIssue removes a sub-issue from a parent issue.
+func RemoveSubIssue(client *Client, hostname string, parentID string, subIssueID string) error {
+	query := `
+	mutation RemoveSubIssue($input: RemoveSubIssueInput!) {
+		removeSubIssue(input: $input) {
+			issue { id }
+		}
+	}`
+	variables := map[string]interface{}{
+		"input": map[string]interface{}{
+			"issueId":    parentID,
+			"subIssueId": subIssueID,
+		},
+	}
+	var result struct {
+		RemoveSubIssue struct {
+			Issue struct{ ID string }
+		}
+	}
+	return client.GraphQL(hostname, query, variables, &result)
+}
+
+// AddBlockedBy marks an issue as blocked by another issue.
+func AddBlockedBy(client *Client, hostname string, issueID string, blockingIssueID string) error {
+	query := `
+	mutation AddBlockedBy($input: AddBlockedByInput!) {
+		addBlockedBy(input: $input) {
+			blockedIssue { id }
+		}
+	}`
+	variables := map[string]interface{}{
+		"input": map[string]interface{}{
+			"issueId":         issueID,
+			"blockingIssueId": blockingIssueID,
+		},
+	}
+	var result struct {
+		AddBlockedBy struct {
+			BlockedIssue struct{ ID string }
+		}
+	}
+	return client.GraphQL(hostname, query, variables, &result)
+}
+
+// RemoveBlockedBy removes a "blocked by" relationship between two issues.
+func RemoveBlockedBy(client *Client, hostname string, issueID string, blockingIssueID string) error {
+	query := `
+	mutation RemoveBlockedBy($input: RemoveBlockedByInput!) {
+		removeBlockedBy(input: $input) {
+			blockedIssue { id }
+		}
+	}`
+	variables := map[string]interface{}{
+		"input": map[string]interface{}{
+			"issueId":         issueID,
+			"blockingIssueId": blockingIssueID,
+		},
+	}
+	var result struct {
+		RemoveBlockedBy struct {
+			BlockedIssue struct{ ID string }
+		}
+	}
+	return client.GraphQL(hostname, query, variables, &result)
+}
+
+// RepoIssueTypes fetches the available issue types for a repository.
+func RepoIssueTypes(client *Client, repo ghrepo.Interface) ([]IssueType, error) {
+	query := `
+	query RepositoryIssueTypes($owner: String!, $name: String!) {
+		repository(owner: $owner, name: $name) {
+			issueTypes(first: 50) {
+				nodes { id, name, description, color }
+			}
+		}
+	}`
+	variables := map[string]interface{}{
+		"owner": repo.RepoOwner(),
+		"name":  repo.RepoName(),
+	}
+	var result struct {
+		Repository struct {
+			IssueTypes struct {
+				Nodes []IssueType
+			}
+		}
+	}
+	err := client.GraphQL(repo.RepoHost(), query, variables, &result)
+	if err != nil {
+		return nil, err
+	}
+	return result.Repository.IssueTypes.Nodes, nil
+}
+
+// IssueNodeID fetches the node ID for an issue given its number and repository.
+func IssueNodeID(client *Client, repo ghrepo.Interface, number int) (string, error) {
+	query := `
+	query IssueNodeID($owner: String!, $name: String!, $number: Int!) {
+		repository(owner: $owner, name: $name) {
+			issue(number: $number) {
+				id
+			}
+		}
+	}`
+	variables := map[string]interface{}{
+		"owner":  repo.RepoOwner(),
+		"name":   repo.RepoName(),
+		"number": number,
+	}
+	var result struct {
+		Repository struct {
+			Issue struct {
+				ID string
+			}
+		}
+	}
+	err := client.GraphQL(repo.RepoHost(), query, variables, &result)
+	if err != nil {
+		return "", err
+	}
+	if result.Repository.Issue.ID == "" {
+		return "", fmt.Errorf("issue #%d not found in %s", number, ghrepo.FullName(repo))
+	}
+	return result.Repository.Issue.ID, nil
 }
