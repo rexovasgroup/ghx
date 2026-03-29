@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/MakeNowJust/heredoc"
@@ -14,6 +15,7 @@ import (
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/text"
+	issueShared "github.com/cli/cli/v2/pkg/cmd/issue/shared"
 	prShared "github.com/cli/cli/v2/pkg/cmd/pr/shared"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
@@ -47,6 +49,11 @@ type CreateOptions struct {
 	Projects  []string
 	Milestone string
 	Template  string
+
+	IssueType string
+	Parent    string
+	BlockedBy []string
+	Blocking  []string
 }
 
 func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Command {
@@ -84,6 +91,10 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 			$ gh issue create --assignee "@copilot"
 			$ gh issue create --project "Roadmap"
 			$ gh issue create --template "Bug Report"
+			$ gh issue create --type Bug
+			$ gh issue create --parent 100
+			$ gh issue create --parent https://github.com/cli/go-gh/issues/42
+			$ gh issue create --blocked-by 200,201 --blocking 300
 		`),
 		Args:    cmdutil.NoArgsQuoteReminder,
 		Aliases: []string{"new"},
@@ -141,6 +152,10 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 	cmd.Flags().StringVarP(&opts.Milestone, "milestone", "m", "", "Add the issue to a milestone by `name`")
 	cmd.Flags().StringVar(&opts.RecoverFile, "recover", "", "Recover input from a failed run of create")
 	cmd.Flags().StringVarP(&opts.Template, "template", "T", "", "Template `name` to use as starting body text")
+	cmd.Flags().StringVar(&opts.IssueType, "type", "", "Set the issue type by `name`")
+	cmd.Flags().StringVar(&opts.Parent, "parent", "", "Add the new issue as a sub-issue of the specified parent `number` or URL")
+	cmd.Flags().StringSliceVar(&opts.BlockedBy, "blocked-by", nil, "Mark the new issue as blocked by these issue `numbers` or URLs")
+	cmd.Flags().StringSliceVar(&opts.Blocking, "blocking", nil, "Mark the new issue as blocking these issue `numbers` or URLs")
 
 	return cmd
 }
@@ -289,6 +304,23 @@ func createRun(opts *CreateOptions) (err error) {
 			}
 		}
 
+		// Interactive issue type selection
+		if opts.IssueType == "" {
+			issueTypes, typesErr := api.RepoIssueTypes(apiClient, baseRepo)
+			if typesErr == nil && len(issueTypes) > 0 {
+				typeNames := make([]string, len(issueTypes))
+				for i, t := range issueTypes {
+					typeNames[i] = t.Name
+				}
+				var selected int
+				selected, err = opts.Prompter.Select("Issue type", "", typeNames)
+				if err != nil {
+					return
+				}
+				opts.IssueType = typeNames[selected]
+			}
+		}
+
 		openURL, err = generatePreviewURL(apiClient, baseRepo, tb, projectsV1Support)
 		if err != nil {
 			return
@@ -379,6 +411,28 @@ func createRun(opts *CreateOptions) (err error) {
 			return
 		}
 
+		// Post-creation mutations for Issues 2.0 fields
+		err = applyIssueTypes(apiClient, baseRepo, newIssue, opts)
+		if err != nil {
+			return
+		}
+
+		err = applyParent(apiClient, baseRepo, newIssue, opts)
+		if err != nil {
+			return
+		}
+
+		// TODO IssueRelationshipsCleanup
+		if issueFeatures.IssueRelationshipsSupported {
+			err = applyRelationships(apiClient, baseRepo, newIssue, opts)
+			if err != nil {
+				return
+			}
+		} else if len(opts.BlockedBy) > 0 || len(opts.Blocking) > 0 {
+			err = fmt.Errorf("issue relationships are not supported on this GitHub Enterprise Server version")
+			return
+		}
+
 		fmt.Fprintln(opts.IO.Out, newIssue.URL)
 	} else {
 		panic("Unreachable state")
@@ -390,4 +444,88 @@ func createRun(opts *CreateOptions) (err error) {
 func generatePreviewURL(apiClient *api.Client, baseRepo ghrepo.Interface, tb prShared.IssueMetadataState, projectsV1Support gh.ProjectsV1Support) (string, error) {
 	openURL := ghrepo.GenerateRepoURL(baseRepo, "issues/new")
 	return prShared.WithPrAndIssueQueryParams(apiClient, baseRepo, openURL, tb, projectsV1Support)
+}
+
+// applyIssueTypes resolves the --type flag and sets the issue type via mutation.
+func applyIssueTypes(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *CreateOptions) error {
+	if opts.IssueType == "" {
+		return nil
+	}
+
+	issueTypes, err := api.RepoIssueTypes(client, baseRepo)
+	if err != nil {
+		return err
+	}
+
+	issueTypeID := ""
+	typeNames := make([]string, len(issueTypes))
+	for i, t := range issueTypes {
+		typeNames[i] = t.Name
+		if strings.EqualFold(t.Name, opts.IssueType) {
+			issueTypeID = t.ID
+		}
+	}
+
+	if issueTypeID == "" {
+		return fmt.Errorf("type %q not found; available types: %s", opts.IssueType, strings.Join(typeNames, ", "))
+	}
+
+	return api.UpdateIssueIssueType(client, baseRepo.RepoHost(), issue.ID, issueTypeID)
+}
+
+// applyParent resolves the --parent flag and adds the issue as a sub-issue.
+func applyParent(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *CreateOptions) error {
+	if opts.Parent == "" {
+		return nil
+	}
+
+	parentID, err := resolveIssueRef(client, baseRepo, opts.Parent)
+	if err != nil {
+		return fmt.Errorf("resolving parent: %w", err)
+	}
+
+	return api.AddSubIssue(client, baseRepo.RepoHost(), parentID, issue.ID, false)
+}
+
+// applyRelationships resolves the --blocked-by and --blocking flags and creates relationships.
+func applyRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *CreateOptions) error {
+	hostname := baseRepo.RepoHost()
+
+	for _, ref := range opts.BlockedBy {
+		blockingID, err := resolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --blocked-by reference %q: %w", ref, err)
+		}
+		if err := api.AddBlockedBy(client, hostname, issue.ID, blockingID); err != nil {
+			return err
+		}
+	}
+
+	for _, ref := range opts.Blocking {
+		// --blocking swaps the args: the OTHER issue is blocked by THIS issue
+		blockedID, err := resolveIssueRef(client, baseRepo, ref)
+		if err != nil {
+			return fmt.Errorf("resolving --blocking reference %q: %w", ref, err)
+		}
+		if err := api.AddBlockedBy(client, hostname, blockedID, issue.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// resolveIssueRef parses an issue reference (number or URL) and returns its node ID.
+func resolveIssueRef(client *api.Client, baseRepo ghrepo.Interface, ref string) (string, error) {
+	number, repo, err := issueShared.ParseIssueFromArg(ref)
+	if err != nil {
+		return "", err
+	}
+
+	targetRepo := baseRepo
+	if r, ok := repo.Value(); ok {
+		targetRepo = r
+	}
+
+	return api.IssueNodeID(client, targetRepo, number)
 }
