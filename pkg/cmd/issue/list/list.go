@@ -37,6 +37,7 @@ type ListOptions struct {
 	Mention      string
 	Milestone    string
 	Search       string
+	IssueType    string
 	WebMode      bool
 	Exporter     cmdutil.Exporter
 
@@ -77,6 +78,7 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 			$ gh issue list --milestone "The big 1.0"
 			$ gh issue list --search "error no:assignee sort:created-asc"
 			$ gh issue list --state all
+			$ gh issue list --type Bug
 		`),
 		Aliases: []string{"ls"},
 		Args:    cmdutil.NoArgsQuoteReminder,
@@ -113,6 +115,7 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 	cmd.Flags().StringVar(&opts.Mention, "mention", "", "Filter by mention")
 	cmd.Flags().StringVarP(&opts.Milestone, "milestone", "m", "", "Filter by milestone number or title")
 	cmd.Flags().StringVarP(&opts.Search, "search", "S", "", "Search issues with `query`")
+	cmd.Flags().StringVar(&opts.IssueType, "type", "", "Filter by issue type `name`")
 	cmdutil.AddJSONFlags(cmd, &opts.Exporter, api.IssueFields)
 
 	return cmd
@@ -158,6 +161,7 @@ func listRun(opts *ListOptions) error {
 		Mention:   opts.Mention,
 		Milestone: opts.Milestone,
 		Search:    opts.Search,
+		IssueType: opts.IssueType,
 		Fields:    fields,
 	}
 
@@ -227,7 +231,7 @@ func listRun(opts *ListOptions) error {
 func issueList(client *http.Client, detector fd.Detector, repo ghrepo.Interface, filters prShared.FilterOptions, limit int) (*api.IssuesAndTotalCount, error) {
 	apiClient := api.NewClientFromHTTP(client)
 
-	if filters.Search != "" || len(filters.Labels) > 0 || filters.Milestone != "" {
+	if filters.Search != "" || len(filters.Labels) > 0 || filters.Milestone != "" || filters.IssueType != "" {
 		if milestoneNumber, err := strconv.ParseInt(filters.Milestone, 10, 32); err == nil {
 			milestone, err := milestoneByNumber(client, repo, int32(milestoneNumber))
 			if err != nil {

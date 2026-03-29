@@ -176,6 +176,7 @@ type FilterOptions struct {
 	Entity     string
 	Fields     []string
 	HeadBranch string
+	IssueType  string
 	Labels     []string
 	Mention    string
 	Milestone  string
@@ -212,6 +213,9 @@ func (opts *FilterOptions) IsDefault() bool {
 	if opts.Search != "" {
 		return false
 	}
+	if opts.IssueType != "" {
+		return false
+	}
 	return true
 }
 
@@ -236,6 +240,15 @@ func SearchQueryBuild(options FilterOptions, advancedIssueSearchSyntax bool) str
 	case "merged":
 		is = "merged"
 	}
+
+	searchTerms := options.Search
+	if options.IssueType != "" {
+		if searchTerms != "" {
+			searchTerms += " "
+		}
+		searchTerms += "type:" + options.IssueType
+	}
+
 	query := search.Query{
 		Qualifiers: search.Qualifiers{
 			Assignee:  options.Assignee,
@@ -251,7 +264,7 @@ func SearchQueryBuild(options FilterOptions, advancedIssueSearchSyntax bool) str
 			Is:        []string{is},
 			Type:      options.Entity,
 		},
-		ImmutableKeywords: options.Search,
+		ImmutableKeywords: searchTerms,
 	}
 
 	if !advancedIssueSearchSyntax {
