@@ -1492,7 +1492,7 @@ func Test_createRun_issuesV2(t *testing.T) {
 				r.Register(
 					httpmock.GraphQL(`mutation AddBlockedBy\b`),
 					httpmock.GraphQLMutation(`
-						{ "data": { "addBlockedBy": { "blockedIssue": { "id": "ISSUE_ID_123" } } } }`,
+						{ "data": { "addBlockedBy": { "issue": { "id": "ISSUE_ID_123" } } } }`,
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "ISSUE_ID_123", inputs["issueId"])
 							assert.Equal(t, "BLOCKER_ID_200", inputs["blockingIssueId"])
@@ -1506,7 +1506,7 @@ func Test_createRun_issuesV2(t *testing.T) {
 				r.Register(
 					httpmock.GraphQL(`mutation AddBlockedBy\b`),
 					httpmock.GraphQLMutation(`
-						{ "data": { "addBlockedBy": { "blockedIssue": { "id": "BLOCKED_ID_300" } } } }`,
+						{ "data": { "addBlockedBy": { "issue": { "id": "BLOCKED_ID_300" } } } }`,
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "BLOCKED_ID_300", inputs["issueId"])
 							assert.Equal(t, "ISSUE_ID_123", inputs["blockingIssueId"])

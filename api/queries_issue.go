@@ -549,7 +549,7 @@ func AddBlockedBy(client *Client, hostname string, issueID string, blockingIssue
 	query := `
 	mutation AddBlockedBy($input: AddBlockedByInput!) {
 		addBlockedBy(input: $input) {
-			blockedIssue { id }
+			issue { id }
 		}
 	}`
 	variables := map[string]interface{}{
@@ -560,7 +560,7 @@ func AddBlockedBy(client *Client, hostname string, issueID string, blockingIssue
 	}
 	var result struct {
 		AddBlockedBy struct {
-			BlockedIssue struct{ ID string }
+			Issue struct{ ID string }
 		}
 	}
 	return client.GraphQL(hostname, query, variables, &result)
@@ -571,7 +571,7 @@ func RemoveBlockedBy(client *Client, hostname string, issueID string, blockingIs
 	query := `
 	mutation RemoveBlockedBy($input: RemoveBlockedByInput!) {
 		removeBlockedBy(input: $input) {
-			blockedIssue { id }
+			issue { id }
 		}
 	}`
 	variables := map[string]interface{}{
@@ -582,7 +582,7 @@ func RemoveBlockedBy(client *Client, hostname string, issueID string, blockingIs
 	}
 	var result struct {
 		RemoveBlockedBy struct {
-			BlockedIssue struct{ ID string }
+			Issue struct{ ID string }
 		}
 	}
 	return client.GraphQL(hostname, query, variables, &result)

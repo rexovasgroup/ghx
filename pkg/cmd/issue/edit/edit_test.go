@@ -1048,7 +1048,7 @@ func Test_editRun(t *testing.T) {
 				reg.Register(
 					httpmock.GraphQL(`mutation AddBlockedBy\b`),
 					httpmock.GraphQLMutation(`
-					{ "data": { "addBlockedBy": { "blockedIssue": { "id": "123" } } } }`,
+					{ "data": { "addBlockedBy": { "issue": { "id": "123" } } } }`,
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "123", inputs["issueId"])
 							assert.Equal(t, "BLOCKING_200_ID", inputs["blockingIssueId"])
@@ -1063,7 +1063,7 @@ func Test_editRun(t *testing.T) {
 				reg.Register(
 					httpmock.GraphQL(`mutation RemoveBlockedBy\b`),
 					httpmock.GraphQLMutation(`
-					{ "data": { "removeBlockedBy": { "blockedIssue": { "id": "123" } } } }`,
+					{ "data": { "removeBlockedBy": { "issue": { "id": "123" } } } }`,
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "123", inputs["issueId"])
 							assert.Equal(t, "BLOCKING_201_ID", inputs["blockingIssueId"])
@@ -1094,7 +1094,7 @@ func Test_editRun(t *testing.T) {
 				reg.Register(
 					httpmock.GraphQL(`mutation AddBlockedBy\b`),
 					httpmock.GraphQLMutation(`
-					{ "data": { "addBlockedBy": { "blockedIssue": { "id": "BLOCKED_300_ID" } } } }`,
+					{ "data": { "addBlockedBy": { "issue": { "id": "BLOCKED_300_ID" } } } }`,
 						func(inputs map[string]interface{}) {
 							// --add-blocking swaps: OTHER issue is blocked BY this issue
 							assert.Equal(t, "BLOCKED_300_ID", inputs["issueId"])
@@ -1126,7 +1126,7 @@ func Test_editRun(t *testing.T) {
 				reg.Register(
 					httpmock.GraphQL(`mutation RemoveBlockedBy\b`),
 					httpmock.GraphQLMutation(`
-					{ "data": { "removeBlockedBy": { "blockedIssue": { "id": "BLOCKED_300_ID" } } } }`,
+					{ "data": { "removeBlockedBy": { "issue": { "id": "BLOCKED_300_ID" } } } }`,
 						func(inputs map[string]interface{}) {
 							// --remove-blocking swaps: OTHER issue is no longer blocked BY this issue
 							assert.Equal(t, "BLOCKED_300_ID", inputs["issueId"])
