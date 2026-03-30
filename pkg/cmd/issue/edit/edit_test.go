@@ -1137,6 +1137,22 @@ func Test_editRun(t *testing.T) {
 			stdout: "https://github.com/OWNER/REPO/issue/123\n",
 		},
 		{
+			name: "relationships unsupported on GHES",
+			input: &EditOptions{
+				Detector:     &fd.DisabledDetectorMock{},
+				IssueNumbers: []int{123},
+				Interactive:  false,
+				AddBlockedBy: []string{"200"},
+				FetchOptions: func(_ *api.Client, _ ghrepo.Interface, _ *prShared.Editable, _ gh.ProjectsV1Support) error {
+					return nil
+				},
+			},
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				mockIssueGet(t, reg)
+			},
+			wantErr: true,
+		},
+		{
 			name: "batch edit type",
 			input: &EditOptions{
 				Detector:     &fd.EnabledDetectorMock{},

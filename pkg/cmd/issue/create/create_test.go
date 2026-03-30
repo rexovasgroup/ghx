@@ -1260,8 +1260,6 @@ func TestIssueCreate_projectsV2(t *testing.T) {
 	assert.Equal(t, "https://github.com/OWNER/REPO/issues/12\n", output.String())
 }
 
-// TODO projectsV1Deprecation
-// Remove this test.
 func TestNewCmdCreate_issuesV2Flags(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1604,6 +1602,8 @@ func Test_createRun_issuesV2(t *testing.T) {
 	}
 }
 
+// TODO projectsV1Deprecation
+// Remove this test.
 func TestProjectsV1Deprecation(t *testing.T) {
 
 	t.Run("non-interactive submission", func(t *testing.T) {
