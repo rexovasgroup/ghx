@@ -2,6 +2,7 @@ package discussion
 
 import (
 	"github.com/MakeNowJust/heredoc"
+	cmdList "github.com/cli/cli/v2/pkg/cmd/discussion/list"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +29,10 @@ func NewCmdDiscussion(f *cmdutil.Factory) *cobra.Command {
 	}
 
 	cmdutil.EnableRepoOverride(cmd, f)
+
+	cmdutil.AddGroup(cmd, "General commands",
+		cmdList.NewCmdList(f, nil),
+	)
 
 	return cmd
 }
