@@ -29,7 +29,7 @@ type discussionNode struct {
 	Number      int    `json:"number"`
 	Title       string `json:"title"`
 	URL         string `json:"url"`
-	State       string `json:"state"`
+	Closed      bool   `json:"closed"`
 	StateReason string `json:"stateReason"`
 	Author      struct {
 		Login string `json:"login"`
@@ -67,12 +67,17 @@ type discussionNode struct {
 
 // mapDiscussion converts a GraphQL discussionNode response into the domain Discussion type.
 func mapDiscussion(n discussionNode) Discussion {
+	state := "OPEN"
+	if n.Closed {
+		state = "CLOSED"
+	}
+
 	d := Discussion{
 		ID:          n.ID,
 		Number:      n.Number,
 		Title:       n.Title,
 		URL:         n.URL,
-		State:       n.State,
+		State:       state,
 		StateReason: n.StateReason,
 		Author:      DiscussionAuthor{Login: n.Author.Login},
 		Category: DiscussionCategory{
@@ -110,7 +115,7 @@ func mapDiscussion(n discussionNode) Discussion {
 // discussionFields is the GraphQL fragment selecting fields for discussion queries.
 // It is shared by both List (repository.discussions) and Search queries.
 const discussionFields = `
-	id number title url state stateReason
+	id number title url closed stateReason
 	author { login }
 	category { id name slug emoji isAnswerable }
 	labels(first: 20) { nodes { id name color } }
