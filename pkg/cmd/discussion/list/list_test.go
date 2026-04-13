@@ -55,6 +55,13 @@ func sampleDiscussions() []client.Discussion {
 	}
 }
 
+func sampleResult() client.DiscussionListResult {
+	return client.DiscussionListResult{
+		Discussions: sampleDiscussions(),
+		TotalCount:  2,
+	}
+}
+
 func sampleCategories() []client.DiscussionCategory {
 	return []client.DiscussionCategory{
 		{ID: "CAT1", Name: "General", Slug: "general", IsAnswerable: true},
@@ -69,8 +76,8 @@ func TestListRun_tty(t *testing.T) {
 	ios.SetStderrTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, limit int) ([]client.Discussion, int, error) {
-			return sampleDiscussions(), 2, nil
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+			return sampleResult(), nil
 		},
 	}
 
@@ -80,6 +87,8 @@ func TestListRun_tty(t *testing.T) {
 		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
@@ -102,8 +111,8 @@ func TestListRun_nontty(t *testing.T) {
 	ios.SetStdoutTTY(false)
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, limit int) ([]client.Discussion, int, error) {
-			return sampleDiscussions(), 2, nil
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+			return sampleResult(), nil
 		},
 	}
 
@@ -113,6 +122,8 @@ func TestListRun_nontty(t *testing.T) {
 		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
@@ -120,7 +131,6 @@ func TestListRun_nontty(t *testing.T) {
 	require.NoError(t, err)
 
 	out := stdout.String()
-	// Non-TTY output should not contain # prefix or header
 	assert.NotContains(t, out, "Showing")
 	assert.Contains(t, out, "42")
 	assert.Contains(t, out, "OPEN")
@@ -131,8 +141,12 @@ func TestListRun_json(t *testing.T) {
 	ios, _, stdout, _ := iostreams.Test()
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, limit int) ([]client.Discussion, int, error) {
-			return sampleDiscussions(), 2, nil
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+			return client.DiscussionListResult{
+				Discussions: sampleDiscussions(),
+				TotalCount:  2,
+				NextCursor:  "CURSOR123",
+			}, nil
 		},
 	}
 
@@ -145,6 +159,8 @@ func TestListRun_json(t *testing.T) {
 		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Exporter: exporter,
 		Now:      fixedTime,
 	}
@@ -155,6 +171,7 @@ func TestListRun_json(t *testing.T) {
 	out := stdout.String()
 	assert.Contains(t, out, `"totalCount"`)
 	assert.Contains(t, out, `"discussions"`)
+	assert.Contains(t, out, `"next"`)
 }
 
 func TestListRun_web(t *testing.T) {
@@ -184,8 +201,8 @@ func TestListRun_noResults(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, limit int) ([]client.Discussion, int, error) {
-			return []client.Discussion{}, 0, nil
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+			return client.DiscussionListResult{}, nil
 		},
 	}
 
@@ -195,6 +212,8 @@ func TestListRun_noResults(t *testing.T) {
 		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
@@ -212,9 +231,12 @@ func TestListRun_categoryFilter(t *testing.T) {
 		ListCategoriesFunc: func(repo ghrepo.Interface) ([]client.DiscussionCategory, error) {
 			return sampleCategories(), nil
 		},
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, limit int) ([]client.Discussion, int, error) {
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
 			assert.Equal(t, "CAT1", filters.CategoryID)
-			return sampleDiscussions()[:1], 1, nil
+			return client.DiscussionListResult{
+				Discussions: sampleDiscussions()[:1],
+				TotalCount:  1,
+			}, nil
 		},
 	}
 
@@ -225,6 +247,8 @@ func TestListRun_categoryFilter(t *testing.T) {
 		Category: "general",
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
@@ -249,13 +273,14 @@ func TestListRun_categoryNotFound(t *testing.T) {
 		Category: "nonexistent",
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
 	err := listRun(opts)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "category not found: nonexistent")
-	assert.Contains(t, err.Error(), "general (General)")
+	assert.Contains(t, err.Error(), `unknown category: "nonexistent"`)
 }
 
 func TestListRun_authorFilter(t *testing.T) {
@@ -263,9 +288,12 @@ func TestListRun_authorFilter(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, limit int) ([]client.Discussion, int, error) {
+		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (client.DiscussionListResult, error) {
 			assert.Equal(t, "monalisa", filters.Author)
-			return sampleDiscussions()[:1], 1, nil
+			return client.DiscussionListResult{
+				Discussions: sampleDiscussions()[:1],
+				TotalCount:  1,
+			}, nil
 		},
 	}
 
@@ -276,6 +304,8 @@ func TestListRun_authorFilter(t *testing.T) {
 		Author:   "monalisa",
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
@@ -289,9 +319,12 @@ func TestListRun_labelFilter(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, limit int) ([]client.Discussion, int, error) {
+		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (client.DiscussionListResult, error) {
 			assert.Equal(t, []string{"bug", "docs"}, filters.Labels)
-			return sampleDiscussions()[:1], 1, nil
+			return client.DiscussionListResult{
+				Discussions: sampleDiscussions()[:1],
+				TotalCount:  1,
+			}, nil
 		},
 	}
 
@@ -302,12 +335,72 @@ func TestListRun_labelFilter(t *testing.T) {
 		Labels:   []string{"bug", "docs"},
 		State:    "open",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
 	err := listRun(opts)
 	require.NoError(t, err)
 	assert.Contains(t, stdout.String(), "Bug report discussion")
+}
+
+func TestListRun_searchFilter(t *testing.T) {
+	ios, _, stdout, _ := iostreams.Test()
+	ios.SetStdoutTTY(true)
+
+	mockClient := &client.DiscussionClientMock{
+		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (client.DiscussionListResult, error) {
+			assert.Equal(t, "some keywords", filters.Keywords)
+			return client.DiscussionListResult{
+				Discussions: sampleDiscussions()[:1],
+				TotalCount:  1,
+			}, nil
+		},
+	}
+
+	opts := &ListOptions{
+		IO:       ios,
+		BaseRepo: func() (ghrepo.Interface, error) { return ghrepo.New("OWNER", "REPO"), nil },
+		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
+		Search:   "some keywords",
+		State:    "open",
+		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
+		Now:      fixedTime,
+	}
+
+	err := listRun(opts)
+	require.NoError(t, err)
+	assert.Contains(t, stdout.String(), "Bug report discussion")
+}
+
+func TestListRun_afterCursor(t *testing.T) {
+	ios, _, _, _ := iostreams.Test()
+	ios.SetStdoutTTY(true)
+
+	mockClient := &client.DiscussionClientMock{
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+			assert.Equal(t, "CURSOR_ABC", after)
+			return sampleResult(), nil
+		},
+	}
+
+	opts := &ListOptions{
+		IO:       ios,
+		BaseRepo: func() (ghrepo.Interface, error) { return ghrepo.New("OWNER", "REPO"), nil },
+		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
+		State:    "open",
+		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
+		After:    "CURSOR_ABC",
+		Now:      fixedTime,
+	}
+
+	err := listRun(opts)
+	require.NoError(t, err)
 }
 
 func TestNewCmdList(t *testing.T) {
@@ -350,12 +443,38 @@ func TestNewCmdList(t *testing.T) {
 			args: "--web",
 		},
 		{
+			name: "sort flag",
+			args: "--sort created",
+		},
+		{
 			name: "order flag",
-			args: "--order created",
+			args: "--order asc",
+		},
+		{
+			name: "sort and order flags",
+			args: "--sort created --order asc",
+		},
+		{
+			name: "search flag",
+			args: "--search \"some query\"",
+		},
+		{
+			name: "after flag",
+			args: "--after CURSOR123",
 		},
 		{
 			name:     "invalid state",
 			args:     "--state invalid",
+			wantsErr: true,
+		},
+		{
+			name:     "invalid sort",
+			args:     "--sort invalid",
+			wantsErr: true,
+		},
+		{
+			name:     "invalid order",
+			args:     "--order invalid",
 			wantsErr: true,
 		},
 	}
@@ -365,8 +484,8 @@ func TestNewCmdList(t *testing.T) {
 			ios, _, _, _ := iostreams.Test()
 			f := &cmdutil.Factory{
 				IOStreams: ios,
-				Browser:   &browser.Stub{},
-				BaseRepo:  func() (ghrepo.Interface, error) { return ghrepo.New("OWNER", "REPO"), nil },
+				Browser:  &browser.Stub{},
+				BaseRepo: func() (ghrepo.Interface, error) { return ghrepo.New("OWNER", "REPO"), nil },
 			}
 
 			var gotOpts *ListOptions
@@ -394,6 +513,30 @@ func TestNewCmdList(t *testing.T) {
 		})
 	}
 }
+
+func TestToFilterState(t *testing.T) {
+	tests := []struct {
+		input string
+		want  *string
+	}{
+		{"open", strPtr(client.FilterStateOpen)},
+		{"closed", strPtr(client.FilterStateClosed)},
+		{"all", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := toFilterState(tt.input)
+			if tt.want == nil {
+				assert.Nil(t, got)
+			} else {
+				require.NotNil(t, got)
+				assert.Equal(t, *tt.want, *got)
+			}
+		})
+	}
+}
+
+func strPtr(s string) *string { return &s }
 
 func splitArgs(s string) []string {
 	var args []string
@@ -441,8 +584,11 @@ func TestListRun_closedState(t *testing.T) {
 	}
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, limit int) ([]client.Discussion, int, error) {
-			return closed, 1, nil
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+			return client.DiscussionListResult{
+				Discussions: closed,
+				TotalCount:  1,
+			}, nil
 		},
 	}
 
@@ -452,6 +598,8 @@ func TestListRun_closedState(t *testing.T) {
 		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
 		State:    "closed",
 		Limit:    30,
+		Sort:     "updated",
+		Order:    "desc",
 		Now:      fixedTime,
 	}
 
@@ -461,6 +609,5 @@ func TestListRun_closedState(t *testing.T) {
 	out := stdout.String()
 	assert.Contains(t, out, "closed discussions")
 	assert.Contains(t, out, "Old discussion")
-	// Verify the # prefix is present (TTY mode)
 	assert.Contains(t, out, "#10")
 }

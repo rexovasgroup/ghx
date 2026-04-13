@@ -119,7 +119,11 @@ const discussionFields = `
 	createdAt updatedAt closedAt locked
 `
 
-func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, limit int) ([]Discussion, int, error) {
+func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error) {
+	if limit <= 0 {
+		return DiscussionListResult{}, fmt.Errorf("limit argument must be positive: %v", limit)
+	}
+
 	type response struct {
 		Repository struct {
 			HasDiscussionsEnabled bool `json:"hasDiscussionsEnabled"`
@@ -142,10 +146,24 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, limi
 	orderField := "UPDATED_AT"
 	orderDir := "DESC"
 	if filters.OrderBy != "" {
-		orderField = strings.ToUpper(filters.OrderBy) + "_AT"
+		switch filters.OrderBy {
+		case OrderByCreated:
+			orderField = "CREATED_AT"
+		case OrderByUpdated:
+			orderField = "UPDATED_AT"
+		default:
+			return DiscussionListResult{}, fmt.Errorf("unknown order-by field: %q", filters.OrderBy)
+		}
 	}
 	if filters.Direction != "" {
-		orderDir = strings.ToUpper(filters.Direction)
+		switch filters.Direction {
+		case OrderDirectionAsc:
+			orderDir = "ASC"
+		case OrderDirectionDesc:
+			orderDir = "DESC"
+		default:
+			return DiscussionListResult{}, fmt.Errorf("unknown order direction: %q", filters.Direction)
+		}
 	}
 	variables["orderBy"] = map[string]string{
 		"field":     orderField,
@@ -156,11 +174,15 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, limi
 		variables["categoryId"] = filters.CategoryID
 	}
 
-	switch strings.ToLower(filters.State) {
-	case "open":
-		variables["states"] = []string{"OPEN"}
-	case "closed":
-		variables["states"] = []string{"CLOSED"}
+	if filters.State != nil {
+		switch *filters.State {
+		case FilterStateOpen:
+			variables["states"] = []string{"OPEN"}
+		case FilterStateClosed:
+			variables["states"] = []string{"CLOSED"}
+		default:
+			return DiscussionListResult{}, fmt.Errorf("unknown state filter: %q; should be one of %q, %q", *filters.State, FilterStateOpen, FilterStateClosed)
+		}
 	}
 
 	if filters.Answered != nil {
@@ -204,12 +226,20 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, limi
 		}
 	}`, strings.Join(paramParts, ", "), strings.Join(argParts, ", "), discussionFields)
 
+	if after != "" {
+		variables["after"] = after
+	}
+
 	var discussions []Discussion
 	var totalCount int
-	pageLimit := limit
+	var nextCursor string
+	remaining := limit
+
+	// Check hasDiscussionsEnabled on first request only
+	firstPage := true
 
 	for {
-		perPage := pageLimit
+		perPage := remaining
 		if perPage > 100 {
 			perPage = 100
 		}
@@ -217,29 +247,41 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, limi
 
 		var data response
 		if err := c.gql.GraphQL(repo.RepoHost(), query, variables, &data); err != nil {
-			return nil, 0, err
+			return DiscussionListResult{}, err
 		}
 
-		if !data.Repository.HasDiscussionsEnabled {
-			return nil, 0, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
+		if firstPage && !data.Repository.HasDiscussionsEnabled {
+			return DiscussionListResult{}, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 		}
+		firstPage = false
 
 		totalCount = data.Repository.Discussions.TotalCount
 		for _, n := range data.Repository.Discussions.Nodes {
 			discussions = append(discussions, mapDiscussion(n))
 		}
 
-		pageLimit -= len(data.Repository.Discussions.Nodes)
-		if pageLimit <= 0 || !data.Repository.Discussions.PageInfo.HasNextPage {
+		remaining -= len(data.Repository.Discussions.Nodes)
+		if remaining <= 0 || !data.Repository.Discussions.PageInfo.HasNextPage {
+			if data.Repository.Discussions.PageInfo.HasNextPage {
+				nextCursor = data.Repository.Discussions.PageInfo.EndCursor
+			}
 			break
 		}
 		variables["after"] = data.Repository.Discussions.PageInfo.EndCursor
 	}
 
-	return discussions, totalCount, nil
+	return DiscussionListResult{
+		Discussions: discussions,
+		TotalCount:  totalCount,
+		NextCursor:  nextCursor,
+	}, nil
 }
 
-func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, limit int) ([]Discussion, int, error) {
+func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (DiscussionListResult, error) {
+	if limit <= 0 {
+		return DiscussionListResult{}, fmt.Errorf("limit argument must be positive: %v", limit)
+	}
+
 	type response struct {
 		Search struct {
 			DiscussionCount int `json:"discussionCount"`
@@ -251,43 +293,60 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 		} `json:"search"`
 	}
 
-	searchTerms := []string{fmt.Sprintf("repo:%s/%s", repo.RepoOwner(), repo.RepoName())}
+	qualifiers := []string{fmt.Sprintf("repo:%s/%s", repo.RepoOwner(), repo.RepoName())}
 
-	switch strings.ToLower(filters.State) {
-	case "open":
-		searchTerms = append(searchTerms, "state:open")
-	case "closed":
-		searchTerms = append(searchTerms, "state:closed")
-	}
-
-	if filters.Author != "" {
-		searchTerms = append(searchTerms, fmt.Sprintf("author:%s", filters.Author))
-	}
-	for _, l := range filters.Labels {
-		searchTerms = append(searchTerms, fmt.Sprintf("label:%q", l))
-	}
-	if filters.Category != "" {
-		searchTerms = append(searchTerms, fmt.Sprintf("category:%q", filters.Category))
-	}
-	if filters.Answered != nil {
-		if *filters.Answered {
-			searchTerms = append(searchTerms, "is:answered")
-		} else {
-			searchTerms = append(searchTerms, "is:unanswered")
+	if filters.State != nil {
+		switch *filters.State {
+		case FilterStateOpen:
+			qualifiers = append(qualifiers, "state:open")
+		case FilterStateClosed:
+			qualifiers = append(qualifiers, "state:closed")
+		default:
+			return DiscussionListResult{}, fmt.Errorf("unknown state filter: %q; should be one of %q, %q", *filters.State, FilterStateOpen, FilterStateClosed)
 		}
 	}
 
-	orderField := "updated"
-	orderDir := "desc"
+	if filters.Author != "" {
+		qualifiers = append(qualifiers, fmt.Sprintf("author:%q", filters.Author))
+	}
+	for _, l := range filters.Labels {
+		qualifiers = append(qualifiers, fmt.Sprintf("label:%q", l))
+	}
+	if filters.Category != "" {
+		qualifiers = append(qualifiers, fmt.Sprintf("category:%q", filters.Category))
+	}
+	if filters.Answered != nil {
+		if *filters.Answered {
+			qualifiers = append(qualifiers, "is:answered")
+		} else {
+			qualifiers = append(qualifiers, "is:unanswered")
+		}
+	}
+
+	orderField := OrderByUpdated
+	orderDir := OrderDirectionDesc
 	if filters.OrderBy != "" {
-		orderField = strings.ToLower(filters.OrderBy)
+		switch filters.OrderBy {
+		case OrderByCreated, OrderByUpdated:
+			orderField = filters.OrderBy
+		default:
+			return DiscussionListResult{}, fmt.Errorf("unknown order-by field: %q", filters.OrderBy)
+		}
 	}
 	if filters.Direction != "" {
-		orderDir = strings.ToLower(filters.Direction)
+		switch filters.Direction {
+		case OrderDirectionAsc, OrderDirectionDesc:
+			orderDir = filters.Direction
+		default:
+			return DiscussionListResult{}, fmt.Errorf("unknown order direction: %q", filters.Direction)
+		}
 	}
-	searchTerms = append(searchTerms, fmt.Sprintf("sort:%s-%s", orderField, orderDir))
+	qualifiers = append(qualifiers, fmt.Sprintf("sort:%s-%s", orderField, orderDir))
 
-	searchQuery := strings.Join(searchTerms, " ")
+	searchQuery := strings.Join(qualifiers, " ")
+	if filters.Keywords != "" {
+		searchQuery += " " + filters.Keywords
+	}
 
 	query := fmt.Sprintf(`query DiscussionSearch($query: String!, $first: Int!, $after: String) {
 		search(query: $query, type: DISCUSSION, first: $first, after: $after) {
@@ -301,12 +360,17 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 		"query": searchQuery,
 	}
 
+	if after != "" {
+		variables["after"] = after
+	}
+
 	var discussions []Discussion
 	var totalCount int
-	pageLimit := limit
+	var nextCursor string
+	remaining := limit
 
 	for {
-		perPage := pageLimit
+		perPage := remaining
 		if perPage > 100 {
 			perPage = 100
 		}
@@ -314,7 +378,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 
 		var data response
 		if err := c.gql.GraphQL(repo.RepoHost(), query, variables, &data); err != nil {
-			return nil, 0, err
+			return DiscussionListResult{}, err
 		}
 
 		totalCount = data.Search.DiscussionCount
@@ -322,14 +386,21 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 			discussions = append(discussions, mapDiscussion(n))
 		}
 
-		pageLimit -= len(data.Search.Nodes)
-		if pageLimit <= 0 || !data.Search.PageInfo.HasNextPage {
+		remaining -= len(data.Search.Nodes)
+		if remaining <= 0 || !data.Search.PageInfo.HasNextPage {
+			if data.Search.PageInfo.HasNextPage {
+				nextCursor = data.Search.PageInfo.EndCursor
+			}
 			break
 		}
 		variables["after"] = data.Search.PageInfo.EndCursor
 	}
 
-	return discussions, totalCount, nil
+	return DiscussionListResult{
+		Discussions: discussions,
+		TotalCount:  totalCount,
+		NextCursor:  nextCursor,
+	}, nil
 }
 
 func (c *discussionClient) GetByNumber(_ ghrepo.Interface, _ int) (*Discussion, error) {

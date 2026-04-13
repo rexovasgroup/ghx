@@ -11,8 +11,10 @@ import (
 func NewCmdDiscussion(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "discussion <command>",
-		Short: "Manage discussions",
-		Long:  "Work with GitHub Discussions.",
+		Short: "Work with GitHub Discussions (preview)",
+		Long: heredoc.Doc(`
+			Working with discussions in the GitHub CLI is in preview and subject to change without notice.
+		`),
 		Example: heredoc.Doc(`
 			$ gh discussion list
 			$ gh discussion create --category "General" --title "Hello"

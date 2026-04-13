@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const defaultLimit = 30
+
 // ListOptions holds the configuration for the discussion list command.
 type ListOptions struct {
 	IO       *iostreams.IOStreams
@@ -31,7 +33,10 @@ type ListOptions struct {
 	State    string
 	Limit    int
 	Answered *bool
+	Sort     string
 	Order    string
+	Search   string
+	After    string
 
 	WebMode  bool
 	Exporter cmdutil.Exporter
@@ -47,8 +52,8 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 	}
 
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List discussions in a repository",
+		Use:   "list [flags]",
+		Short: "List discussions in a repository (preview)",
 		Long: heredoc.Doc(`
 			List discussions in a GitHub repository. By default, only open discussions
 			are shown.
@@ -58,13 +63,19 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 			$ gh discussion list
 
 			# List discussions with a specific category
-			$ gh discussion list --category "General"
+			$ gh discussion list --category General
 
 			# List closed discussions by author
 			$ gh discussion list --state closed --author monalisa
 
+			# List all discussions (closed or open) by label
+			$ gh discussion list --state all --label bug,enhancement
+
 			# List answered discussions as JSON
 			$ gh discussion list --answered --json number,title,url
+
+			# List unanswered discussions as JSON
+			$ gh discussion list --answered=false --json number,title,url
 		`),
 		Aliases: []string{"ls"},
 		Args:    cmdutil.NoArgsQuoteReminder,
@@ -87,13 +98,31 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 	cmd.Flags().StringVarP(&opts.Category, "category", "c", "", "Filter by category name or slug")
 	cmd.Flags().StringSliceVarP(&opts.Labels, "label", "l", nil, "Filter by label")
 	cmdutil.StringEnumFlag(cmd, &opts.State, "state", "s", "open", []string{"open", "closed", "all"}, "Filter by state")
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum number of discussions to fetch")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", defaultLimit, fmt.Sprintf("Maximum number of discussions to fetch (default %d)", defaultLimit))
 	cmdutil.NilBoolFlag(cmd, &opts.Answered, "answered", "", "Filter by answered state")
-	cmdutil.StringEnumFlag(cmd, &opts.Order, "order", "", "updated", []string{"created", "updated"}, "Order by field")
+	cmdutil.StringEnumFlag(cmd, &opts.Sort, "sort", "", "updated", []string{"created", "updated"}, "Sort by field")
+	cmdutil.StringEnumFlag(cmd, &opts.Order, "order", "", "desc", []string{"asc", "desc"}, "Order of results")
+	cmd.Flags().StringVarP(&opts.Search, "search", "S", "", "Search discussions with `query`")
+	cmd.Flags().StringVar(&opts.After, "after", "", "Cursor for the next page of results")
 	cmd.Flags().BoolVarP(&opts.WebMode, "web", "w", false, "List discussions in the web browser")
 	cmdutil.AddJSONFlags(cmd, &opts.Exporter, shared.DiscussionFields)
 
 	return cmd
+}
+
+// toFilterState maps CLI state strings to domain-level filter state pointers.
+// "all" maps to nil (no state filter).
+func toFilterState(v string) *string {
+	switch v {
+	case "open":
+		s := client.FilterStateOpen
+		return &s
+	case "closed":
+		s := client.FilterStateClosed
+		return &s
+	default:
+		return nil
+	}
 }
 
 func listRun(opts *ListOptions) error {
@@ -118,7 +147,7 @@ func listRun(opts *ListOptions) error {
 		if err != nil {
 			return err
 		}
-		cat, err := matchCategory(opts.Category, categories)
+		cat, err := shared.MatchCategory(opts.Category, categories)
 		if err != nil {
 			return err
 		}
@@ -126,28 +155,32 @@ func listRun(opts *ListOptions) error {
 		categorySlug = cat.Slug
 	}
 
-	var discussions []client.Discussion
-	var totalCount int
+	state := toFilterState(opts.State)
 
-	useSearch := opts.Author != "" || len(opts.Labels) > 0
+	var result client.DiscussionListResult
+
+	useSearch := opts.Author != "" || len(opts.Labels) > 0 || opts.Search != ""
 	if useSearch {
 		filters := client.SearchFilters{
-			Author:   opts.Author,
-			Labels:   opts.Labels,
-			State:    opts.State,
-			Category: categorySlug,
-			Answered: opts.Answered,
-			OrderBy:  opts.Order,
+			Author:    opts.Author,
+			Labels:    opts.Labels,
+			State:     state,
+			Category:  categorySlug,
+			Answered:  opts.Answered,
+			Keywords:  opts.Search,
+			OrderBy:   opts.Sort,
+			Direction: opts.Order,
 		}
-		discussions, totalCount, err = dc.Search(repo, filters, opts.Limit)
+		result, err = dc.Search(repo, filters, opts.After, opts.Limit)
 	} else {
 		filters := client.ListFilters{
-			State:      opts.State,
+			State:      state,
 			CategoryID: categoryID,
 			Answered:   opts.Answered,
-			OrderBy:    opts.Order,
+			OrderBy:    opts.Sort,
+			Direction:  opts.Order,
 		}
-		discussions, totalCount, err = dc.List(repo, filters, opts.Limit)
+		result, err = dc.List(repo, filters, opts.After, opts.Limit)
 	}
 	if err != nil {
 		return err
@@ -155,13 +188,14 @@ func listRun(opts *ListOptions) error {
 
 	if opts.Exporter != nil {
 		envelope := map[string]interface{}{
-			"totalCount":  totalCount,
-			"discussions": discussions,
+			"totalCount":  result.TotalCount,
+			"discussions": result.Discussions,
+			"next":        result.NextCursor,
 		}
 		return opts.Exporter.Write(opts.IO, envelope)
 	}
 
-	if len(discussions) == 0 {
+	if len(result.Discussions) == 0 {
 		return noResults(repo, opts.State)
 	}
 
@@ -173,11 +207,11 @@ func listRun(opts *ListOptions) error {
 
 	isTerminal := opts.IO.IsStdoutTTY()
 	if isTerminal {
-		title := listHeader(ghrepo.FullName(repo), len(discussions), totalCount, opts.State)
+		title := listHeader(ghrepo.FullName(repo), len(result.Discussions), result.TotalCount, opts.State)
 		fmt.Fprintf(opts.IO.Out, "\n%s\n\n", title)
 	}
 
-	printDiscussions(opts, discussions, totalCount)
+	printDiscussions(opts, result.Discussions, result.TotalCount)
 	return nil
 }
 
@@ -213,25 +247,6 @@ func openInBrowser(opts *ListOptions, repo ghrepo.Interface) error {
 		fmt.Fprintf(opts.IO.ErrOut, "Opening %s in your browser.\n", text.DisplayURL(discussionsURL))
 	}
 	return opts.Browser.Browse(discussionsURL)
-}
-
-func matchCategory(input string, categories []client.DiscussionCategory) (*client.DiscussionCategory, error) {
-	for i := range categories {
-		if strings.EqualFold(categories[i].Slug, input) {
-			return &categories[i], nil
-		}
-	}
-	for i := range categories {
-		if strings.EqualFold(categories[i].Name, input) {
-			return &categories[i], nil
-		}
-	}
-
-	var available strings.Builder
-	for _, c := range categories {
-		fmt.Fprintf(&available, "  %s (%s)\n", c.Slug, c.Name)
-	}
-	return nil, fmt.Errorf("category not found: %s\n\nAvailable categories:\n%s", input, available.String())
 }
 
 func noResults(repo ghrepo.Interface, state string) error {

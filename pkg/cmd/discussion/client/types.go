@@ -225,10 +225,37 @@ const (
 	CloseReasonDuplicate CloseReason = "DUPLICATE"
 )
 
+// Domain-level filter constants for state.
+const (
+	FilterStateOpen   = "open"
+	FilterStateClosed = "closed"
+)
+
+// Domain-level constants for order-by field.
+const (
+	OrderByCreated = "created"
+	OrderByUpdated = "updated"
+)
+
+// Domain-level constants for order direction.
+const (
+	OrderDirectionAsc  = "asc"
+	OrderDirectionDesc = "desc"
+)
+
+// DiscussionListResult holds the result of a List or Search call,
+// including the discussions, total count, and pagination cursor.
+type DiscussionListResult struct {
+	Discussions []Discussion
+	TotalCount  int
+	NextCursor  string
+}
+
 // ListFilters holds parameters for the repository.discussions query.
 // CategoryID must be resolved by the caller before passing to List.
+// A nil State indicates no state filtering (all states).
 type ListFilters struct {
-	State      string
+	State      *string
 	CategoryID string
 	Answered   *bool
 	OrderBy    string
@@ -237,12 +264,14 @@ type ListFilters struct {
 
 // SearchFilters holds parameters for the search query used when
 // author or label filtering is required.
+// A nil State indicates no state filtering (all states).
 type SearchFilters struct {
 	Author    string
 	Labels    []string
-	State     string
+	State     *string
 	Category  string
 	Answered  *bool
+	Keywords  string
 	OrderBy   string
 	Direction string
 }

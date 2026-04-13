@@ -33,7 +33,7 @@ var _ DiscussionClient = &DiscussionClientMock{}
 //			GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, order string) (*Discussion, error) {
 //				panic("mock out the GetWithComments method")
 //			},
-//			ListFunc: func(repo ghrepo.Interface, filters ListFilters, limit int) ([]Discussion, int, error) {
+//			ListFunc: func(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error) {
 //				panic("mock out the List method")
 //			},
 //			ListCategoriesFunc: func(repo ghrepo.Interface) ([]DiscussionCategory, error) {
@@ -48,7 +48,7 @@ var _ DiscussionClient = &DiscussionClientMock{}
 //			ReopenFunc: func(repo ghrepo.Interface, id string) (*Discussion, error) {
 //				panic("mock out the Reopen method")
 //			},
-//			SearchFunc: func(repo ghrepo.Interface, filters SearchFilters, limit int) ([]Discussion, int, error) {
+//			SearchFunc: func(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (DiscussionListResult, error) {
 //				panic("mock out the Search method")
 //			},
 //			UnlockFunc: func(repo ghrepo.Interface, id string) error {
@@ -83,7 +83,7 @@ type DiscussionClientMock struct {
 	GetWithCommentsFunc func(repo ghrepo.Interface, number int, commentLimit int, order string) (*Discussion, error)
 
 	// ListFunc mocks the List method.
-	ListFunc func(repo ghrepo.Interface, filters ListFilters, limit int) ([]Discussion, int, error)
+	ListFunc func(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error)
 
 	// ListCategoriesFunc mocks the ListCategories method.
 	ListCategoriesFunc func(repo ghrepo.Interface) ([]DiscussionCategory, error)
@@ -98,7 +98,7 @@ type DiscussionClientMock struct {
 	ReopenFunc func(repo ghrepo.Interface, id string) (*Discussion, error)
 
 	// SearchFunc mocks the Search method.
-	SearchFunc func(repo ghrepo.Interface, filters SearchFilters, limit int) ([]Discussion, int, error)
+	SearchFunc func(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (DiscussionListResult, error)
 
 	// UnlockFunc mocks the Unlock method.
 	UnlockFunc func(repo ghrepo.Interface, id string) error
@@ -162,6 +162,8 @@ type DiscussionClientMock struct {
 			Repo ghrepo.Interface
 			// Filters is the filters argument value.
 			Filters ListFilters
+			// After is the after argument value.
+			After string
 			// Limit is the limit argument value.
 			Limit int
 		}
@@ -199,6 +201,8 @@ type DiscussionClientMock struct {
 			Repo ghrepo.Interface
 			// Filters is the filters argument value.
 			Filters SearchFilters
+			// After is the after argument value.
+			After string
 			// Limit is the limit argument value.
 			Limit int
 		}
@@ -441,23 +445,25 @@ func (mock *DiscussionClientMock) GetWithCommentsCalls() []struct {
 }
 
 // List calls ListFunc.
-func (mock *DiscussionClientMock) List(repo ghrepo.Interface, filters ListFilters, limit int) ([]Discussion, int, error) {
+func (mock *DiscussionClientMock) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error) {
 	if mock.ListFunc == nil {
 		panic("DiscussionClientMock.ListFunc: method is nil but DiscussionClient.List was just called")
 	}
 	callInfo := struct {
 		Repo    ghrepo.Interface
 		Filters ListFilters
+		After   string
 		Limit   int
 	}{
 		Repo:    repo,
 		Filters: filters,
+		After:   after,
 		Limit:   limit,
 	}
 	mock.lockList.Lock()
 	mock.calls.List = append(mock.calls.List, callInfo)
 	mock.lockList.Unlock()
-	return mock.ListFunc(repo, filters, limit)
+	return mock.ListFunc(repo, filters, after, limit)
 }
 
 // ListCalls gets all the calls that were made to List.
@@ -467,11 +473,13 @@ func (mock *DiscussionClientMock) List(repo ghrepo.Interface, filters ListFilter
 func (mock *DiscussionClientMock) ListCalls() []struct {
 	Repo    ghrepo.Interface
 	Filters ListFilters
+	After   string
 	Limit   int
 } {
 	var calls []struct {
 		Repo    ghrepo.Interface
 		Filters ListFilters
+		After   string
 		Limit   int
 	}
 	mock.lockList.RLock()
@@ -625,23 +633,25 @@ func (mock *DiscussionClientMock) ReopenCalls() []struct {
 }
 
 // Search calls SearchFunc.
-func (mock *DiscussionClientMock) Search(repo ghrepo.Interface, filters SearchFilters, limit int) ([]Discussion, int, error) {
+func (mock *DiscussionClientMock) Search(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (DiscussionListResult, error) {
 	if mock.SearchFunc == nil {
 		panic("DiscussionClientMock.SearchFunc: method is nil but DiscussionClient.Search was just called")
 	}
 	callInfo := struct {
 		Repo    ghrepo.Interface
 		Filters SearchFilters
+		After   string
 		Limit   int
 	}{
 		Repo:    repo,
 		Filters: filters,
+		After:   after,
 		Limit:   limit,
 	}
 	mock.lockSearch.Lock()
 	mock.calls.Search = append(mock.calls.Search, callInfo)
 	mock.lockSearch.Unlock()
-	return mock.SearchFunc(repo, filters, limit)
+	return mock.SearchFunc(repo, filters, after, limit)
 }
 
 // SearchCalls gets all the calls that were made to Search.
@@ -651,11 +661,13 @@ func (mock *DiscussionClientMock) Search(repo ghrepo.Interface, filters SearchFi
 func (mock *DiscussionClientMock) SearchCalls() []struct {
 	Repo    ghrepo.Interface
 	Filters SearchFilters
+	After   string
 	Limit   int
 } {
 	var calls []struct {
 		Repo    ghrepo.Interface
 		Filters SearchFilters
+		After   string
 		Limit   int
 	}
 	mock.lockSearch.RLock()
