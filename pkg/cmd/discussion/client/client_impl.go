@@ -414,7 +414,8 @@ func (c *discussionClient) GetWithComments(_ ghrepo.Interface, _ int, _ int, _ s
 func (c *discussionClient) ListCategories(repo ghrepo.Interface) ([]DiscussionCategory, error) {
 	var query struct {
 		Repository struct {
-			DiscussionCategories struct {
+			HasDiscussionsEnabled bool
+			DiscussionCategories  struct {
 				Nodes []struct {
 					ID           string
 					Name         string
@@ -433,6 +434,10 @@ func (c *discussionClient) ListCategories(repo ghrepo.Interface) ([]DiscussionCa
 
 	if err := c.gql.Query(repo.RepoHost(), "DiscussionCategoryList", &query, variables); err != nil {
 		return nil, err
+	}
+
+	if !query.Repository.HasDiscussionsEnabled {
+		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 	}
 
 	categories := make([]DiscussionCategory, len(query.Repository.DiscussionCategories.Nodes))
