@@ -484,8 +484,8 @@ func TestNewCmdList(t *testing.T) {
 			ios, _, _, _ := iostreams.Test()
 			f := &cmdutil.Factory{
 				IOStreams: ios,
-				Browser:  &browser.Stub{},
-				BaseRepo: func() (ghrepo.Interface, error) { return ghrepo.New("OWNER", "REPO"), nil },
+				Browser:   &browser.Stub{},
+				BaseRepo:  func() (ghrepo.Interface, error) { return ghrepo.New("OWNER", "REPO"), nil },
 			}
 
 			var gotOpts *ListOptions
