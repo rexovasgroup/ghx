@@ -22,53 +22,6 @@ func NewDiscussionClient(httpClient *http.Client) DiscussionClient {
 	}
 }
 
-// discussionNode is the GraphQL response shape for a single discussion,
-// used by both List and Search to avoid duplicating the field mapping.
-type discussionNode struct {
-	ID          string `json:"id"`
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Closed      bool   `json:"closed"`
-	StateReason string `json:"stateReason"`
-	Author      struct {
-		Login string `json:"login"`
-		ID    string `json:"id"`
-		Name  string `json:"name"`
-	} `json:"author"`
-	Category struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		Slug         string `json:"slug"`
-		Emoji        string `json:"emoji"`
-		IsAnswerable bool   `json:"isAnswerable"`
-	} `json:"category"`
-	Labels struct {
-		Nodes []struct {
-			ID    string `json:"id"`
-			Name  string `json:"name"`
-			Color string `json:"color"`
-		} `json:"nodes"`
-	} `json:"labels"`
-	IsAnswered     bool      `json:"isAnswered"`
-	AnswerChosenAt time.Time `json:"answerChosenAt"`
-	AnswerChosenBy *struct {
-		Login string `json:"login"`
-		ID    string `json:"id"`
-		Name  string `json:"name"`
-	} `json:"answerChosenBy"`
-	ReactionGroups []struct {
-		Content string `json:"content"`
-		Users   struct {
-			TotalCount int `json:"totalCount"`
-		} `json:"users"`
-	} `json:"reactionGroups"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	ClosedAt  time.Time `json:"closedAt"`
-	Locked    bool      `json:"locked"`
-}
-
 // actorNode is the GraphQL response shape for an Actor union (User or Bot)
 // used in discussionListNode fields like Author and AnswerChosenBy.
 type actorNode struct {
@@ -137,56 +90,6 @@ type discussionListNode struct {
 	Locked    bool
 }
 
-// mapDiscussion converts a GraphQL discussionNode response into the domain Discussion type.
-func mapDiscussion(n discussionNode) Discussion {
-	d := Discussion{
-		ID:          n.ID,
-		Number:      n.Number,
-		Title:       n.Title,
-		URL:         n.URL,
-		Closed:      n.Closed,
-		StateReason: n.StateReason,
-		Author: DiscussionActor{
-			ID:    n.Author.ID,
-			Login: n.Author.Login,
-			Name:  n.Author.Name,
-		},
-		Category: DiscussionCategory{
-			ID:           n.Category.ID,
-			Name:         n.Category.Name,
-			Slug:         n.Category.Slug,
-			Emoji:        n.Category.Emoji,
-			IsAnswerable: n.Category.IsAnswerable,
-		},
-		Answered:       n.IsAnswered,
-		AnswerChosenAt: n.AnswerChosenAt,
-		CreatedAt:      n.CreatedAt,
-		UpdatedAt:      n.UpdatedAt,
-		ClosedAt:       n.ClosedAt,
-		Locked:         n.Locked,
-	}
-
-	if n.AnswerChosenBy != nil {
-		d.AnswerChosenBy = &DiscussionActor{
-			ID:    n.AnswerChosenBy.ID,
-			Login: n.AnswerChosenBy.Login,
-			Name:  n.AnswerChosenBy.Name,
-		}
-	}
-
-	d.Labels = make([]DiscussionLabel, len(n.Labels.Nodes))
-	for i, l := range n.Labels.Nodes {
-		d.Labels[i] = DiscussionLabel{ID: l.ID, Name: l.Name, Color: l.Color}
-	}
-
-	d.ReactionGroups = make([]ReactionGroup, len(n.ReactionGroups))
-	for i, rg := range n.ReactionGroups {
-		d.ReactionGroups[i] = ReactionGroup{Content: rg.Content, TotalCount: rg.Users.TotalCount}
-	}
-
-	return d
-}
-
 // mapDiscussionFromListNode converts a discussionListNode into the domain Discussion type.
 func mapDiscussionFromListNode(n discussionListNode) Discussion {
 	d := Discussion{
@@ -231,50 +134,33 @@ func mapDiscussionFromListNode(n discussionListNode) Discussion {
 	return d
 }
 
-// discussionFields is the GraphQL fragment selecting fields for discussion queries.
-// It is shared by both List (repository.discussions) and Search queries.
-const discussionFields = `
-	id number title body url closed stateReason
-	author { login ...on User { id name } ...on Bot { id } }
-	category { id name slug emoji isAnswerable }
-	labels(first: 20) { nodes { id name color } }
-	isAnswered answerChosenAt answerChosenBy { login ...on User { id name } ...on Bot { id } }
-	reactionGroups { content users { totalCount } }
-	createdAt updatedAt closedAt locked
-`
-
 func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (*DiscussionListResult, error) {
 	if limit <= 0 {
 		return nil, fmt.Errorf("limit argument must be positive: %v", limit)
 	}
 
-	type response struct {
+	var query struct {
 		Repository struct {
-			HasDiscussionsEnabled bool `json:"hasDiscussionsEnabled"`
+			HasDiscussionsEnabled bool
 			Discussions           struct {
-				TotalCount int `json:"totalCount"`
+				TotalCount int
 				PageInfo   struct {
-					HasNextPage bool   `json:"hasNextPage"`
-					EndCursor   string `json:"endCursor"`
-				} `json:"pageInfo"`
-				Nodes []discussionNode `json:"nodes"`
-			} `json:"discussions"`
-		} `json:"repository"`
+					HasNextPage bool
+					EndCursor   string
+				}
+				Nodes []discussionListNode
+			} `graphql:"discussions(first: $first, after: $after, orderBy: $orderBy, categoryId: $categoryId, states: $states, answered: $answered)"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
 	}
 
-	variables := map[string]interface{}{
-		"owner": repo.RepoOwner(),
-		"name":  repo.RepoName(),
-	}
-
-	orderField := "UPDATED_AT"
-	orderDir := "DESC"
+	orderField := githubv4.DiscussionOrderFieldUpdatedAt
+	orderDir := githubv4.OrderDirectionDesc
 	if filters.OrderBy != "" {
 		switch filters.OrderBy {
 		case OrderByCreated:
-			orderField = "CREATED_AT"
+			orderField = githubv4.DiscussionOrderFieldCreatedAt
 		case OrderByUpdated:
-			orderField = "UPDATED_AT"
+			orderField = githubv4.DiscussionOrderFieldUpdatedAt
 		default:
 			return nil, fmt.Errorf("unknown order-by field: %q", filters.OrderBy)
 		}
@@ -282,113 +168,82 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 	if filters.Direction != "" {
 		switch filters.Direction {
 		case OrderDirectionAsc:
-			orderDir = "ASC"
+			orderDir = githubv4.OrderDirectionAsc
 		case OrderDirectionDesc:
-			orderDir = "DESC"
+			orderDir = githubv4.OrderDirectionDesc
 		default:
 			return nil, fmt.Errorf("unknown order direction: %q", filters.Direction)
 		}
 	}
-	variables["orderBy"] = map[string]string{
-		"field":     orderField,
-		"direction": orderDir,
+
+	perPage := limit
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	variables := map[string]interface{}{
+		"owner":      githubv4.String(repo.RepoOwner()),
+		"name":       githubv4.String(repo.RepoName()),
+		"first":      githubv4.Int(perPage),
+		"after":      (*githubv4.String)(nil),
+		"orderBy":    githubv4.DiscussionOrder{Field: orderField, Direction: orderDir},
+		"categoryId": (*githubv4.ID)(nil),
+		"states":     (*[]githubv4.DiscussionState)(nil),
+		"answered":   (*githubv4.Boolean)(nil),
+	}
+
+	if after != "" {
+		variables["after"] = githubv4.String(after)
 	}
 
 	if filters.CategoryID != "" {
-		variables["categoryId"] = filters.CategoryID
+		variables["categoryId"] = githubv4.ID(filters.CategoryID)
 	}
 
 	if filters.State != nil {
 		switch *filters.State {
 		case FilterStateOpen:
-			variables["states"] = []string{"OPEN"}
+			variables["states"] = &[]githubv4.DiscussionState{githubv4.DiscussionStateOpen}
 		case FilterStateClosed:
-			variables["states"] = []string{"CLOSED"}
+			variables["states"] = &[]githubv4.DiscussionState{githubv4.DiscussionStateClosed}
 		default:
 			return nil, fmt.Errorf("unknown state filter: %q; should be one of %q, %q", *filters.State, FilterStateOpen, FilterStateClosed)
 		}
 	}
 
 	if filters.Answered != nil {
-		variables["answered"] = *filters.Answered
+		variables["answered"] = githubv4.Boolean(*filters.Answered)
 	}
 
-	query := fmt.Sprintf(`query DiscussionList(
-		$owner: String!,
-		$name: String!,
-		$first: Int!,
-		$after: String,
-		$orderBy: DiscussionOrder,
-		$categoryId: ID,
-		$states: [DiscussionState!],
-		$answered: Boolean
-	) {
-		repository(owner: $owner, name: $name) {
-			hasDiscussionsEnabled
-			discussions(
-				first: $first,
-				after: $after,
-				orderBy: $orderBy,
-				categoryId: $categoryId,
-				states: $states,
-				answered: $answered
-			) {
-				totalCount
-				pageInfo { hasNextPage endCursor }
-				nodes { %s }
-			}
-		}
-	}`, discussionFields)
-
-	if after != "" {
-		variables["after"] = after
-	}
-
-	var discussions []Discussion
-	var totalCount int
-	var nextCursor string
+	var result DiscussionListResult
 	remaining := limit
 
-	// Check hasDiscussionsEnabled on first request only
-	firstPage := true
-
 	for {
-		perPage := remaining
-		if perPage > 100 {
-			perPage = 100
-		}
-		variables["first"] = perPage
-
-		var data response
-		if err := c.gql.GraphQL(repo.RepoHost(), query, variables, &data); err != nil {
+		if err := c.gql.Query(repo.RepoHost(), "DiscussionList", &query, variables); err != nil {
 			return nil, err
 		}
 
-		if firstPage && !data.Repository.HasDiscussionsEnabled {
+		if !query.Repository.HasDiscussionsEnabled {
+			// This would be the same over every iteration, so if we're going to return we will at the first page.
 			return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 		}
-		firstPage = false
 
-		totalCount = data.Repository.Discussions.TotalCount
-		for _, n := range data.Repository.Discussions.Nodes {
-			discussions = append(discussions, mapDiscussion(n))
+		result.TotalCount = query.Repository.Discussions.TotalCount
+		for _, n := range query.Repository.Discussions.Nodes {
+			result.Discussions = append(result.Discussions, mapDiscussionFromListNode(n))
 		}
 
-		remaining -= len(data.Repository.Discussions.Nodes)
-		if remaining <= 0 || !data.Repository.Discussions.PageInfo.HasNextPage {
-			if data.Repository.Discussions.PageInfo.HasNextPage {
-				nextCursor = data.Repository.Discussions.PageInfo.EndCursor
+		remaining -= len(query.Repository.Discussions.Nodes)
+		if remaining <= 0 || !query.Repository.Discussions.PageInfo.HasNextPage {
+			if query.Repository.Discussions.PageInfo.HasNextPage {
+				result.NextCursor = query.Repository.Discussions.PageInfo.EndCursor
 			}
 			break
 		}
-		variables["after"] = data.Repository.Discussions.PageInfo.EndCursor
+		variables["after"] = githubv4.String(query.Repository.Discussions.PageInfo.EndCursor)
 	}
 
-	return &DiscussionListResult{
-		Discussions: discussions,
-		TotalCount:  totalCount,
-		NextCursor:  nextCursor,
-	}, nil
+	return &result, nil
 }
 
 func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (*DiscussionListResult, error) {
