@@ -236,6 +236,9 @@ func openInBrowser(opts *ListOptions, repo ghrepo.Interface) error {
 	discussionsURL := ghrepo.GenerateRepoURL(repo, "discussions")
 
 	var queryParts []string
+	if opts.Search != "" {
+		queryParts = append(queryParts, opts.Search)
+	}
 	if opts.State != "" && opts.State != "all" {
 		queryParts = append(queryParts, "is:"+opts.State)
 	}
