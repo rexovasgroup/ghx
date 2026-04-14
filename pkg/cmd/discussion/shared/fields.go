@@ -8,7 +8,7 @@ var DiscussionFields = []string{
 	"title",
 	"body",
 	"url",
-	"state",
+	"closed",
 	"stateReason",
 	"author",
 	"category",

@@ -24,7 +24,6 @@ func sampleDiscussions() []client.Discussion {
 			Number: 42,
 			Title:  "Bug report discussion",
 			URL:    "https://github.com/OWNER/REPO/discussions/42",
-			State:  "OPEN",
 			Author: client.DiscussionAuthor{Login: "monalisa"},
 			Category: client.DiscussionCategory{
 				ID:   "CAT1",
@@ -41,7 +40,6 @@ func sampleDiscussions() []client.Discussion {
 			Number: 41,
 			Title:  "Feature request",
 			URL:    "https://github.com/OWNER/REPO/discussions/41",
-			State:  "OPEN",
 			Author: client.DiscussionAuthor{Login: "octocat"},
 			Category: client.DiscussionCategory{
 				ID:   "CAT2",
@@ -576,7 +574,7 @@ func TestListRun_closedState(t *testing.T) {
 		{
 			Number:    10,
 			Title:     "Old discussion",
-			State:     "CLOSED",
+			Closed:    true,
 			Category:  client.DiscussionCategory{Name: "General"},
 			Labels:    []client.DiscussionLabel{},
 			UpdatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),

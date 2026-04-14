@@ -10,7 +10,7 @@ type Discussion struct {
 	Title          string
 	Body           string
 	URL            string
-	State          string
+	Closed         bool
 	StateReason    string
 	Author         DiscussionAuthor
 	Category       DiscussionCategory
@@ -43,8 +43,8 @@ func (d Discussion) ExportData(fields []string) map[string]interface{} {
 			data[f] = d.Body
 		case "url":
 			data[f] = d.URL
-		case "state":
-			data[f] = d.State
+		case "closed":
+			data[f] = d.Closed
 		case "stateReason":
 			data[f] = d.StateReason
 		case "author":

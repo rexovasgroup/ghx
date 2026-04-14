@@ -20,13 +20,16 @@ import (
 
 const defaultLimit = 30
 
+// discussionListFields lists the field names available for --json output
+// on the discussion list command. This excludes fields like "comments"
+// that are only populated by the view command.
 var discussionListFields = []string{
 	"id",
 	"number",
 	"title",
 	"body",
 	"url",
-	"state",
+	"closed",
 	"stateReason",
 	"author",
 	"category",
@@ -306,13 +309,17 @@ func printDiscussions(opts *ListOptions, discussions []client.Discussion, totalC
 	for _, d := range discussions {
 		if isTerminal {
 			idColor := cs.Green
-			if strings.EqualFold(d.State, "CLOSED") {
+			if d.Closed {
 				idColor = cs.Gray
 			}
 			tp.AddField(fmt.Sprintf("#%d", d.Number), tableprinter.WithColor(idColor))
 		} else {
 			tp.AddField(fmt.Sprintf("%d", d.Number))
-			tp.AddField(d.State)
+			if d.Closed {
+				tp.AddField("CLOSED")
+			} else {
+				tp.AddField("OPEN")
+			}
 		}
 
 		tp.AddField(text.RemoveExcessiveWhitespace(d.Title))

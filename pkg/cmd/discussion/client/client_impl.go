@@ -67,17 +67,12 @@ type discussionNode struct {
 
 // mapDiscussion converts a GraphQL discussionNode response into the domain Discussion type.
 func mapDiscussion(n discussionNode) Discussion {
-	state := "OPEN"
-	if n.Closed {
-		state = "CLOSED"
-	}
-
 	d := Discussion{
 		ID:          n.ID,
 		Number:      n.Number,
 		Title:       n.Title,
 		URL:         n.URL,
-		State:       state,
+		Closed:      n.Closed,
 		StateReason: n.StateReason,
 		Author:      DiscussionAuthor{Login: n.Author.Login},
 		Category: DiscussionCategory{
