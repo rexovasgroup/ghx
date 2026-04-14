@@ -201,42 +201,32 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 		variables["answered"] = *filters.Answered
 	}
 
-	// Build optional parameter declarations
-	paramParts := []string{
-		"$owner: String!",
-		"$name: String!",
-		"$first: Int!",
-		"$after: String",
-		"$orderBy: DiscussionOrder",
-	}
-	argParts := []string{
-		"first: $first",
-		"after: $after",
-		"orderBy: $orderBy",
-	}
-	if filters.CategoryID != "" {
-		paramParts = append(paramParts, "$categoryId: ID")
-		argParts = append(argParts, "categoryId: $categoryId")
-	}
-	if _, ok := variables["states"]; ok {
-		paramParts = append(paramParts, "$states: [DiscussionState!]")
-		argParts = append(argParts, "states: $states")
-	}
-	if filters.Answered != nil {
-		paramParts = append(paramParts, "$answered: Boolean")
-		argParts = append(argParts, "answered: $answered")
-	}
-
-	query := fmt.Sprintf(`query DiscussionList(%s) {
+	query := fmt.Sprintf(`query DiscussionList(
+		$owner: String!,
+		$name: String!,
+		$first: Int!,
+		$after: String,
+		$orderBy: DiscussionOrder,
+		$categoryId: ID,
+		$states: [DiscussionState!],
+		$answered: Boolean
+	) {
 		repository(owner: $owner, name: $name) {
 			hasDiscussionsEnabled
-			discussions(%s) {
+			discussions(
+				first: $first,
+				after: $after,
+				orderBy: $orderBy,
+				categoryId: $categoryId,
+				states: $states,
+				answered: $answered
+			) {
 				totalCount
 				pageInfo { hasNextPage endCursor }
 				nodes { %s }
 			}
 		}
-	}`, strings.Join(paramParts, ", "), strings.Join(argParts, ", "), discussionFields)
+	}`, discussionFields)
 
 	if after != "" {
 		variables["after"] = after
