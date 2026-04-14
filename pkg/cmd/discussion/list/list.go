@@ -20,6 +20,27 @@ import (
 
 const defaultLimit = 30
 
+var discussionListFields = []string{
+	"id",
+	"number",
+	"title",
+	"body",
+	"url",
+	"state",
+	"stateReason",
+	"author",
+	"category",
+	"labels",
+	"answered",
+	"answerChosenAt",
+	"answerChosenBy",
+	"reactionGroups",
+	"createdAt",
+	"updatedAt",
+	"closedAt",
+	"locked",
+}
+
 // ListOptions holds the configuration for the discussion list command.
 type ListOptions struct {
 	IO       *iostreams.IOStreams
@@ -105,7 +126,7 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 	cmd.Flags().StringVarP(&opts.Search, "search", "S", "", "Search discussions with `query`")
 	cmd.Flags().StringVar(&opts.After, "after", "", "Cursor for the next page of results")
 	cmd.Flags().BoolVarP(&opts.WebMode, "web", "w", false, "List discussions in the web browser")
-	cmdutil.AddJSONFlags(cmd, &opts.Exporter, shared.DiscussionFields)
+	cmdutil.AddJSONFlags(cmd, &opts.Exporter, discussionListFields)
 
 	return cmd
 }
