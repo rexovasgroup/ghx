@@ -19,7 +19,6 @@ type Discussion struct {
 	AnswerChosenAt time.Time
 	AnswerChosenBy *DiscussionActor
 	Comments       DiscussionCommentList
-	ReactionGroups []ReactionGroup
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	ClosedAt       time.Time
@@ -80,12 +79,6 @@ func (d Discussion) ExportData(fields []string) map[string]interface{} {
 				"totalCount": d.Comments.TotalCount,
 				"nodes":      comments,
 			}
-		case "reactionGroups":
-			groups := make([]interface{}, len(d.ReactionGroups))
-			for i, rg := range d.ReactionGroups {
-				groups[i] = rg.Export()
-			}
-			data[f] = groups
 		case "createdAt":
 			data[f] = d.CreatedAt
 		case "updatedAt":

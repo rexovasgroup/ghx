@@ -37,7 +37,6 @@ var discussionListFields = []string{
 	"answered",
 	"answerChosenAt",
 	"answerChosenBy",
-	"reactionGroups",
 	"createdAt",
 	"updatedAt",
 	"closedAt",

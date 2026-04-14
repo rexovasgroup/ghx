@@ -83,7 +83,7 @@ type discussionListNode struct {
 		Users   struct {
 			TotalCount int
 		}
-	}
+	} `graphql:"reactionGroups"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	ClosedAt  time.Time
@@ -124,11 +124,6 @@ func mapDiscussionFromListNode(n discussionListNode) Discussion {
 	d.Labels = make([]DiscussionLabel, len(n.Labels.Nodes))
 	for i, l := range n.Labels.Nodes {
 		d.Labels[i] = DiscussionLabel{ID: l.ID, Name: l.Name, Color: l.Color}
-	}
-
-	d.ReactionGroups = make([]ReactionGroup, len(n.ReactionGroups))
-	for i, rg := range n.ReactionGroups {
-		d.ReactionGroups[i] = ReactionGroup{Content: rg.Content, TotalCount: rg.Users.TotalCount}
 	}
 
 	return d
