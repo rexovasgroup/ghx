@@ -33,6 +33,8 @@ type discussionNode struct {
 	StateReason string `json:"stateReason"`
 	Author      struct {
 		Login string `json:"login"`
+		ID    string `json:"id"`
+		Name  string `json:"name"`
 	} `json:"author"`
 	Category struct {
 		ID           string `json:"id"`
@@ -52,6 +54,8 @@ type discussionNode struct {
 	AnswerChosenAt time.Time `json:"answerChosenAt"`
 	AnswerChosenBy *struct {
 		Login string `json:"login"`
+		ID    string `json:"id"`
+		Name  string `json:"name"`
 	} `json:"answerChosenBy"`
 	ReactionGroups []struct {
 		Content string `json:"content"`
@@ -74,7 +78,11 @@ func mapDiscussion(n discussionNode) Discussion {
 		URL:         n.URL,
 		Closed:      n.Closed,
 		StateReason: n.StateReason,
-		Author:      DiscussionAuthor{Login: n.Author.Login},
+		Author: DiscussionActor{
+			ID:    n.Author.ID,
+			Login: n.Author.Login,
+			Name:  n.Author.Name,
+		},
 		Category: DiscussionCategory{
 			ID:           n.Category.ID,
 			Name:         n.Category.Name,
@@ -91,7 +99,11 @@ func mapDiscussion(n discussionNode) Discussion {
 	}
 
 	if n.AnswerChosenBy != nil {
-		d.AnswerChosenBy = &DiscussionAuthor{Login: n.AnswerChosenBy.Login}
+		d.AnswerChosenBy = &DiscussionActor{
+			ID:    n.AnswerChosenBy.ID,
+			Login: n.AnswerChosenBy.Login,
+			Name:  n.AnswerChosenBy.Name,
+		}
 	}
 
 	d.Labels = make([]DiscussionLabel, len(n.Labels.Nodes))
@@ -111,10 +123,10 @@ func mapDiscussion(n discussionNode) Discussion {
 // It is shared by both List (repository.discussions) and Search queries.
 const discussionFields = `
 	id number title body url closed stateReason
-	author { login }
+	author { login ...on User { id name } ...on Bot { id } }
 	category { id name slug emoji isAnswerable }
 	labels(first: 20) { nodes { id name color } }
-	isAnswered answerChosenAt answerChosenBy { login }
+	isAnswered answerChosenAt answerChosenBy { login ...on User { id name } ...on Bot { id } }
 	reactionGroups { content users { totalCount } }
 	createdAt updatedAt closedAt locked
 `

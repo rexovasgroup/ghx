@@ -12,12 +12,12 @@ type Discussion struct {
 	URL            string
 	Closed         bool
 	StateReason    string
-	Author         DiscussionAuthor
+	Author         DiscussionActor
 	Category       DiscussionCategory
 	Labels         []DiscussionLabel
 	Answered       bool
 	AnswerChosenAt time.Time
-	AnswerChosenBy *DiscussionAuthor
+	AnswerChosenBy *DiscussionActor
 	Comments       DiscussionCommentList
 	ReactionGroups []ReactionGroup
 	CreatedAt      time.Time
@@ -103,15 +103,15 @@ func (d Discussion) ExportData(fields []string) map[string]interface{} {
 	return data
 }
 
-// DiscussionAuthor represents the author of a discussion or comment.
-type DiscussionAuthor struct {
+// DiscussionActor represents a GitHub actor (user or bot) associated with a discussion.
+type DiscussionActor struct {
 	ID    string
 	Login string
 	Name  string
 }
 
 // Export returns the author as a map for JSON output.
-func (a DiscussionAuthor) Export() map[string]interface{} {
+func (a DiscussionActor) Export() map[string]interface{} {
 	return map[string]interface{}{
 		"id":    a.ID,
 		"login": a.Login,
@@ -159,7 +159,7 @@ func (l DiscussionLabel) Export() map[string]interface{} {
 type DiscussionComment struct {
 	ID             string
 	URL            string
-	Author         DiscussionAuthor
+	Author         DiscussionActor
 	Body           string
 	CreatedAt      time.Time
 	IsAnswer       bool

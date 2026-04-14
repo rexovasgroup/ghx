@@ -24,7 +24,7 @@ func sampleDiscussions() []client.Discussion {
 			Number: 42,
 			Title:  "Bug report discussion",
 			URL:    "https://github.com/OWNER/REPO/discussions/42",
-			Author: client.DiscussionAuthor{Login: "monalisa"},
+			Author: client.DiscussionActor{Login: "monalisa"},
 			Category: client.DiscussionCategory{
 				ID:   "CAT1",
 				Name: "General",
@@ -40,7 +40,7 @@ func sampleDiscussions() []client.Discussion {
 			Number: 41,
 			Title:  "Feature request",
 			URL:    "https://github.com/OWNER/REPO/discussions/41",
-			Author: client.DiscussionAuthor{Login: "octocat"},
+			Author: client.DiscussionActor{Login: "octocat"},
 			Category: client.DiscussionCategory{
 				ID:   "CAT2",
 				Name: "Ideas",
