@@ -110,7 +110,7 @@ func mapDiscussion(n discussionNode) Discussion {
 // discussionFields is the GraphQL fragment selecting fields for discussion queries.
 // It is shared by both List (repository.discussions) and Search queries.
 const discussionFields = `
-	id number title url closed stateReason
+	id number title body url closed stateReason
 	author { login }
 	category { id name slug emoji isAnswerable }
 	labels(first: 20) { nodes { id name color } }
