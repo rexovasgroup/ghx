@@ -228,13 +228,7 @@ func listRun(opts *ListOptions) error {
 		fmt.Fprintf(opts.IO.ErrOut, "failed to start pager: %v\n", err)
 	}
 
-	isTerminal := opts.IO.IsStdoutTTY()
-	if isTerminal {
-		title := listHeader(ghrepo.FullName(repo), len(result.Discussions), result.TotalCount, opts.State)
-		fmt.Fprintf(opts.IO.Out, "\n%s\n\n", title)
-	}
-
-	printDiscussions(opts, result.Discussions, result.TotalCount)
+	printDiscussions(opts, ghrepo.FullName(repo), result.Discussions, result.TotalCount)
 	return nil
 }
 
@@ -294,10 +288,15 @@ func listHeader(repoName string, count, total int, state string) string {
 	}
 }
 
-func printDiscussions(opts *ListOptions, discussions []client.Discussion, totalCount int) {
+func printDiscussions(opts *ListOptions, repoName string, discussions []client.Discussion, totalCount int) {
 	isTerminal := opts.IO.IsStdoutTTY()
 	cs := opts.IO.ColorScheme()
 	now := opts.Now()
+
+	if isTerminal {
+		title := listHeader(repoName, len(discussions), totalCount, opts.State)
+		fmt.Fprintf(opts.IO.Out, "\n%s\n\n", title)
+	}
 
 	headers := []string{"ID", "TITLE", "CATEGORY", "LABELS", "ANSWERED", "UPDATED"}
 	if !isTerminal {
@@ -309,7 +308,7 @@ func printDiscussions(opts *ListOptions, discussions []client.Discussion, totalC
 		if isTerminal {
 			idColor := cs.Green
 			if d.Closed {
-				idColor = cs.Gray
+				idColor = cs.Muted
 			}
 			tp.AddField(fmt.Sprintf("#%d", d.Number), tableprinter.WithColor(idColor))
 		} else {
