@@ -240,7 +240,7 @@ func openInBrowser(opts *ListOptions, repo ghrepo.Interface) error {
 		queryParts = append(queryParts, "is:"+opts.State)
 	}
 	if opts.Author != "" {
-		queryParts = append(queryParts, "author:"+opts.Author)
+		queryParts = append(queryParts, fmt.Sprintf("author:%q", opts.Author))
 	}
 	for _, l := range opts.Labels {
 		queryParts = append(queryParts, fmt.Sprintf("label:%q", l))
