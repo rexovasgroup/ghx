@@ -53,8 +53,8 @@ func sampleDiscussions() []client.Discussion {
 	}
 }
 
-func sampleResult() client.DiscussionListResult {
-	return client.DiscussionListResult{
+func sampleResult() *client.DiscussionListResult {
+	return &client.DiscussionListResult{
 		Discussions: sampleDiscussions(),
 		TotalCount:  2,
 	}
@@ -74,7 +74,7 @@ func TestListRun_tty(t *testing.T) {
 	ios.SetStderrTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (*client.DiscussionListResult, error) {
 			return sampleResult(), nil
 		},
 	}
@@ -109,7 +109,7 @@ func TestListRun_nontty(t *testing.T) {
 	ios.SetStdoutTTY(false)
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (*client.DiscussionListResult, error) {
 			return sampleResult(), nil
 		},
 	}
@@ -139,8 +139,8 @@ func TestListRun_json(t *testing.T) {
 	ios, _, stdout, _ := iostreams.Test()
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
-			return client.DiscussionListResult{
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (*client.DiscussionListResult, error) {
+			return &client.DiscussionListResult{
 				Discussions: sampleDiscussions(),
 				TotalCount:  2,
 				NextCursor:  "CURSOR123",
@@ -199,8 +199,8 @@ func TestListRun_noResults(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
-			return client.DiscussionListResult{}, nil
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (*client.DiscussionListResult, error) {
+			return &client.DiscussionListResult{}, nil
 		},
 	}
 
@@ -229,9 +229,9 @@ func TestListRun_categoryFilter(t *testing.T) {
 		ListCategoriesFunc: func(repo ghrepo.Interface) ([]client.DiscussionCategory, error) {
 			return sampleCategories(), nil
 		},
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (*client.DiscussionListResult, error) {
 			assert.Equal(t, "CAT1", filters.CategoryID)
-			return client.DiscussionListResult{
+			return &client.DiscussionListResult{
 				Discussions: sampleDiscussions()[:1],
 				TotalCount:  1,
 			}, nil
@@ -286,9 +286,9 @@ func TestListRun_authorFilter(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (client.DiscussionListResult, error) {
+		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (*client.DiscussionListResult, error) {
 			assert.Equal(t, "monalisa", filters.Author)
-			return client.DiscussionListResult{
+			return &client.DiscussionListResult{
 				Discussions: sampleDiscussions()[:1],
 				TotalCount:  1,
 			}, nil
@@ -317,9 +317,9 @@ func TestListRun_labelFilter(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (client.DiscussionListResult, error) {
+		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (*client.DiscussionListResult, error) {
 			assert.Equal(t, []string{"bug", "docs"}, filters.Labels)
-			return client.DiscussionListResult{
+			return &client.DiscussionListResult{
 				Discussions: sampleDiscussions()[:1],
 				TotalCount:  1,
 			}, nil
@@ -348,9 +348,9 @@ func TestListRun_searchFilter(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (client.DiscussionListResult, error) {
+		SearchFunc: func(repo ghrepo.Interface, filters client.SearchFilters, after string, limit int) (*client.DiscussionListResult, error) {
 			assert.Equal(t, "some keywords", filters.Keywords)
-			return client.DiscussionListResult{
+			return &client.DiscussionListResult{
 				Discussions: sampleDiscussions()[:1],
 				TotalCount:  1,
 			}, nil
@@ -379,7 +379,7 @@ func TestListRun_afterCursor(t *testing.T) {
 	ios.SetStdoutTTY(true)
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (*client.DiscussionListResult, error) {
 			assert.Equal(t, "CURSOR_ABC", after)
 			return sampleResult(), nil
 		},
@@ -582,8 +582,8 @@ func TestListRun_closedState(t *testing.T) {
 	}
 
 	mockClient := &client.DiscussionClientMock{
-		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (client.DiscussionListResult, error) {
-			return client.DiscussionListResult{
+		ListFunc: func(repo ghrepo.Interface, filters client.ListFilters, after string, limit int) (*client.DiscussionListResult, error) {
+			return &client.DiscussionListResult{
 				Discussions: closed,
 				TotalCount:  1,
 			}, nil

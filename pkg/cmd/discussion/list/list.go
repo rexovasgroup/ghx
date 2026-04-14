@@ -181,7 +181,7 @@ func listRun(opts *ListOptions) error {
 
 	state := toFilterState(opts.State)
 
-	var result client.DiscussionListResult
+	var result *client.DiscussionListResult
 
 	useSearch := opts.Author != "" || len(opts.Labels) > 0 || opts.Search != ""
 	if useSearch {

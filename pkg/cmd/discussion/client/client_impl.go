@@ -131,9 +131,9 @@ const discussionFields = `
 	createdAt updatedAt closedAt locked
 `
 
-func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (DiscussionListResult, error) {
+func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (*DiscussionListResult, error) {
 	if limit <= 0 {
-		return DiscussionListResult{}, fmt.Errorf("limit argument must be positive: %v", limit)
+		return nil, fmt.Errorf("limit argument must be positive: %v", limit)
 	}
 
 	type response struct {
@@ -164,7 +164,7 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 		case OrderByUpdated:
 			orderField = "UPDATED_AT"
 		default:
-			return DiscussionListResult{}, fmt.Errorf("unknown order-by field: %q", filters.OrderBy)
+			return nil, fmt.Errorf("unknown order-by field: %q", filters.OrderBy)
 		}
 	}
 	if filters.Direction != "" {
@@ -174,7 +174,7 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 		case OrderDirectionDesc:
 			orderDir = "DESC"
 		default:
-			return DiscussionListResult{}, fmt.Errorf("unknown order direction: %q", filters.Direction)
+			return nil, fmt.Errorf("unknown order direction: %q", filters.Direction)
 		}
 	}
 	variables["orderBy"] = map[string]string{
@@ -193,7 +193,7 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 		case FilterStateClosed:
 			variables["states"] = []string{"CLOSED"}
 		default:
-			return DiscussionListResult{}, fmt.Errorf("unknown state filter: %q; should be one of %q, %q", *filters.State, FilterStateOpen, FilterStateClosed)
+			return nil, fmt.Errorf("unknown state filter: %q; should be one of %q, %q", *filters.State, FilterStateOpen, FilterStateClosed)
 		}
 	}
 
@@ -249,11 +249,11 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 
 		var data response
 		if err := c.gql.GraphQL(repo.RepoHost(), query, variables, &data); err != nil {
-			return DiscussionListResult{}, err
+			return nil, err
 		}
 
 		if firstPage && !data.Repository.HasDiscussionsEnabled {
-			return DiscussionListResult{}, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
+			return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 		}
 		firstPage = false
 
@@ -272,16 +272,16 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 		variables["after"] = data.Repository.Discussions.PageInfo.EndCursor
 	}
 
-	return DiscussionListResult{
+	return &DiscussionListResult{
 		Discussions: discussions,
 		TotalCount:  totalCount,
 		NextCursor:  nextCursor,
 	}, nil
 }
 
-func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (DiscussionListResult, error) {
+func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (*DiscussionListResult, error) {
 	if limit <= 0 {
-		return DiscussionListResult{}, fmt.Errorf("limit argument must be positive: %v", limit)
+		return nil, fmt.Errorf("limit argument must be positive: %v", limit)
 	}
 
 	type response struct {
@@ -304,7 +304,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 		case FilterStateClosed:
 			qualifiers = append(qualifiers, "state:closed")
 		default:
-			return DiscussionListResult{}, fmt.Errorf("unknown state filter: %q; should be one of %q, %q", *filters.State, FilterStateOpen, FilterStateClosed)
+			return nil, fmt.Errorf("unknown state filter: %q; should be one of %q, %q", *filters.State, FilterStateOpen, FilterStateClosed)
 		}
 	}
 
@@ -332,7 +332,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 		case OrderByCreated, OrderByUpdated:
 			orderField = filters.OrderBy
 		default:
-			return DiscussionListResult{}, fmt.Errorf("unknown order-by field: %q", filters.OrderBy)
+			return nil, fmt.Errorf("unknown order-by field: %q", filters.OrderBy)
 		}
 	}
 	if filters.Direction != "" {
@@ -340,7 +340,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 		case OrderDirectionAsc, OrderDirectionDesc:
 			orderDir = filters.Direction
 		default:
-			return DiscussionListResult{}, fmt.Errorf("unknown order direction: %q", filters.Direction)
+			return nil, fmt.Errorf("unknown order direction: %q", filters.Direction)
 		}
 	}
 	qualifiers = append(qualifiers, fmt.Sprintf("sort:%s-%s", orderField, orderDir))
@@ -380,7 +380,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 
 		var data response
 		if err := c.gql.GraphQL(repo.RepoHost(), query, variables, &data); err != nil {
-			return DiscussionListResult{}, err
+			return nil, err
 		}
 
 		totalCount = data.Search.DiscussionCount
@@ -398,7 +398,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 		variables["after"] = data.Search.PageInfo.EndCursor
 	}
 
-	return DiscussionListResult{
+	return &DiscussionListResult{
 		Discussions: discussions,
 		TotalCount:  totalCount,
 		NextCursor:  nextCursor,
