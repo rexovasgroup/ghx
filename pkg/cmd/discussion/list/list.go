@@ -273,25 +273,25 @@ func openInBrowser(opts *ListOptions, repo ghrepo.Interface) error {
 }
 
 func noResults(repo ghrepo.Interface, state string) error {
-	stateQualifier := ""
 	switch state {
 	case "open":
-		stateQualifier = " open"
+		return cmdutil.NewNoResultsError(fmt.Sprintf("no open discussions match your search in %s", ghrepo.FullName(repo)))
 	case "closed":
-		stateQualifier = " closed"
+		return cmdutil.NewNoResultsError(fmt.Sprintf("no closed discussions match your search in %s", ghrepo.FullName(repo)))
+	default:
+		return cmdutil.NewNoResultsError(fmt.Sprintf("no discussions match your search in %s", ghrepo.FullName(repo)))
 	}
-	return cmdutil.NewNoResultsError(fmt.Sprintf("no%s discussions match your search in %s", stateQualifier, ghrepo.FullName(repo)))
 }
 
 func listHeader(repoName string, count, total int, state string) string {
-	stateQualifier := ""
 	switch state {
 	case "open":
-		stateQualifier = " open"
+		return fmt.Sprintf("Showing %d of %d open discussions in %s", count, total, repoName)
 	case "closed":
-		stateQualifier = " closed"
+		return fmt.Sprintf("Showing %d of %d closed discussions in %s", count, total, repoName)
+	default:
+		return fmt.Sprintf("Showing %d of %d discussions in %s", count, total, repoName)
 	}
-	return fmt.Sprintf("Showing %d of %d%s discussions in %s", count, total, stateQualifier, repoName)
 }
 
 func printDiscussions(opts *ListOptions, discussions []client.Discussion, totalCount int) {
