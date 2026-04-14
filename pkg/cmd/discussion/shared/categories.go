@@ -28,5 +28,5 @@ func MatchCategory(input string, categories []client.DiscussionCategory) (*clien
 		slugs[i] = c.Slug
 	}
 	slices.Sort(slugs)
-	return nil, fmt.Errorf("unknown category: %q; must be one of %v", input, slugs)
+	return nil, fmt.Errorf("unknown category: %q; must be one of %q", input, slugs)
 }
