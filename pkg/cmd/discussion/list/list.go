@@ -346,8 +346,7 @@ func printDiscussions(opts *ListOptions, discussions []client.Discussion, totalC
 
 	_ = tp.Render()
 
-	remaining := totalCount - len(discussions)
-	if remaining > 0 {
+	if remaining := totalCount - len(discussions); isTerminal && remaining > 0 {
 		fmt.Fprintf(opts.IO.Out, cs.Muted("And %d more\n"), remaining)
 	}
 }
