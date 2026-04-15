@@ -9,8 +9,8 @@ import "github.com/cli/cli/v2/internal/ghrepo"
 
 // DiscussionClient defines operations for interacting with the GitHub Discussions API.
 type DiscussionClient interface {
-	List(repo ghrepo.Interface, filters ListFilters, limit int) ([]Discussion, int, error)
-	Search(repo ghrepo.Interface, filters SearchFilters, limit int) ([]Discussion, int, error)
+	List(repo ghrepo.Interface, filters ListFilters, after string, limit int) (*DiscussionListResult, error)
+	Search(repo ghrepo.Interface, filters SearchFilters, after string, limit int) (*DiscussionListResult, error)
 	GetByNumber(repo ghrepo.Interface, number int) (*Discussion, error)
 	GetWithComments(repo ghrepo.Interface, number int, commentLimit int, order string) (*Discussion, error)
 	ListCategories(repo ghrepo.Interface) ([]DiscussionCategory, error)

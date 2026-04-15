@@ -10,16 +10,15 @@ type Discussion struct {
 	Title          string
 	Body           string
 	URL            string
-	State          string
+	Closed         bool
 	StateReason    string
-	Author         DiscussionAuthor
+	Author         DiscussionActor
 	Category       DiscussionCategory
 	Labels         []DiscussionLabel
 	Answered       bool
 	AnswerChosenAt time.Time
-	AnswerChosenBy *DiscussionAuthor
+	AnswerChosenBy *DiscussionActor
 	Comments       DiscussionCommentList
-	ReactionGroups []ReactionGroup
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	ClosedAt       time.Time
@@ -43,8 +42,8 @@ func (d Discussion) ExportData(fields []string) map[string]interface{} {
 			data[f] = d.Body
 		case "url":
 			data[f] = d.URL
-		case "state":
-			data[f] = d.State
+		case "closed":
+			data[f] = d.Closed
 		case "stateReason":
 			data[f] = d.StateReason
 		case "author":
@@ -80,12 +79,6 @@ func (d Discussion) ExportData(fields []string) map[string]interface{} {
 				"totalCount": d.Comments.TotalCount,
 				"nodes":      comments,
 			}
-		case "reactionGroups":
-			groups := make([]interface{}, len(d.ReactionGroups))
-			for i, rg := range d.ReactionGroups {
-				groups[i] = rg.Export()
-			}
-			data[f] = groups
 		case "createdAt":
 			data[f] = d.CreatedAt
 		case "updatedAt":
@@ -103,15 +96,15 @@ func (d Discussion) ExportData(fields []string) map[string]interface{} {
 	return data
 }
 
-// DiscussionAuthor represents the author of a discussion or comment.
-type DiscussionAuthor struct {
+// DiscussionActor represents a GitHub actor (user or bot) associated with a discussion.
+type DiscussionActor struct {
 	ID    string
 	Login string
 	Name  string
 }
 
 // Export returns the author as a map for JSON output.
-func (a DiscussionAuthor) Export() map[string]interface{} {
+func (a DiscussionActor) Export() map[string]interface{} {
 	return map[string]interface{}{
 		"id":    a.ID,
 		"login": a.Login,
@@ -159,7 +152,7 @@ func (l DiscussionLabel) Export() map[string]interface{} {
 type DiscussionComment struct {
 	ID             string
 	URL            string
-	Author         DiscussionAuthor
+	Author         DiscussionActor
 	Body           string
 	CreatedAt      time.Time
 	IsAnswer       bool
@@ -225,10 +218,37 @@ const (
 	CloseReasonDuplicate CloseReason = "DUPLICATE"
 )
 
+// Domain-level filter constants for state.
+const (
+	FilterStateOpen   = "open"
+	FilterStateClosed = "closed"
+)
+
+// Domain-level constants for order-by field.
+const (
+	OrderByCreated = "created"
+	OrderByUpdated = "updated"
+)
+
+// Domain-level constants for order direction.
+const (
+	OrderDirectionAsc  = "asc"
+	OrderDirectionDesc = "desc"
+)
+
+// DiscussionListResult holds the result of a List or Search call,
+// including the discussions, total count, and pagination cursor.
+type DiscussionListResult struct {
+	Discussions []Discussion
+	TotalCount  int
+	NextCursor  string
+}
+
 // ListFilters holds parameters for the repository.discussions query.
 // CategoryID must be resolved by the caller before passing to List.
+// A nil State indicates no state filtering (all states).
 type ListFilters struct {
-	State      string
+	State      *string
 	CategoryID string
 	Answered   *bool
 	OrderBy    string
@@ -237,12 +257,14 @@ type ListFilters struct {
 
 // SearchFilters holds parameters for the search query used when
 // author or label filtering is required.
+// A nil State indicates no state filtering (all states).
 type SearchFilters struct {
 	Author    string
 	Labels    []string
-	State     string
+	State     *string
 	Category  string
 	Answered  *bool
+	Keywords  string
 	OrderBy   string
 	Direction string
 }
