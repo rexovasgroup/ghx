@@ -241,7 +241,15 @@ func installRun(opts *InstallOptions) error {
 	// Kick off the visibility fetch in parallel with the install work so
 	// the extra API roundtrip doesn't add latency on the critical path.
 	// The result is consumed when the telemetry event is emitted below.
-	visFuture := discovery.FetchRepoVisibilityAsync(apiClient, hostname, opts.repo.RepoOwner(), opts.repo.RepoName())
+	type visResult struct {
+		vis discovery.RepoVisibility
+		err error
+	}
+	visCh := make(chan visResult, 1)
+	go func() {
+		vis, err := discovery.FetchRepoVisibility(apiClient, hostname, opts.repo.RepoOwner(), opts.repo.RepoName())
+		visCh <- visResult{vis: vis, err: err}
+	}()
 
 	resolved, err := resolveVersion(opts, apiClient, hostname)
 	if err != nil {
@@ -349,12 +357,17 @@ func installRun(opts *InstallOptions) error {
 	// and are only included for public repositories. If the visibility
 	// fetch has not completed in time, we emit "unknown" and omit skill
 	// names rather than blocking the command on it.
-	if vis, ok := visFuture.Wait(visibilityWaitTimeout); ok {
-		dims["repo_visibility"] = string(vis)
-		if vis == discovery.RepoVisibilityPublic {
-			dims["skill_names"] = mapSkillsToNames(selectedSkills)
+	select {
+	case r := <-visCh:
+		if r.err == nil {
+			dims["repo_visibility"] = string(r.vis)
+			if r.vis == discovery.RepoVisibilityPublic {
+				dims["skill_names"] = mapSkillsToNames(selectedSkills)
+			}
+		} else {
+			dims["repo_visibility"] = "unknown"
 		}
-	} else {
+	case <-time.After(visibilityWaitTimeout):
 		dims["repo_visibility"] = "unknown"
 	}
 	opts.Telemetry.Record(ghtelemetry.Event{

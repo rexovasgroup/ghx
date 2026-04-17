@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/skills/frontmatter"
@@ -158,47 +157,6 @@ func FetchRepoVisibility(client *api.Client, host, owner, repo string) (RepoVisi
 		return "", err
 	}
 	return parseRepoVisibility(resp.Visibility)
-}
-
-// VisibilityFuture represents an in-flight repo visibility fetch.
-// Callers invoke Wait to block up to a timeout for the result without
-// forcing the command's main work to serialize behind the request.
-type VisibilityFuture struct {
-	ch <-chan visibilityResult
-}
-
-type visibilityResult struct {
-	vis RepoVisibility
-	err error
-}
-
-// FetchRepoVisibilityAsync kicks off FetchRepoVisibility in a goroutine
-// and returns a future that can be waited on. The goroutine always
-// runs to completion regardless of whether Wait is called, so the
-// buffered channel is always drained.
-func FetchRepoVisibilityAsync(client *api.Client, host, owner, repo string) *VisibilityFuture {
-	ch := make(chan visibilityResult, 1)
-	go func() {
-		vis, err := FetchRepoVisibility(client, host, owner, repo)
-		ch <- visibilityResult{vis: vis, err: err}
-	}()
-	return &VisibilityFuture{ch: ch}
-}
-
-// Wait blocks up to timeout for the fetch to complete. Returns
-// (visibility, true) on success, or ("", false) if the fetch errored
-// or the timeout elapsed first. In the failure case the goroutine
-// continues running and the result is discarded.
-func (f *VisibilityFuture) Wait(timeout time.Duration) (RepoVisibility, bool) {
-	select {
-	case r := <-f.ch:
-		if r.err != nil {
-			return "", false
-		}
-		return r.vis, true
-	case <-time.After(timeout):
-		return "", false
-	}
 }
 
 // ResolveRef determines the git ref to use for a given owner/repo.

@@ -134,7 +134,15 @@ func previewRun(opts *PreviewOptions) error {
 	// Kick off the visibility fetch in parallel with the preview work so
 	// the extra API roundtrip doesn't add latency on the critical path.
 	// The result is consumed when the telemetry event is emitted below.
-	visFuture := discovery.FetchRepoVisibilityAsync(apiClient, hostname, owner, repoName)
+	type visResult struct {
+		vis discovery.RepoVisibility
+		err error
+	}
+	visCh := make(chan visResult, 1)
+	go func() {
+		vis, err := discovery.FetchRepoVisibility(apiClient, hostname, owner, repoName)
+		visCh <- visResult{vis: vis, err: err}
+	}()
 
 	opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Resolving %s/%s", owner, repoName))
 	resolved, err := discovery.ResolveRef(apiClient, hostname, owner, repoName, opts.Version)
@@ -206,12 +214,17 @@ func previewRun(opts *PreviewOptions) error {
 	// and are only included for public repositories. If the visibility
 	// fetch has not completed in time, we emit "unknown" and omit the
 	// skill name rather than blocking the command on it.
-	if vis, ok := visFuture.Wait(visibilityWaitTimeout); ok {
-		dims["repo_visibility"] = string(vis)
-		if vis == discovery.RepoVisibilityPublic {
-			dims["skill_names"] = skill.DisplayName()
+	select {
+	case r := <-visCh:
+		if r.err == nil {
+			dims["repo_visibility"] = string(r.vis)
+			if r.vis == discovery.RepoVisibilityPublic {
+				dims["skill_names"] = skill.DisplayName()
+			}
+		} else {
+			dims["repo_visibility"] = "unknown"
 		}
-	} else {
+	case <-time.After(visibilityWaitTimeout):
 		dims["repo_visibility"] = "unknown"
 	}
 	opts.Telemetry.Record(ghtelemetry.Event{
