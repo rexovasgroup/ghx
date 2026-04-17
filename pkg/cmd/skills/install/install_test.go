@@ -2062,8 +2062,8 @@ func TestInstallRun_TelemetryVisibility(t *testing.T) {
 			assert.Equal(t, "skill_install", event.Type)
 			assert.NotEmpty(t, event.Dimensions["agent_hosts"], "agent_hosts should always be present")
 
-			// skill_host is always recorded (no PII risk).
-			assert.Equal(t, "github.com", event.Dimensions["skill_host"])
+			// skill_host_type is always recorded (categorized, no raw hostname for enterprise/tenancy).
+			assert.Equal(t, "github.com", event.Dimensions["skill_host_type"])
 
 			if tt.visibilityErr {
 				assert.Equal(t, "unknown", event.Dimensions["repo_visibility"],

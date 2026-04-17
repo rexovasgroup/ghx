@@ -12,6 +12,7 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
+	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/skills/discovery"
@@ -201,7 +202,7 @@ func previewRun(opts *PreviewOptions) error {
 	}
 
 	dims := map[string]string{
-		"skill_host": opts.repo.RepoHost(),
+		"skill_host_type": ghinstance.CategorizeHost(opts.repo.RepoHost()),
 	}
 	select {
 	case r := <-visCh:

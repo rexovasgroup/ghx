@@ -998,8 +998,8 @@ func TestPreviewRun_TelemetryVisibility(t *testing.T) {
 			event := recorder.Events[0]
 			assert.Equal(t, "skill_preview", event.Type)
 
-			// skill_host is always recorded (no PII risk).
-			assert.Equal(t, "github.com", event.Dimensions["skill_host"])
+			// skill_host_type is always recorded (categorized, no raw hostname for enterprise/tenancy).
+			assert.Equal(t, "github.com", event.Dimensions["skill_host_type"])
 
 			if tt.visibilityErr {
 				assert.Equal(t, "unknown", event.Dimensions["repo_visibility"],

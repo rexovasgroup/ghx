@@ -15,6 +15,7 @@ import (
 	ghContext "github.com/cli/cli/v2/context"
 	"github.com/cli/cli/v2/git"
 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
+	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/skills/discovery"
@@ -343,8 +344,8 @@ func installRun(opts *InstallOptions) error {
 	}
 
 	dims := map[string]string{
-		"agent_hosts": mapAgentHostsToIDs(selectedHosts),
-		"skill_host":  opts.repo.RepoHost(),
+		"agent_hosts":     mapAgentHostsToIDs(selectedHosts),
+		"skill_host_type": ghinstance.CategorizeHost(opts.repo.RepoHost()),
 	}
 	select {
 	case r := <-visCh:

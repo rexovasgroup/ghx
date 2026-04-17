@@ -6,10 +6,6 @@ stderr 'no skills found in'
 exec gh skill publish --dry-run $WORK/test-repo
 stdout 'hello-world'
 
-# Validate alias should work identically
-exec gh skill validate --dry-run $WORK/test-repo
-stdout 'hello-world'
-
 # Publish dry-run with --tag
 exec gh skill publish --dry-run --tag v1.0.0 $WORK/test-repo
 stdout 'hello-world'

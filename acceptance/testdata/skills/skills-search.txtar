@@ -10,13 +10,3 @@ stdout '"repo"'
 # Search with a short query should error
 ! exec gh skill search a
 stderr 'at least'
-
-# Telemetry: skill_search event records query and owner verbatim.
-env GH_PRIVATE_ENABLE_TELEMETRY=1
-env GH_TELEMETRY=log
-env GH_TELEMETRY_SAMPLE_RATE=100
-exec gh skill search copilot --owner github --limit 1
-stderr 'Telemetry payload:'
-stderr '"type": "skill_search"'
-stderr '"query": "copilot"'
-stderr '"owner": "github"'

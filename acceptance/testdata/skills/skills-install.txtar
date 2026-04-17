@@ -28,6 +28,6 @@ exec gh skill install github/awesome-copilot git-commit --scope user --force --a
 stderr 'Telemetry payload:'
 stderr '"type": "skill_install"'
 stderr '"agent_hosts": "github-copilot"'
-stderr '"skill_host": "github.com"'
+stderr '"skill_host_type": "github.com"'
 stderr '"skill_owner": "github"'
 stderr '"skill_repo": "awesome-copilot"'
