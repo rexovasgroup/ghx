@@ -28,6 +28,8 @@ type ViewOptions struct {
 
 	DiscussionNumber int
 	WebMode          bool
+	Comments         bool
+	Order            string
 	Exporter         cmdutil.Exporter
 	Now              func() time.Time
 }
@@ -46,6 +48,9 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 		Long: heredoc.Docf(`
 			Display the title, body, and other information about a discussion.
 
+			With %[1]s--comments%[1]s flag, show threaded comments on the discussion.
+			Use %[1]s--order%[1]s to control comment ordering (oldest or newest first).
+
 			With %[1]s--web%[1]s flag, open the discussion in a web browser instead.
 		`, "`"),
 		Example: heredoc.Doc(`
@@ -55,11 +60,21 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 			# View a discussion by URL
 			$ gh discussion view https://github.com/OWNER/REPO/discussions/123
 
+			# View with comments
+			$ gh discussion view 123 --comments
+
+			# View with newest comments first
+			$ gh discussion view 123 --comments --order newest
+
 			# Open in browser
 			$ gh discussion view 123 --web
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("order") && !opts.Comments {
+				return cmdutil.FlagErrorf("--order requires --comments")
+			}
+
 			number, repo, err := shared.ParseDiscussionArg(args[0])
 			if err != nil {
 				return err
@@ -84,6 +99,8 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 	}
 
 	cmd.Flags().BoolVarP(&opts.WebMode, "web", "w", false, "Open a discussion in the browser")
+	cmd.Flags().BoolVarP(&opts.Comments, "comments", "c", false, "View discussion comments")
+	cmdutil.StringEnumFlag(cmd, &opts.Order, "order", "", "oldest", []string{"oldest", "newest"}, "Order of comments")
 	cmdutil.AddJSONFlags(cmd, &opts.Exporter, shared.DiscussionFields)
 
 	return cmd
@@ -111,7 +128,12 @@ func viewRun(opts *ViewOptions) error {
 	opts.IO.DetectTerminalTheme()
 	opts.IO.StartProgressIndicator()
 
-	discussion, err := c.GetByNumber(repo, opts.DiscussionNumber)
+	var discussion *client.Discussion
+	if opts.Comments {
+		discussion, err = c.GetWithComments(repo, opts.DiscussionNumber, 30, opts.Order)
+	} else {
+		discussion, err = c.GetByNumber(repo, opts.DiscussionNumber)
+	}
 
 	opts.IO.StopProgressIndicator()
 
@@ -132,7 +154,7 @@ func viewRun(opts *ViewOptions) error {
 		return printHumanView(opts, discussion)
 	}
 
-	return printRawView(opts.IO.Out, discussion)
+	return printRawView(opts.IO.Out, discussion, opts.Comments)
 }
 
 func printHumanView(opts *ViewOptions, d *client.Discussion) error {
@@ -192,12 +214,29 @@ func printHumanView(opts *ViewOptions, d *client.Discussion) error {
 		fmt.Fprintln(out)
 	}
 
+	// Comments section
+	if opts.Comments && d.Comments.TotalCount > 0 {
+		fmt.Fprintln(out, cs.Bold("Comments"))
+		fmt.Fprintln(out)
+
+		for _, c := range d.Comments.Comments {
+			if err := printHumanComment(opts, out, c, ""); err != nil {
+				return err
+			}
+		}
+
+		if shown := len(d.Comments.Comments); shown < d.Comments.TotalCount {
+			fmt.Fprintf(out, cs.Muted("  And %d more comments\n"), d.Comments.TotalCount-shown)
+			fmt.Fprintln(out)
+		}
+	}
+
 	fmt.Fprintf(out, cs.Muted("View this discussion on GitHub: %s\n"), d.URL)
 
 	return nil
 }
 
-func printRawView(out io.Writer, d *client.Discussion) error {
+func printRawView(out io.Writer, d *client.Discussion, showComments bool) error {
 	fmt.Fprintf(out, "title:\t%s\n", d.Title)
 	state := "OPEN"
 	if d.Closed {
@@ -212,7 +251,79 @@ func printRawView(out io.Writer, d *client.Discussion) error {
 	fmt.Fprintf(out, "url:\t%s\n", d.URL)
 	fmt.Fprintln(out, "--")
 	fmt.Fprintln(out, d.Body)
+
+	if showComments {
+		for _, c := range d.Comments.Comments {
+			printRawComment(out, c, "")
+		}
+	}
+
 	return nil
+}
+
+func printHumanComment(opts *ViewOptions, out io.Writer, c client.DiscussionComment, indent string) error {
+	cs := opts.IO.ColorScheme()
+	now := opts.Now()
+
+	header := fmt.Sprintf("%s%s commented %s",
+		indent,
+		cs.Bold(c.Author.Login),
+		text.FuzzyAgo(now, c.CreatedAt),
+	)
+	if c.IsAnswer {
+		header += " " + cs.Green("✓ Answer")
+	}
+	fmt.Fprintln(out, header)
+
+	if c.Body != "" {
+		md, err := markdown.Render(c.Body,
+			markdown.WithTheme(opts.IO.TerminalTheme()),
+			markdown.WithWrap(opts.IO.TerminalWidth()))
+		if err != nil {
+			return err
+		}
+		if indent != "" {
+			md = text.Indent(md, indent)
+		}
+		fmt.Fprint(out, md)
+	}
+
+	if reactions := shared.ReactionGroupList(c.ReactionGroups); reactions != "" {
+		fmt.Fprintf(out, "%s%s\n", indent, reactions)
+	}
+
+	fmt.Fprintln(out)
+
+	for _, reply := range c.Replies {
+		if err := printHumanComment(opts, out, reply, indent+"  "); err != nil {
+			return err
+		}
+	}
+
+	if shown := len(c.Replies); shown < c.TotalReplies {
+		fmt.Fprintf(out, "%s  %s\n\n", indent, cs.Muted(fmt.Sprintf("And %d more replies", c.TotalReplies-shown)))
+	}
+
+	return nil
+}
+
+func printRawComment(out io.Writer, c client.DiscussionComment, indent string) {
+	answer := ""
+	if c.IsAnswer {
+		answer = "\tanswer"
+	}
+	fmt.Fprintf(out, "%scomment:\t%s\t%s\t%s%s\n", indent, c.Author.Login, c.CreatedAt.Format(time.RFC3339), c.URL, answer)
+	fmt.Fprintf(out, "%s--\n", indent)
+	if indent != "" {
+		fmt.Fprint(out, text.Indent(c.Body, indent))
+	} else {
+		fmt.Fprint(out, c.Body)
+	}
+	fmt.Fprintln(out)
+
+	for _, reply := range c.Replies {
+		printRawComment(out, reply, indent+"  ")
+	}
 }
 
 func labelList(labels []client.DiscussionLabel, cs *iostreams.ColorScheme) string {
