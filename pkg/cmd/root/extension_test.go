@@ -234,3 +234,43 @@ func TestNewCmdExtension_UpdateCheckIsNonblocking(t *testing.T) {
 		t.Fatal("extension update check should have exited")
 	}
 }
+
+func TestNewCmdExtension_TelemetryEnabledForOfficialExtensions(t *testing.T) {
+	tests := []struct {
+		name             string
+		extName          string
+		wantTelemetryOff bool
+	}{
+		{
+			name:             "official extension records telemetry",
+			extName:          "stack",
+			wantTelemetryOff: false,
+		},
+		{
+			name:             "official extension name with mixed case still records telemetry",
+			extName:          "STACK",
+			wantTelemetryOff: false,
+		},
+		{
+			name:             "third-party extension disables telemetry",
+			extName:          "my-custom-ext",
+			wantTelemetryOff: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ios, _, _, _ := iostreams.Test()
+			em := &extensions.ExtensionManagerMock{}
+			ext := &extensions.ExtensionMock{
+				NameFunc: func() string { return tt.extName },
+			}
+
+			cmd := root.NewCmdExtension(ios, em, ext, func(extensions.ExtensionManager, extensions.Extension) (*update.ReleaseInfo, error) {
+				return nil, nil
+			})
+
+			assert.Equal(t, tt.wantTelemetryOff, cmd.Annotations["telemetry"] == "disabled")
+		})
+	}
+}
