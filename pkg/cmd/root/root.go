@@ -149,7 +149,7 @@ func NewCmdRoot(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, versi
 	cmd.AddCommand(codespaceCmd.NewCmdCodespace(f))
 	cmd.AddCommand(projectCmd.NewCmdProject(f))
 	cmd.AddCommand(previewCmd.NewCmdPreview(f))
-	cmd.AddCommand(skillsCmd.NewCmdSkills(f))
+	cmd.AddCommand(skillsCmd.NewCmdSkills(f, telemetry))
 
 	// Root commands with standalone functionality and no subcommands
 	cmd.AddCommand(copilotCmd.NewCmdCopilot(f, nil))

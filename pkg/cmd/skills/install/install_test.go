@@ -16,6 +16,7 @@ import (
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/skills/discovery"
+	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/httpmock"
 	"github.com/cli/cli/v2/pkg/iostreams"
@@ -128,7 +129,7 @@ func TestNewCmdInstall(t *testing.T) {
 			}
 
 			var gotOpts *InstallOptions
-			cmd := NewCmdInstall(f, func(opts *InstallOptions) error {
+			cmd := NewCmdInstall(f, &telemetry.NoOpService{}, func(opts *InstallOptions) error {
 				gotOpts = opts
 				return nil
 			})
@@ -167,7 +168,7 @@ func TestNewCmdInstall(t *testing.T) {
 	t.Run("command metadata", func(t *testing.T) {
 		ios, _, _, _ := iostreams.Test()
 		f := &cmdutil.Factory{IOStreams: ios, Prompter: &prompter.PrompterMock{}, GitClient: &git.Client{}}
-		cmd := NewCmdInstall(f, nil)
+		cmd := NewCmdInstall(f, &telemetry.NoOpService{}, nil)
 
 		assert.Equal(t, "install <repository> [<skill[@version]>] [flags]", cmd.Use)
 		assert.NotEmpty(t, cmd.Short)
@@ -1348,6 +1349,9 @@ func TestInstallRun(t *testing.T) {
 			ios.SetStdinTTY(tt.isTTY)
 			ios.SetStderrTTY(tt.isTTY)
 			opts := tt.opts(ios, reg)
+			if opts.Telemetry == nil {
+				opts.Telemetry = &telemetry.NoOpService{}
+			}
 
 			err := installRun(opts)
 
@@ -1414,6 +1418,7 @@ func TestInstallRun_DeduplicatesSharedProjectDirAcrossHosts(t *testing.T) {
 		SkillSource: "monalisa/octocat-skills",
 		SkillName:   "git-commit",
 		Force:       true,
+		Telemetry:   &telemetry.NoOpService{},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, strings.Count(stdout.String(), "Installed git-commit"))
@@ -1979,4 +1984,178 @@ func Test_selectSkillsWithSelector_noDisclaimer(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.NotContains(t, stderr.String(), "not verified by GitHub")
+}
+
+func TestInstallRun_TelemetryVisibility(t *testing.T) {
+	tests := []struct {
+		name           string
+		visibility     string
+		visibilityErr  bool
+		wantSkillNames string
+	}{
+		{
+			name:           "public repo includes skill names",
+			visibility:     "public",
+			wantSkillNames: "git-commit",
+		},
+		{
+			name:       "private repo excludes skill names",
+			visibility: "private",
+		},
+		{
+			name:       "internal repo excludes skill names",
+			visibility: "internal",
+		},
+		{
+			name:          "API error omits visibility and skill names",
+			visibilityErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+
+			stubResolveVersion(reg, "monalisa", "octocat-skills", "v1.0.0", "abc123")
+			stubDiscoverTree(reg, "monalisa", "octocat-skills", "abc123",
+				singleSkillTreeJSON("git-commit", "treeSHA", "blobSHA"))
+			stubInstallFiles(reg, "monalisa", "octocat-skills", "treeSHA", "blobSHA", gitCommitContent)
+			if tt.visibilityErr {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+					httpmock.StatusStringResponse(500, "server error"),
+				)
+			} else {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+					httpmock.JSONResponse(map[string]interface{}{
+						"visibility": tt.visibility,
+					}),
+				)
+			}
+
+			ios, _, _, _ := iostreams.Test()
+			ios.SetStdoutTTY(true)
+			ios.SetStdinTTY(true)
+
+			recorder := &telemetry.EventRecorderSpy{}
+
+			err := installRun(&InstallOptions{
+				IO:           ios,
+				HttpClient:   func() (*http.Client, error) { return &http.Client{Transport: reg}, nil },
+				GitClient:    &git.Client{RepoDir: t.TempDir()},
+				Prompter:     &prompter.PrompterMock{},
+				SkillSource:  "monalisa/octocat-skills",
+				SkillName:    "git-commit",
+				Agent:        "github-copilot",
+				Scope:        "project",
+				ScopeChanged: true,
+				Dir:          t.TempDir(),
+				Force:        true,
+				Telemetry:    recorder,
+			})
+			require.NoError(t, err)
+
+			require.Len(t, recorder.Events, 1)
+			event := recorder.Events[0]
+			assert.Equal(t, "skill_install", event.Type)
+			assert.NotEmpty(t, event.Dimensions["agent_hosts"], "agent_hosts should always be present")
+
+			// Repo identifiers are always recorded (already in API request path).
+			assert.Equal(t, "github.com", event.Dimensions["skill_host"])
+			assert.Equal(t, "monalisa", event.Dimensions["skill_owner"])
+			assert.Equal(t, "octocat-skills", event.Dimensions["skill_repo"])
+
+			if tt.visibilityErr {
+				assert.Equal(t, "unknown", event.Dimensions["repo_visibility"],
+					"visibility fetch errors should emit repo_visibility=\"unknown\" so the fallback is distinguishable from a successful fetch")
+			} else {
+				assert.Equal(t, tt.visibility, event.Dimensions["repo_visibility"])
+			}
+
+			if tt.wantSkillNames != "" {
+				assert.Equal(t, tt.wantSkillNames, event.Dimensions["skill_names"])
+			} else {
+				assert.Empty(t, event.Dimensions["skill_names"])
+			}
+		})
+	}
+}
+
+func TestInstallRun_TelemetryMultipleSkills(t *testing.T) {
+	codeReviewContent := heredoc.Doc(`
+		---
+		name: code-review
+		description: Reviews code
+		---
+		# Code Review
+	`)
+
+	reg := &httpmock.Registry{}
+	defer reg.Verify(t)
+
+	stubResolveVersion(reg, "monalisa", "octocat-skills", "v1.0.0", "abc123")
+	treeJSON := `{"path": "skills/git-commit", "type": "tree", "sha": "treeGC"}, ` +
+		`{"path": "skills/git-commit/SKILL.md", "type": "blob", "sha": "blobGC"}, ` +
+		`{"path": "skills/code-review", "type": "tree", "sha": "treeCR"}, ` +
+		`{"path": "skills/code-review/SKILL.md", "type": "blob", "sha": "blobCR"}`
+	stubDiscoverTree(reg, "monalisa", "octocat-skills", "abc123", treeJSON)
+
+	// Blob stubs for FetchDescriptionsConcurrent during interactive selection
+	encGC := base64.StdEncoding.EncodeToString([]byte(gitCommitContent))
+	encCR := base64.StdEncoding.EncodeToString([]byte(codeReviewContent))
+	reg.Register(
+		httpmock.REST("GET", "repos/monalisa/octocat-skills/git/blobs/blobGC"),
+		httpmock.StringResponse(fmt.Sprintf(`{"sha": "blobGC", "content": %q, "encoding": "base64"}`, encGC)))
+	reg.Register(
+		httpmock.REST("GET", "repos/monalisa/octocat-skills/git/blobs/blobCR"),
+		httpmock.StringResponse(fmt.Sprintf(`{"sha": "blobCR", "content": %q, "encoding": "base64"}`, encCR)))
+
+	stubInstallFiles(reg, "monalisa", "octocat-skills", "treeGC", "blobGC", gitCommitContent)
+	stubInstallFiles(reg, "monalisa", "octocat-skills", "treeCR", "blobCR", codeReviewContent)
+
+	reg.Register(
+		httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+		httpmock.JSONResponse(map[string]interface{}{
+			"visibility": "public",
+		}),
+	)
+
+	ios, _, _, _ := iostreams.Test()
+	ios.SetStdoutTTY(true)
+	ios.SetStdinTTY(true)
+
+	pm := &prompter.PrompterMock{
+		MultiSelectWithSearchFunc: func(_, _ string, _, _ []string, _ func(string) prompter.MultiSelectSearchResult) ([]string, error) {
+			return []string{allSkillsKey}, nil
+		},
+	}
+
+	recorder := &telemetry.EventRecorderSpy{}
+
+	err := installRun(&InstallOptions{
+		IO:           ios,
+		HttpClient:   func() (*http.Client, error) { return &http.Client{Transport: reg}, nil },
+		GitClient:    &git.Client{RepoDir: t.TempDir()},
+		Prompter:     pm,
+		SkillSource:  "monalisa/octocat-skills",
+		Agent:        "github-copilot",
+		Scope:        "project",
+		ScopeChanged: true,
+		Dir:          t.TempDir(),
+		Telemetry:    recorder,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, recorder.Events, 1)
+	event := recorder.Events[0]
+	assert.Equal(t, "skill_install", event.Type)
+	assert.Equal(t, "public", event.Dimensions["repo_visibility"])
+
+	// Verify comma-separated skill names (alphabetical order from DiscoverSkills)
+	names := strings.Split(event.Dimensions["skill_names"], ",")
+	assert.Len(t, names, 2)
+	assert.Contains(t, names, "code-review")
+	assert.Contains(t, names, "git-commit")
 }

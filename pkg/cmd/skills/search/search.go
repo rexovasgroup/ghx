@@ -15,6 +15,7 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/gh"
+	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/skills/discovery"
 	"github.com/cli/cli/v2/internal/skills/frontmatter"
@@ -48,6 +49,7 @@ var SkillSearchFields = []string{
 
 type SearchOptions struct {
 	IO             *iostreams.IOStreams
+	Telemetry      ghtelemetry.EventRecorder
 	HttpClient     func() (*http.Client, error)
 	Config         func() (gh.Config, error)
 	Prompter       prompter.Prompter
@@ -62,9 +64,10 @@ type SearchOptions struct {
 }
 
 // NewCmdSearch creates the "skills search" command.
-func NewCmdSearch(f *cmdutil.Factory, runF func(*SearchOptions) error) *cobra.Command {
+func NewCmdSearch(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, runF func(*SearchOptions) error) *cobra.Command {
 	opts := &SearchOptions{
 		IO:             f.IOStreams,
+		Telemetry:      telemetry,
 		HttpClient:     f.HttpClient,
 		Config:         f.Config,
 		Prompter:       f.Prompter,
@@ -102,6 +105,8 @@ func NewCmdSearch(f *cmdutil.Factory, runF func(*SearchOptions) error) *cobra.Co
 		`),
 		Args: cmdutil.MinimumArgs(1, "cannot search: query argument required"),
 		RunE: func(c *cobra.Command, args []string) error {
+			telemetry.SetSampleRate(ghtelemetry.SAMPLE_ALL)
+
 			opts.Query = strings.Join(args, " ")
 
 			if len(strings.TrimSpace(opts.Query)) < 2 {
@@ -216,6 +221,17 @@ func searchRun(opts *SearchOptions) error {
 	if err := source.ValidateSupportedHost(host); err != nil {
 		return err
 	}
+
+	// The query and owner are already sent verbatim to the GitHub Code
+	// Search API (GET search/code?q=…), so recording them in telemetry
+	// does not expand the data exposure surface.
+	opts.Telemetry.Record(ghtelemetry.Event{
+		Type: "skill_search",
+		Dimensions: map[string]string{
+			"query": opts.Query,
+			"owner": opts.Owner,
+		},
+	})
 
 	opts.IO.StartProgressIndicatorWithLabel("Searching for skills")
 
@@ -551,6 +567,17 @@ func promptInstall(opts *SearchOptions, skills []skillResult) error {
 	if len(indices) == 0 {
 		return nil
 	}
+
+	opts.Telemetry.Record(ghtelemetry.Event{
+		Type: "skill_search_install",
+		Dimensions: map[string]string{
+			"query": opts.Query,
+			"owner": opts.Owner,
+		},
+		Measures: ghtelemetry.Measures{
+			"install_count": int64(len(indices)),
+		},
+	})
 
 	// Prompt for target agent host (once for all selected skills)
 	hostNames := registry.AgentNames()

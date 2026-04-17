@@ -561,6 +561,75 @@ func TestFetchBlob(t *testing.T) {
 	}
 }
 
+func TestFetchRepoVisibility(t *testing.T) {
+	tests := []struct {
+		name    string
+		stubs   func(*httpmock.Registry)
+		want    RepoVisibility
+		wantErr string
+	}{
+		{
+			name: "public repo",
+			stubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+					httpmock.JSONResponse(map[string]interface{}{
+						"visibility": "public",
+					}))
+			},
+			want: RepoVisibilityPublic,
+		},
+		{
+			name: "private repo",
+			stubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+					httpmock.JSONResponse(map[string]interface{}{
+						"visibility": "private",
+					}))
+			},
+			want: RepoVisibilityPrivate,
+		},
+		{
+			name: "internal repo",
+			stubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+					httpmock.JSONResponse(map[string]interface{}{
+						"visibility": "internal",
+					}))
+			},
+			want: RepoVisibilityInternal,
+		},
+		{
+			name: "API error",
+			stubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+					httpmock.StatusStringResponse(500, "server error"))
+			},
+			wantErr: "HTTP 500",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+			tt.stubs(reg)
+			client := api.NewClientFromHTTP(&http.Client{Transport: reg})
+
+			got, err := FetchRepoVisibility(client, "github.com", "monalisa", "octocat-skills")
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestDiscoverSkills(t *testing.T) {
 	tests := []struct {
 		name       string

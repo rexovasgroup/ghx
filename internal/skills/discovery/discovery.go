@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/skills/frontmatter"
@@ -126,18 +127,78 @@ type treeResponse struct {
 	Truncated bool        `json:"truncated"`
 }
 
-type blobResponse struct {
-	SHA      string `json:"sha"`
-	Content  string `json:"content"`
-	Encoding string `json:"encoding"`
+type RepoVisibility string
+
+const (
+	RepoVisibilityPublic   RepoVisibility = "public"
+	RepoVisibilityPrivate  RepoVisibility = "private"
+	RepoVisibilityInternal RepoVisibility = "internal"
+)
+
+func parseRepoVisibility(s string) (RepoVisibility, error) {
+	switch s {
+	case "public":
+		return RepoVisibilityPublic, nil
+	case "private":
+		return RepoVisibilityPrivate, nil
+	case "internal":
+		return RepoVisibilityInternal, nil
+	default:
+		return "", fmt.Errorf("unknown repository visibility: %q", s)
+	}
 }
 
-type releaseResponse struct {
-	TagName string `json:"tag_name"`
+// FetchRepoVisibility returns the repository visibility: "public", "private", or "internal".
+func FetchRepoVisibility(client *api.Client, host, owner, repo string) (RepoVisibility, error) {
+	apiPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
+	var resp struct {
+		Visibility string `json:"visibility"`
+	}
+	if err := client.REST(host, "GET", apiPath, nil, &resp); err != nil {
+		return "", err
+	}
+	return parseRepoVisibility(resp.Visibility)
 }
 
-type repoResponse struct {
-	DefaultBranch string `json:"default_branch"`
+// VisibilityFuture represents an in-flight repo visibility fetch.
+// Callers invoke Wait to block up to a timeout for the result without
+// forcing the command's main work to serialize behind the request.
+type VisibilityFuture struct {
+	ch <-chan visibilityResult
+}
+
+type visibilityResult struct {
+	vis RepoVisibility
+	err error
+}
+
+// FetchRepoVisibilityAsync kicks off FetchRepoVisibility in a goroutine
+// and returns a future that can be waited on. The goroutine always
+// runs to completion regardless of whether Wait is called, so the
+// buffered channel is always drained.
+func FetchRepoVisibilityAsync(client *api.Client, host, owner, repo string) *VisibilityFuture {
+	ch := make(chan visibilityResult, 1)
+	go func() {
+		vis, err := FetchRepoVisibility(client, host, owner, repo)
+		ch <- visibilityResult{vis: vis, err: err}
+	}()
+	return &VisibilityFuture{ch: ch}
+}
+
+// Wait blocks up to timeout for the fetch to complete. Returns
+// (visibility, true) on success, or ("", false) if the fetch errored
+// or the timeout elapsed first. In the failure case the goroutine
+// continues running and the result is discarded.
+func (f *VisibilityFuture) Wait(timeout time.Duration) (RepoVisibility, bool) {
+	select {
+	case r := <-f.ch:
+		if r.err != nil {
+			return "", false
+		}
+		return r.vis, true
+	case <-time.After(timeout):
+		return "", false
+	}
 }
 
 // ResolveRef determines the git ref to use for a given owner/repo.
@@ -266,8 +327,10 @@ func (e *noReleasesError) Error() string { return e.reason }
 
 func resolveLatestRelease(client *api.Client, host, owner, repo string) (*ResolvedRef, error) {
 	apiPath := fmt.Sprintf("repos/%s/%s/releases/latest", url.PathEscape(owner), url.PathEscape(repo))
-	var release releaseResponse
-	if err := client.REST(host, "GET", apiPath, nil, &release); err != nil {
+	var resp struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := client.REST(host, "GET", apiPath, nil, &resp); err != nil {
 		// A 404 means the repository has no releases. This is the
 		// only case where falling back to the default branch is safe.
 		// Any other HTTP error (403, 500, …) or network failure is
@@ -278,19 +341,21 @@ func resolveLatestRelease(client *api.Client, host, owner, repo string) (*Resolv
 		}
 		return nil, fmt.Errorf("could not fetch latest release: %w", err)
 	}
-	if release.TagName == "" {
+	if resp.TagName == "" {
 		return nil, &noReleasesError{reason: "latest release has no tag"}
 	}
-	return resolveTagRef(client, host, owner, repo, release.TagName)
+	return resolveTagRef(client, host, owner, repo, resp.TagName)
 }
 
 func resolveDefaultBranch(client *api.Client, host, owner, repo string) (*ResolvedRef, error) {
 	apiPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
-	var repoResp repoResponse
-	if err := client.REST(host, "GET", apiPath, nil, &repoResp); err != nil {
+	var resp struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := client.REST(host, "GET", apiPath, nil, &resp); err != nil {
 		return nil, fmt.Errorf("could not determine default branch: %w", err)
 	}
-	branch := repoResp.DefaultBranch
+	branch := resp.DefaultBranch
 	if branch == "" {
 		return nil, fmt.Errorf("could not determine default branch for %s/%s", owner, repo)
 	}
@@ -657,18 +722,22 @@ func walkTree(client *api.Client, host, owner, repo, sha, prefix string, depth i
 // FetchBlob retrieves the content of a blob by SHA.
 func FetchBlob(client *api.Client, host, owner, repo, sha string) (string, error) {
 	apiPath := fmt.Sprintf("repos/%s/%s/git/blobs/%s", url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(sha))
-	var blob blobResponse
-	if err := client.REST(host, "GET", apiPath, nil, &blob); err != nil {
+	var resp struct {
+		SHA      string `json:"sha"`
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := client.REST(host, "GET", apiPath, nil, &resp); err != nil {
 		return "", fmt.Errorf("could not fetch blob: %w", err)
 	}
 
-	if blob.Encoding != "base64" {
-		return "", fmt.Errorf("unexpected blob encoding: %s", blob.Encoding)
+	if resp.Encoding != "base64" {
+		return "", fmt.Errorf("unexpected blob encoding: %s", resp.Encoding)
 	}
 
 	// GitHub API returns base64 with embedded newlines; use the StdEncoding
 	// decoder via a reader to handle them transparently.
-	decoded, err := io.ReadAll(base64.NewDecoder(base64.StdEncoding, strings.NewReader(blob.Content)))
+	decoded, err := io.ReadAll(base64.NewDecoder(base64.StdEncoding, strings.NewReader(resp.Content)))
 	if err != nil {
 		return "", fmt.Errorf("could not decode blob content: %w", err)
 	}

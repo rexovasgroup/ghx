@@ -11,6 +11,7 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
+	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/httpmock"
 	"github.com/cli/cli/v2/pkg/iostreams"
@@ -74,7 +75,7 @@ func TestNewCmdPreview(t *testing.T) {
 			}
 
 			var gotOpts *PreviewOptions
-			cmd := NewCmdPreview(f, func(opts *PreviewOptions) error {
+			cmd := NewCmdPreview(f, &telemetry.NoOpService{}, func(opts *PreviewOptions) error {
 				gotOpts = opts
 				return nil
 			})
@@ -332,6 +333,7 @@ func TestPreviewRun(t *testing.T) {
 			tt.opts.IO = ios
 
 			tt.opts.Prompter = &prompter.PrompterMock{}
+			tt.opts.Telemetry = &telemetry.NoOpService{}
 
 			err := previewRun(tt.opts)
 
@@ -354,6 +356,7 @@ func TestPreviewRun_UnsupportedHost(t *testing.T) {
 		IO:         ios,
 		HttpClient: func() (*http.Client, error) { return &http.Client{}, nil },
 		repo:       ghrepo.NewWithHost("github", "awesome-copilot", "acme.ghes.com"),
+		Telemetry:  &telemetry.NoOpService{},
 	})
 	require.ErrorContains(t, err, "supports only github.com")
 }
@@ -415,6 +418,7 @@ func TestPreviewRun_Interactive(t *testing.T) {
 		HttpClient: func() (*http.Client, error) { return &http.Client{Transport: reg}, nil },
 		Prompter:   pm,
 		repo:       ghrepo.New("owner", "repo"),
+		Telemetry:  &telemetry.NoOpService{},
 	}
 
 	err := previewRun(opts)
@@ -510,6 +514,7 @@ func TestPreviewRun_ShowsFileTree(t *testing.T) {
 			Prompter:   pm,
 			repo:       ghrepo.New("owner", "repo"),
 			SkillName:  "my-skill",
+			Telemetry:  &telemetry.NoOpService{},
 		}
 
 		err := previewRun(opts)
@@ -593,6 +598,7 @@ func TestPreviewRun_ShowsFileTree(t *testing.T) {
 				renderCalls++
 				return fmt.Sprintf("rendered:%s", filePath)
 			},
+			Telemetry: &telemetry.NoOpService{},
 		}
 
 		err := previewRun(opts)
@@ -618,6 +624,7 @@ func TestPreviewRun_ShowsFileTree(t *testing.T) {
 			Prompter:   &prompter.PrompterMock{},
 			repo:       ghrepo.New("owner", "repo"),
 			SkillName:  "my-skill",
+			Telemetry:  &telemetry.NoOpService{},
 		}
 
 		err := previewRun(opts)
@@ -724,6 +731,7 @@ func TestPreviewRun_RenderLimits(t *testing.T) {
 			Prompter:   &prompter.PrompterMock{},
 			repo:       ghrepo.New("monalisa", "skills-repo"),
 			SkillName:  "my-skill",
+			Telemetry:  &telemetry.NoOpService{},
 		}
 
 		err := previewRun(opts)
@@ -761,6 +769,7 @@ func TestPreviewRun_RenderLimits(t *testing.T) {
 			Prompter:   &prompter.PrompterMock{},
 			repo:       ghrepo.New("monalisa", "skills-repo"),
 			SkillName:  "my-skill",
+			Telemetry:  &telemetry.NoOpService{},
 		}
 
 		err := previewRun(opts)
@@ -793,6 +802,7 @@ func TestPreviewRun_RenderLimits(t *testing.T) {
 			Prompter:   &prompter.PrompterMock{},
 			repo:       ghrepo.New("monalisa", "skills-repo"),
 			SkillName:  "my-skill",
+			Telemetry:  &telemetry.NoOpService{},
 		}
 
 		err := previewRun(opts)
@@ -801,4 +811,210 @@ func TestPreviewRun_RenderLimits(t *testing.T) {
 		out := stdout.String()
 		assert.Contains(t, out, "could not fetch file")
 	})
+}
+
+func TestPreviewRun_InteractiveTelemetryCapturesSelectedSkillName(t *testing.T) {
+	skillContent := "# Selected Skill\n\nContent here."
+	encodedContent := base64.StdEncoding.EncodeToString([]byte(skillContent))
+
+	reg := &httpmock.Registry{}
+	defer reg.Verify(t)
+	reg.Register(
+		httpmock.REST("GET", "repos/owner/repo/releases/latest"),
+		httpmock.StringResponse(`{"tag_name": "v1.0.0"}`),
+	)
+	reg.Register(
+		httpmock.REST("GET", "repos/owner/repo/git/ref/tags/v1.0.0"),
+		httpmock.StringResponse(`{"object": {"sha": "abc123", "type": "commit"}}`),
+	)
+	reg.Register(
+		httpmock.REST("GET", "repos/owner/repo/git/trees/abc123"),
+		httpmock.StringResponse(`{
+			"sha": "abc123",
+			"truncated": false,
+			"tree": [
+				{"path": "skills/alpha", "type": "tree", "sha": "tree-a"},
+				{"path": "skills/alpha/SKILL.md", "type": "blob", "sha": "blob-a"},
+				{"path": "skills/beta", "type": "tree", "sha": "tree-b"},
+				{"path": "skills/beta/SKILL.md", "type": "blob", "sha": "blob-b"}
+			]
+		}`),
+	)
+	reg.Register(
+		httpmock.REST("GET", "repos/owner/repo/git/trees/tree-b"),
+		httpmock.StringResponse(`{
+			"tree": [
+				{"path": "SKILL.md", "type": "blob", "sha": "blob-b", "size": 40}
+			]
+		}`),
+	)
+	reg.Register(
+		httpmock.REST("GET", "repos/owner/repo/git/blobs/blob-b"),
+		httpmock.StringResponse(`{"sha": "blob-b", "content": "`+encodedContent+`", "encoding": "base64"}`),
+	)
+	reg.Register(
+		httpmock.REST("GET", "repos/owner/repo"),
+		httpmock.JSONResponse(map[string]interface{}{
+			"visibility": "public",
+		}),
+	)
+
+	ios, _, _, _ := iostreams.Test()
+	ios.SetStdoutTTY(true)
+	ios.SetStdinTTY(true)
+
+	pm := &prompter.PrompterMock{
+		SelectFunc: func(prompt string, defaultValue string, options []string) (int, error) {
+			return 1, nil // select "beta"
+		},
+	}
+
+	recorder := &telemetry.EventRecorderSpy{}
+
+	opts := &PreviewOptions{
+		IO:         ios,
+		HttpClient: func() (*http.Client, error) { return &http.Client{Transport: reg}, nil },
+		Prompter:   pm,
+		Telemetry:  recorder,
+		repo:       ghrepo.New("owner", "repo"),
+		// SkillName intentionally left empty to simulate interactive selection
+	}
+
+	err := previewRun(opts)
+	require.NoError(t, err)
+
+	// Verify the telemetry event captured the interactively-selected skill name, not empty string
+	require.Len(t, recorder.Events, 1)
+	event := recorder.Events[0]
+	assert.Equal(t, "skill_preview", event.Type)
+	assert.Equal(t, "beta", event.Dimensions["skill_names"], "telemetry should capture the selected skill name, not the empty opts.SkillName")
+}
+
+func TestPreviewRun_TelemetryVisibility(t *testing.T) {
+	skillContent := heredoc.Doc(`
+		---
+		name: my-skill
+		description: test
+		---
+		# My Skill
+		Body.
+	`)
+	encodedContent := base64.StdEncoding.EncodeToString([]byte(skillContent))
+
+	tests := []struct {
+		name           string
+		visibility     string
+		visibilityErr  bool
+		wantSkillNames string
+	}{
+		{
+			name:           "public repo includes skill names",
+			visibility:     "public",
+			wantSkillNames: "my-skill",
+		},
+		{
+			name:       "private repo excludes skill names",
+			visibility: "private",
+		},
+		{
+			name:       "internal repo excludes skill names",
+			visibility: "internal",
+		},
+		{
+			name:          "API error omits visibility and skill names",
+			visibilityErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+
+			reg.Register(
+				httpmock.REST("GET", "repos/owner/repo/releases/latest"),
+				httpmock.StringResponse(`{"tag_name": "v1.0.0"}`),
+			)
+			reg.Register(
+				httpmock.REST("GET", "repos/owner/repo/git/ref/tags/v1.0.0"),
+				httpmock.StringResponse(`{"object": {"sha": "abc123", "type": "commit"}}`),
+			)
+			reg.Register(
+				httpmock.REST("GET", "repos/owner/repo/git/trees/abc123"),
+				httpmock.StringResponse(`{
+					"sha": "abc123",
+					"truncated": false,
+					"tree": [
+						{"path": "skills/my-skill", "type": "tree", "sha": "treeSHA"},
+						{"path": "skills/my-skill/SKILL.md", "type": "blob", "sha": "blobSKILL"}
+					]
+				}`),
+			)
+			reg.Register(
+				httpmock.REST("GET", "repos/owner/repo/git/trees/treeSHA"),
+				httpmock.StringResponse(`{
+					"tree": [
+						{"path": "SKILL.md", "type": "blob", "sha": "blobSKILL", "size": 50}
+					]
+				}`),
+			)
+			reg.Register(
+				httpmock.REST("GET", "repos/owner/repo/git/blobs/blobSKILL"),
+				httpmock.StringResponse(`{"sha": "blobSKILL", "content": "`+encodedContent+`", "encoding": "base64"}`),
+			)
+			if tt.visibilityErr {
+				reg.Register(
+					httpmock.REST("GET", "repos/owner/repo"),
+					httpmock.StatusStringResponse(500, "server error"),
+				)
+			} else {
+				reg.Register(
+					httpmock.REST("GET", "repos/owner/repo"),
+					httpmock.JSONResponse(map[string]interface{}{
+						"visibility": tt.visibility,
+					}),
+				)
+			}
+
+			ios, _, _, _ := iostreams.Test()
+			ios.SetStdoutTTY(false)
+			ios.SetStdinTTY(false)
+
+			recorder := &telemetry.EventRecorderSpy{}
+
+			opts := &PreviewOptions{
+				IO:         ios,
+				HttpClient: func() (*http.Client, error) { return &http.Client{Transport: reg}, nil },
+				Prompter:   &prompter.PrompterMock{},
+				Telemetry:  recorder,
+				repo:       ghrepo.New("owner", "repo"),
+				SkillName:  "my-skill",
+			}
+
+			err := previewRun(opts)
+			require.NoError(t, err)
+
+			require.Len(t, recorder.Events, 1)
+			event := recorder.Events[0]
+			assert.Equal(t, "skill_preview", event.Type)
+
+			// Repo identifiers are always recorded (already in API request path).
+			assert.Equal(t, "github.com", event.Dimensions["skill_host"])
+			assert.Equal(t, "owner", event.Dimensions["skill_owner"])
+			assert.Equal(t, "repo", event.Dimensions["skill_repo"])
+
+			if tt.visibilityErr {
+				assert.Equal(t, "unknown", event.Dimensions["repo_visibility"],
+					"visibility fetch errors should emit repo_visibility=\"unknown\" so the fallback is distinguishable from a successful fetch")
+			} else {
+				assert.Equal(t, tt.visibility, event.Dimensions["repo_visibility"])
+			}
+
+			if tt.wantSkillNames != "" {
+				assert.Equal(t, tt.wantSkillNames, event.Dimensions["skill_names"])
+			} else {
+				assert.Empty(t, event.Dimensions["skill_names"])
+			}
+		})
+	}
 }

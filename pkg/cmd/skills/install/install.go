@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/api"
 	ghContext "github.com/cli/cli/v2/context"
 	"github.com/cli/cli/v2/git"
+	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/skills/discovery"
@@ -38,6 +40,7 @@ const (
 // InstallOptions holds all dependencies and user-provided flags for the install command.
 type InstallOptions struct {
 	IO         *iostreams.IOStreams
+	Telemetry  ghtelemetry.EventRecorder
 	HttpClient func() (*http.Client, error)
 	Prompter   prompter.Prompter
 	GitClient  *git.Client
@@ -59,9 +62,10 @@ type InstallOptions struct {
 }
 
 // NewCmdInstall creates the "skills install" command.
-func NewCmdInstall(f *cmdutil.Factory, runF func(*InstallOptions) error) *cobra.Command {
+func NewCmdInstall(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, runF func(*InstallOptions) error) *cobra.Command {
 	opts := &InstallOptions{
 		IO:         f.IOStreams,
+		Telemetry:  telemetry,
 		Prompter:   f.Prompter,
 		GitClient:  f.GitClient,
 		Remotes:    f.Remotes,
@@ -160,6 +164,8 @@ func NewCmdInstall(f *cmdutil.Factory, runF func(*InstallOptions) error) *cobra.
 		Aliases: []string{"add"},
 		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			telemetry.SetSampleRate(ghtelemetry.SAMPLE_ALL)
+
 			if len(args) >= 1 {
 				opts.SkillSource = args[0]
 			}
@@ -231,6 +237,11 @@ func installRun(opts *InstallOptions) error {
 	if err := source.ValidateSupportedHost(hostname); err != nil {
 		return err
 	}
+
+	// Kick off the visibility fetch in parallel with the install work so
+	// the extra API roundtrip doesn't add latency on the critical path.
+	// The result is consumed when the telemetry event is emitted below.
+	visFuture := discovery.FetchRepoVisibilityAsync(apiClient, hostname, opts.repo.RepoOwner(), opts.repo.RepoName())
 
 	resolved, err := resolveVersion(opts, apiClient, hostname)
 	if err != nil {
@@ -325,7 +336,56 @@ func installRun(opts *InstallOptions) error {
 		}
 	}
 
+	dims := map[string]string{
+		"agent_hosts": mapAgentHostsToIDs(selectedHosts),
+		"skill_host":  opts.repo.RepoHost(),
+		"skill_owner": opts.repo.RepoOwner(),
+		"skill_repo":  opts.repo.RepoName(),
+	}
+	// Repo identifiers (host/owner/repo) are always recorded because they
+	// are already sent verbatim in the API request path (e.g.
+	// repos/{owner}/{repo}/...), so recording them in telemetry does not
+	// expand the data exposure surface. Skill names refer to repo contents
+	// and are only included for public repositories. If the visibility
+	// fetch has not completed in time, we emit "unknown" and omit skill
+	// names rather than blocking the command on it.
+	if vis, ok := visFuture.Wait(visibilityWaitTimeout); ok {
+		dims["repo_visibility"] = string(vis)
+		if vis == discovery.RepoVisibilityPublic {
+			dims["skill_names"] = mapSkillsToNames(selectedSkills)
+		}
+	} else {
+		dims["repo_visibility"] = "unknown"
+	}
+	opts.Telemetry.Record(ghtelemetry.Event{
+		Type:       "skill_install",
+		Dimensions: dims,
+	})
+
 	return nil
+}
+
+// visibilityWaitTimeout is how long to wait at telemetry-emit time for
+// the in-flight repo visibility fetch before giving up and emitting
+// repo_visibility="unknown". Generous enough for a healthy API call,
+// short enough that a network stall doesn't noticeably delay command
+// completion.
+const visibilityWaitTimeout = 2 * time.Second
+
+func mapSkillsToNames(skills []discovery.Skill) string {
+	names := make([]string, len(skills))
+	for i, s := range skills {
+		names[i] = s.DisplayName()
+	}
+	return strings.Join(names, ",")
+}
+
+func mapAgentHostsToIDs(hosts []*registry.AgentHost) string {
+	agentHostIDs := make([]string, len(hosts))
+	for i, h := range hosts {
+		agentHostIDs[i] = h.ID
+	}
+	return strings.Join(agentHostIDs, ",")
 }
 
 // runLocalInstall handles installation from a local directory path.
