@@ -86,8 +86,6 @@ func NewCmdPreview(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, ru
 		Aliases: []string{"show"},
 		Args:    cobra.RangeArgs(1, 2),
 		RunE: func(c *cobra.Command, args []string) error {
-			telemetry.SetSampleRate(ghtelemetry.SAMPLE_ALL)
-
 			opts.RepoArg = args[0]
 			if len(args) == 2 {
 				opts.SkillName = args[1]

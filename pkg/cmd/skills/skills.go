@@ -41,6 +41,10 @@ func NewCmdSkills(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder) *co
 			# Validate skills for publishing
 			$ gh skill publish --dry-run
 		`),
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			telemetry.SetSampleRate(ghtelemetry.SAMPLE_ALL)
+			return nil
+		},
 	}
 
 	cmd.AddCommand(install.NewCmdInstall(f, telemetry, nil))

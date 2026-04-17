@@ -105,8 +105,6 @@ func NewCmdSearch(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, run
 		`),
 		Args: cmdutil.MinimumArgs(1, "cannot search: query argument required"),
 		RunE: func(c *cobra.Command, args []string) error {
-			telemetry.SetSampleRate(ghtelemetry.SAMPLE_ALL)
-
 			opts.Query = strings.Join(args, " ")
 
 			if len(strings.TrimSpace(opts.Query)) < 2 {

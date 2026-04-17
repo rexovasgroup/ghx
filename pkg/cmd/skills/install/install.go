@@ -164,8 +164,6 @@ func NewCmdInstall(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, ru
 		Aliases: []string{"add"},
 		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			telemetry.SetSampleRate(ghtelemetry.SAMPLE_ALL)
-
 			if len(args) >= 1 {
 				opts.SkillSource = args[0]
 			}
