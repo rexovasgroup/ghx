@@ -220,17 +220,6 @@ func searchRun(opts *SearchOptions) error {
 		return err
 	}
 
-	// The query and owner are already sent verbatim to the GitHub Code
-	// Search API (GET search/code?q=…), so recording them in telemetry
-	// does not expand the data exposure surface.
-	opts.Telemetry.Record(ghtelemetry.Event{
-		Type: "skill_search",
-		Dimensions: map[string]string{
-			"query": opts.Query,
-			"owner": opts.Owner,
-		},
-	})
-
 	opts.IO.StartProgressIndicatorWithLabel("Searching for skills")
 
 	skills, err := searchByKeyword(apiClient, host, opts.Query, opts.Owner, opts.Page, opts.Limit)
@@ -568,10 +557,6 @@ func promptInstall(opts *SearchOptions, skills []skillResult) error {
 
 	opts.Telemetry.Record(ghtelemetry.Event{
 		Type: "skill_search_install",
-		Dimensions: map[string]string{
-			"query": opts.Query,
-			"owner": opts.Owner,
-		},
 		Measures: ghtelemetry.Measures{
 			"install_count": int64(len(indices)),
 		},

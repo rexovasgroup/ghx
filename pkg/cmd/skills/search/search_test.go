@@ -580,46 +580,6 @@ func TestDeduplicateByName_Namespaced(t *testing.T) {
 	}
 }
 
-func TestSearchRun_TelemetryRecordsQueryAndOwner(t *testing.T) {
-	codeResponse := `{"total_count": 1, "incomplete_results": false, "items": [
-					{"name": "SKILL.md", "path": "skills/terraform/SKILL.md", "sha": "abc123",
-					 "repository": {"full_name": "org/repo"}}
-				]}`
-
-	reg := &httpmock.Registry{}
-	defer reg.Verify(t)
-	// With --owner set, only path + primary searches fire (no owner search).
-	for range 2 {
-		reg.Register(
-			httpmock.REST("GET", "search/code"),
-			httpmock.StringResponse(codeResponse),
-		)
-	}
-
-	ios, _, _, _ := iostreams.Test()
-	ios.SetStdoutTTY(false)
-
-	recorder := &telemetry.EventRecorderSpy{}
-
-	err := searchRun(&SearchOptions{
-		IO:         ios,
-		HttpClient: func() (*http.Client, error) { return &http.Client{Transport: reg}, nil },
-		Config:     func() (gh.Config, error) { return config.NewBlankConfig(), nil },
-		Telemetry:  recorder,
-		Query:      "terraform",
-		Owner:      "hashicorp",
-		Page:       1,
-		Limit:      defaultLimit,
-	})
-	require.NoError(t, err)
-
-	require.Len(t, recorder.Events, 1)
-	event := recorder.Events[0]
-	assert.Equal(t, "skill_search", event.Type)
-	assert.Equal(t, "terraform", event.Dimensions["query"])
-	assert.Equal(t, "hashicorp", event.Dimensions["owner"])
-}
-
 // TestSearchRun_TelemetryRecordsInstallFromResults verifies that when a
 // user searches, picks one or more results interactively, and proceeds to
 // install them, the search command records a telemetry event capturing
@@ -673,18 +633,21 @@ func TestSearchRun_TelemetryRecordsInstallFromResults(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The search command should record two events: the search itself, and
-	// a follow-up event indicating that the user chose to install from
-	// the search results.
-	require.Len(t, recorder.Events, 2)
+	// The search command no longer records a separate skill_search event;
+	// only the follow-up skill_search_install event fires when the user
+	// proceeds to install from the results.
+	require.Len(t, recorder.Events, 1)
 
-	assert.Equal(t, "skill_search", recorder.Events[0].Type)
-
-	installEvent := recorder.Events[1]
+	installEvent := recorder.Events[0]
 	assert.Equal(t, "skill_search_install", installEvent.Type,
 		"an install triggered from search results should be recorded as a distinct event")
-	assert.Equal(t, "terraform", installEvent.Dimensions["query"],
-		"the query is already sent verbatim to the Code Search API, so recording it here is safe and lets us correlate with the preceding skill_search event")
 	assert.Equal(t, int64(1), installEvent.Measures["install_count"],
 		"install_count captures how many results the user chose to install")
+	// The skill_search_install event must not carry the query or owner:
+	// these were intentionally removed so that installs from search are
+	// not linked back to the search terms at the telemetry layer.
+	assert.Empty(t, installEvent.Dimensions["query"],
+		"skill_search_install must not record the search query")
+	assert.Empty(t, installEvent.Dimensions["owner"],
+		"skill_search_install must not record the search owner filter")
 }

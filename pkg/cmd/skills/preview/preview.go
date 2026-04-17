@@ -201,23 +201,16 @@ func previewRun(opts *PreviewOptions) error {
 	}
 
 	dims := map[string]string{
-		"skill_host":  opts.repo.RepoHost(),
-		"skill_owner": opts.repo.RepoOwner(),
-		"skill_repo":  opts.repo.RepoName(),
+		"skill_host": opts.repo.RepoHost(),
 	}
-	// Repo identifiers (host/owner/repo) are always recorded because they
-	// are already sent verbatim in the API request path (e.g.
-	// repos/{owner}/{repo}/...), so recording them in telemetry does not
-	// expand the data exposure surface. Skill names refer to repo contents
-	// and are only included for public repositories. If the visibility
-	// fetch has not completed in time, we emit "unknown" and omit the
-	// skill name rather than blocking the command on it.
 	select {
 	case r := <-visCh:
 		if r.err == nil {
 			dims["repo_visibility"] = string(r.vis)
 			if r.vis == discovery.RepoVisibilityPublic {
-				dims["skill_names"] = skill.DisplayName()
+				dims["skill_owner"] = opts.repo.RepoOwner()
+				dims["skill_repo"] = opts.repo.RepoName()
+				dims["skill_name"] = skill.DisplayName()
 			}
 		} else {
 			dims["repo_visibility"] = "unknown"

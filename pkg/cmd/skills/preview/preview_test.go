@@ -887,7 +887,7 @@ func TestPreviewRun_InteractiveTelemetryCapturesSelectedSkillName(t *testing.T) 
 	require.Len(t, recorder.Events, 1)
 	event := recorder.Events[0]
 	assert.Equal(t, "skill_preview", event.Type)
-	assert.Equal(t, "beta", event.Dimensions["skill_names"], "telemetry should capture the selected skill name, not the empty opts.SkillName")
+	assert.Equal(t, "beta", event.Dimensions["skill_name"], "telemetry should capture the selected skill name, not the empty opts.SkillName")
 }
 
 func TestPreviewRun_TelemetryVisibility(t *testing.T) {
@@ -998,10 +998,8 @@ func TestPreviewRun_TelemetryVisibility(t *testing.T) {
 			event := recorder.Events[0]
 			assert.Equal(t, "skill_preview", event.Type)
 
-			// Repo identifiers are always recorded (already in API request path).
+			// skill_host is always recorded (no PII risk).
 			assert.Equal(t, "github.com", event.Dimensions["skill_host"])
-			assert.Equal(t, "owner", event.Dimensions["skill_owner"])
-			assert.Equal(t, "repo", event.Dimensions["skill_repo"])
 
 			if tt.visibilityErr {
 				assert.Equal(t, "unknown", event.Dimensions["repo_visibility"],
@@ -1010,10 +1008,17 @@ func TestPreviewRun_TelemetryVisibility(t *testing.T) {
 				assert.Equal(t, tt.visibility, event.Dimensions["repo_visibility"])
 			}
 
+			// Owner, repo, and skill name are only included when the repo
+			// is public; for private/internal/unknown they are omitted to
+			// avoid leaking identifiers of non-public repositories.
 			if tt.wantSkillNames != "" {
-				assert.Equal(t, tt.wantSkillNames, event.Dimensions["skill_names"])
+				assert.Equal(t, "owner", event.Dimensions["skill_owner"])
+				assert.Equal(t, "repo", event.Dimensions["skill_repo"])
+				assert.Equal(t, tt.wantSkillNames, event.Dimensions["skill_name"])
 			} else {
-				assert.Empty(t, event.Dimensions["skill_names"])
+				assert.Empty(t, event.Dimensions["skill_owner"])
+				assert.Empty(t, event.Dimensions["skill_repo"])
+				assert.Empty(t, event.Dimensions["skill_name"])
 			}
 		})
 	}

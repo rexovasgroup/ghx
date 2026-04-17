@@ -2062,10 +2062,8 @@ func TestInstallRun_TelemetryVisibility(t *testing.T) {
 			assert.Equal(t, "skill_install", event.Type)
 			assert.NotEmpty(t, event.Dimensions["agent_hosts"], "agent_hosts should always be present")
 
-			// Repo identifiers are always recorded (already in API request path).
+			// skill_host is always recorded (no PII risk).
 			assert.Equal(t, "github.com", event.Dimensions["skill_host"])
-			assert.Equal(t, "monalisa", event.Dimensions["skill_owner"])
-			assert.Equal(t, "octocat-skills", event.Dimensions["skill_repo"])
 
 			if tt.visibilityErr {
 				assert.Equal(t, "unknown", event.Dimensions["repo_visibility"],
@@ -2074,9 +2072,16 @@ func TestInstallRun_TelemetryVisibility(t *testing.T) {
 				assert.Equal(t, tt.visibility, event.Dimensions["repo_visibility"])
 			}
 
+			// Owner, repo, and skill names are only included when the repo
+			// is public; for private/internal/unknown they are omitted to
+			// avoid leaking identifiers of non-public repositories.
 			if tt.wantSkillNames != "" {
+				assert.Equal(t, "monalisa", event.Dimensions["skill_owner"])
+				assert.Equal(t, "octocat-skills", event.Dimensions["skill_repo"])
 				assert.Equal(t, tt.wantSkillNames, event.Dimensions["skill_names"])
 			} else {
+				assert.Empty(t, event.Dimensions["skill_owner"])
+				assert.Empty(t, event.Dimensions["skill_repo"])
 				assert.Empty(t, event.Dimensions["skill_names"])
 			}
 		})
