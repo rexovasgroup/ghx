@@ -229,8 +229,11 @@ func previewRun(opts *PreviewOptions) error {
 
 // visibilityWaitTimeout is how long to wait at telemetry-emit time for
 // the in-flight repo visibility fetch before giving up and emitting
-// repo_visibility="unknown".
-const visibilityWaitTimeout = 2 * time.Second
+// repo_visibility="unknown". By this point the command has already done
+// several serial API calls and rendering work, so the fetch has almost
+// always completed; this budget is a short safety net for the case
+// where that single REST call has stalled.
+const visibilityWaitTimeout = 200 * time.Millisecond
 
 // renderAllFiles dumps the tree, SKILL.md, and all extra files through the pager.
 func renderAllFiles(opts *PreviewOptions, cs *iostreams.ColorScheme, skill discovery.Skill,

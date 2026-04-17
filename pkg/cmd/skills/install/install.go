@@ -372,10 +372,11 @@ func installRun(opts *InstallOptions) error {
 
 // visibilityWaitTimeout is how long to wait at telemetry-emit time for
 // the in-flight repo visibility fetch before giving up and emitting
-// repo_visibility="unknown". Generous enough for a healthy API call,
-// short enough that a network stall doesn't noticeably delay command
-// completion.
-const visibilityWaitTimeout = 2 * time.Second
+// repo_visibility="unknown". By this point the command has already done
+// several serial API calls and (for install) a git sparse-checkout, so
+// the fetch has almost always completed; this budget is a short safety
+// net for the case where that single REST call has stalled.
+const visibilityWaitTimeout = 200 * time.Millisecond
 
 func mapSkillsToNames(skills []discovery.Skill) string {
 	names := make([]string, len(skills))

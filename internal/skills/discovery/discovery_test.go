@@ -602,6 +602,17 @@ func TestFetchRepoVisibility(t *testing.T) {
 			want: RepoVisibilityInternal,
 		},
 		{
+			name: "unknown visibility",
+			stubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills"),
+					httpmock.JSONResponse(map[string]interface{}{
+						"visibility": "cool-visibility",
+					}))
+			},
+			wantErr: `unknown repository visibility: "cool-visibility"`,
+		},
+		{
 			name: "API error",
 			stubs: func(reg *httpmock.Registry) {
 				reg.Register(
