@@ -494,14 +494,14 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 		Repository struct {
 			HasDiscussionsEnabled bool `json:"hasDiscussionsEnabled"`
 			Discussion            *struct {
-				ID          string     `json:"id"`
-				Number      int        `json:"number"`
-				Title       string     `json:"title"`
-				Body        string     `json:"body"`
-				URL         string     `json:"url"`
-				Closed      bool       `json:"closed"`
-				StateReason string     `json:"stateReason"`
-				Author      actorJSON  `json:"author"`
+				ID          string    `json:"id"`
+				Number      int       `json:"number"`
+				Title       string    `json:"title"`
+				Body        string    `json:"body"`
+				URL         string    `json:"url"`
+				Closed      bool      `json:"closed"`
+				StateReason string    `json:"stateReason"`
+				Author      actorJSON `json:"author"`
 				Category    struct {
 					ID           string `json:"id"`
 					Name         string `json:"name"`
