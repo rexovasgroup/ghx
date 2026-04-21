@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/cli/cli/v2/internal/config/migration"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
+	"github.com/cli/cli/v2/internal/gherrs"
 	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/internal/update"
 	"github.com/cli/cli/v2/pkg/cmd/auth/shared"
@@ -37,16 +39,14 @@ import (
 	"github.com/cli/safeexec"
 	"github.com/mgutz/ansi"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type exitCode int
 
 const (
-	exitOK      exitCode = 0
-	exitError   exitCode = 1
-	exitCancel  exitCode = 2
-	exitAuth    exitCode = 4
-	exitPending exitCode = 8
+	exitOK    exitCode = 0
+	exitError exitCode = 1
 )
 
 func Main() exitCode {
@@ -191,61 +191,121 @@ func Main() exitCode {
 
 	rootCmd.SetArgs(expandedArgs)
 
-	if cmd, err := rootCmd.ExecuteContextC(ctx); err != nil {
-		var pagerPipeError *iostreams.ErrClosedPagerPipe
-		var noResultsError cmdutil.NoResultsError
-		var extError *root.ExternalCommandExitError
-		var authError *root.AuthError
-		if err == cmdutil.SilentError {
-			return exitError
-		} else if err == cmdutil.PendingError {
-			return exitPending
-		} else if cmdutil.IsUserCancellation(err) {
+	var executedCmd *cobra.Command
+	var errorDims ghtelemetry.Dimensions
+	defer func() {
+		if executedCmd == nil {
+			telemetryService.Record(ghtelemetry.Event{
+				Type: "missing_command",
+			})
+			return
+		}
+
+		if cmdutil.IsTelemetryDisabled(executedCmd) {
+			return
+		}
+
+		var flags []string
+		executedCmd.Flags().Visit(func(f *pflag.Flag) {
+			flags = append(flags, f.Name)
+		})
+		slices.Sort(flags)
+
+		var dimensions = ghtelemetry.Dimensions{
+			"command": executedCmd.CommandPath(),
+			"flags":   strings.Join(flags, ","),
+		}
+		maps.Copy(dimensions, errorDims)
+
+		telemetryService.Record(ghtelemetry.Event{
+			Type:       "command_invocation",
+			Dimensions: dimensions,
+		})
+	}()
+
+	if executedCmd, err = rootCmd.ExecuteContextC(ctx); err != nil {
+		var pagerPipeErr *iostreams.ErrClosedPagerPipe
+		var noResultsErr cmdutil.NoResultsError
+		var extErr *root.ExternalCommandExitError
+		var authErr *root.AuthError
+		var dnsErr *net.DNSError
+		var flagErr *cmdutil.FlagError
+		var httpErr api.HTTPError
+
+		switch {
+		case errors.Is(err, cmdutil.SilentError):
+			err = gherrs.SilentError
+		case errors.Is(err, cmdutil.PendingError):
+			err = gherrs.PendingError
+		case cmdutil.IsUserCancellation(err):
+			// This should be fixed at the prompting layer.
 			if errors.Is(err, terminal.InterruptErr) {
-				// ensure the next shell prompt will start on its own line
 				fmt.Fprint(stderr, "\n")
 			}
-			return exitCancel
-		} else if errors.As(err, &authError) {
-			return exitAuth
-		} else if errors.As(err, &pagerPipeError) {
-			// ignore the error raised when piping to a closed pager
-			return exitOK
-		} else if errors.As(err, &noResultsError) {
+			err = gherrs.UserCancellationError
+		case errors.As(err, &authErr):
+			err = gherrs.AuthError
+		case errors.As(err, &pagerPipeErr):
+			err = nil // user quit the pager, not really an error
+		case errors.As(err, &noResultsErr):
 			if cmdFactory.IOStreams.IsStdoutTTY() {
-				fmt.Fprintln(stderr, noResultsError.Error())
+				fmt.Fprintln(stderr, noResultsErr.Error())
 			}
-			// no results is not a command failure
+			err = nil // no data to show, not really an error
+		case errors.As(err, &extErr):
+			err = &gherrs.ExtensionExecError{Code: extErr.ExitCode()}
+		case errors.As(err, &dnsErr):
+			var s strings.Builder
+			fmt.Fprintf(&s, "error connecting to %s\n", dnsErr.Name)
+			if hasDebug {
+				fmt.Fprintf(&s, "%v\n", dnsErr)
+			}
+			fmt.Fprint(&s, "check your internet connection or https://githubstatus.com")
+			err = gherrs.GeneralError{Message: s.String()}
+		case strings.Contains(err.Error(), "Incorrect function"):
+			var s strings.Builder
+			fmt.Fprintln(&s, "You appear to be running in MinTTY without pseudo terminal support.")
+			fmt.Fprint(&s, "To learn about workarounds for this error, run:  gh help mintty")
+			err = gherrs.GeneralError{WrappedErr: err, Message: s.String()}
+		default:
+			if errors.As(err, &flagErr) || strings.HasPrefix(err.Error(), "unknown command ") {
+				var s strings.Builder
+				if !strings.HasSuffix(err.Error(), "\n") {
+					fmt.Fprintln(&s)
+				}
+				fmt.Fprint(&s, executedCmd.UsageString())
+				err = gherrs.GeneralError{WrappedErr: err, Message: s.String()}
+			} else if errors.As(err, &httpErr) && httpErr.StatusCode == 401 {
+				authCommand := "gh auth login"
+				if cfg, cfgErr := cmdFactory.Config(); cfgErr == nil {
+					authCommand = authRecoveryCommand(cfg, httpErr)
+				}
+				err = gherrs.GeneralError{WrappedErr: err, Message: fmt.Sprintf("Try authenticating with:  %s", authCommand)}
+			} else if u := factory.SSOURL(); u != "" {
+				err = gherrs.GeneralError{WrappedErr: err, Message: fmt.Sprintf("Authorize in your web browser:  %s", u)}
+			} else if msg := httpErr.ScopesSuggestion(); msg != "" {
+				err = gherrs.GeneralError{WrappedErr: err, Message: msg}
+			}
+		}
+
+		if err == nil {
 			return exitOK
-		} else if errors.As(err, &extError) {
-			// pass on exit codes from extensions and shell aliases
-			return exitCode(extError.ExitCode())
 		}
 
-		printError(stderr, err, cmd, hasDebug)
+		errorDims = newErrDims(err)
 
-		if strings.Contains(err.Error(), "Incorrect function") {
-			fmt.Fprintln(stderr, "You appear to be running in MinTTY without pseudo terminal support.")
-			fmt.Fprintln(stderr, "To learn about workarounds for this error, run:  gh help mintty")
-			return exitError
+		var silenced gherrs.Silenced
+		if !errors.As(err, &silenced) {
+			fmt.Fprintln(stderr, err)
 		}
 
-		var httpErr api.HTTPError
-		if errors.As(err, &httpErr) && httpErr.StatusCode == 401 {
-			authCommand := "gh auth login"
-			if cfg, cfgErr := cmdFactory.Config(); cfgErr == nil {
-				authCommand = authRecoveryCommand(cfg, httpErr)
-			}
-			fmt.Fprintf(stderr, "Try authenticating with:  %s\n", authCommand)
-		} else if u := factory.SSOURL(); u != "" {
-			// handles organization SAML enforcement error
-			fmt.Fprintf(stderr, "Authorize in your web browser:  %s\n", u)
-		} else if msg := httpErr.ScopesSuggestion(); msg != "" {
-			fmt.Fprintln(stderr, msg)
+		if exitCoder, ok := errors.AsType[gherrs.ExitCoder](err); ok {
+			return exitCode(exitCoder.ExitCode())
 		}
 
 		return exitError
 	}
+
 	if root.HasFailed() {
 		return exitError
 	}
@@ -272,32 +332,42 @@ func Main() exitCode {
 	return exitOK
 }
 
+func newErrDims(err error) ghtelemetry.Dimensions {
+	errTypes := grabAllUnwrappableNestedErrorTypes(err)
+
+	if errors.Is(err, gherrs.PendingError) || errors.Is(err, gherrs.UserCancellationError) {
+		return ghtelemetry.Dimensions{"outcome": "success", "errTypes": errTypes}
+	}
+
+	return ghtelemetry.Dimensions{
+		"outcome":  "error",
+		"errTypes": errTypes,
+	}
+}
+
+// This is a pretty janky way to get some privacy-respecting visibility into
+// what kind of error we're dealing with. It is not at all intended to be comprehensive.
+func grabAllUnwrappableNestedErrorTypes(err error) string {
+	var types []string
+	for i := 0; err != nil && i < 100; i, err = i+1, errors.Unwrap(err) {
+		// Drop the pointer part of the type name, since it doesn't add much value and just makes the output more noisy,
+		// and may make it harder to analyse if we change it in future.
+		t := reflect.TypeOf(err)
+		for t != nil && t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+		if t == nil {
+			continue
+		}
+		types = append(types, t.String())
+	}
+	return strings.Join(types, ",")
+}
+
 // isExtensionCommand returns true if args resolve to an extension command.
 func isExtensionCommand(rootCmd *cobra.Command, args []string) bool {
 	c, _, err := rootCmd.Find(args)
 	return err == nil && c != nil && c.GroupID == "extension"
-}
-
-func printError(out io.Writer, err error, cmd *cobra.Command, debug bool) {
-	var dnsError *net.DNSError
-	if errors.As(err, &dnsError) {
-		fmt.Fprintf(out, "error connecting to %s\n", dnsError.Name)
-		if debug {
-			fmt.Fprintln(out, dnsError)
-		}
-		fmt.Fprintln(out, "check your internet connection or https://githubstatus.com")
-		return
-	}
-
-	fmt.Fprintln(out, err)
-
-	var flagError *cmdutil.FlagError
-	if errors.As(err, &flagError) || strings.HasPrefix(err.Error(), "unknown command ") {
-		if !strings.HasSuffix(err.Error(), "\n") {
-			fmt.Fprintln(out)
-		}
-		fmt.Fprintln(out, cmd.UsageString())
-	}
 }
 
 func authRecoveryCommand(cfg gh.Config, httpErr api.HTTPError) string {
