@@ -24,6 +24,7 @@ import (
 	"github.com/cli/cli/v2/internal/config/migration"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
+	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/internal/update"
 	"github.com/cli/cli/v2/pkg/cmd/auth/shared"
@@ -37,6 +38,7 @@ import (
 	"github.com/cli/safeexec"
 	"github.com/mgutz/ansi"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type exitCode int
@@ -191,7 +193,36 @@ func Main() exitCode {
 
 	rootCmd.SetArgs(expandedArgs)
 
-	if cmd, err := rootCmd.ExecuteContextC(ctx); err != nil {
+	var executedCmd *cobra.Command
+	defer func() {
+		if executedCmd == nil {
+			telemetryService.Record(ghtelemetry.Event{
+				Type: "missing_command",
+			})
+			return
+		}
+
+		if cmdutil.IsTelemetryDisabled(executedCmd) {
+			return
+		}
+
+		var flags []string
+		executedCmd.Flags().Visit(func(f *pflag.Flag) {
+			flags = append(flags, f.Name)
+		})
+		slices.Sort(flags)
+
+		telemetryService.Record(ghtelemetry.Event{
+			Type: "command_invocation",
+			Dimensions: ghtelemetry.Dimensions{
+				"command":           executedCmd.CommandPath(),
+				"flags":             strings.Join(flags, ","),
+				"guessed_host_type": ghinstance.CategorizeHost(telemetry.GuessTargetHost(executedCmd, cmdFactory.BaseRepo, cmdFactory.Config)),
+			},
+		})
+	}()
+
+	if executedCmd, err = rootCmd.ExecuteContextC(ctx); err != nil {
 		var pagerPipeError *iostreams.ErrClosedPagerPipe
 		var noResultsError cmdutil.NoResultsError
 		var extError *root.ExternalCommandExitError
@@ -222,7 +253,7 @@ func Main() exitCode {
 			return exitCode(extError.ExitCode())
 		}
 
-		printError(stderr, err, cmd, hasDebug)
+		printError(stderr, err, executedCmd, hasDebug)
 
 		if strings.Contains(err.Error(), "Incorrect function") {
 			fmt.Fprintln(stderr, "You appear to be running in MinTTY without pseudo terminal support.")
