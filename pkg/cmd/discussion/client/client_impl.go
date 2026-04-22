@@ -214,6 +214,7 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 	remaining := limit
 
 	for {
+		variables["first"] = githubv4.Int(min(remaining, 100))
 		if err := c.gql.Query(repo.RepoHost(), "DiscussionList", &query, variables); err != nil {
 			return nil, err
 		}
@@ -336,6 +337,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 	remaining := limit
 
 	for {
+		variables["first"] = githubv4.Int(min(remaining, 100))
 		if err := c.gql.Query(repo.RepoHost(), "DiscussionListSearch", &query, variables); err != nil {
 			return nil, err
 		}

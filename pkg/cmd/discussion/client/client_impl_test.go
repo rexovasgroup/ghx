@@ -2,6 +2,8 @@ package client
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +24,15 @@ func minimalNode(id, title string) string {
 	return `{"id":"` + id + `","number":1,"title":"` + title + `","body":"","url":"","closed":false,"stateReason":"","isAnswered":false,"answerChosenAt":"0001-01-01T00:00:00Z","author":{"__typename":"User","login":"alice"},"category":{"id":"C1","name":"General","slug":"general","emoji":"","isAnswerable":false},"answerChosenBy":null,"labels":{"nodes":[]},"reactionGroups":[],"createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","closedAt":"0001-01-01T00:00:00Z","locked":false}`
 }
 
+// minimalNodes returns count comma-separated minimal JSON discussion nodes.
+func minimalNodes(count int) string {
+	nodes := make([]string, count)
+	for i := range nodes {
+		nodes[i] = minimalNode("D"+strconv.Itoa(i+1), "Discussion "+strconv.Itoa(i+1))
+	}
+	return strings.Join(nodes, ",")
+}
+
 // listResp builds a mock repository.discussions JSON response.
 func listResp(hasNext bool, cursor string, total int, nodes string) string {
 	hasNextStr := "false"
@@ -29,7 +40,7 @@ func listResp(hasNext bool, cursor string, total int, nodes string) string {
 		hasNextStr = "true"
 	}
 	return `{"data":{"repository":{"hasDiscussionsEnabled":true,"discussions":{"totalCount":` +
-		intStr(total) + `,"pageInfo":{"hasNextPage":` + hasNextStr + `,"endCursor":"` + cursor + `"},"nodes":[` + nodes + `]}}}}`
+		strconv.Itoa(total) + `,"pageInfo":{"hasNextPage":` + hasNextStr + `,"endCursor":"` + cursor + `"},"nodes":[` + nodes + `]}}}}`
 }
 
 // searchResp builds a mock search JSON response.
@@ -39,30 +50,7 @@ func searchResp(hasNext bool, cursor string, count int, nodes string) string {
 		hasNextStr = "true"
 	}
 	return `{"data":{"search":{"discussionCount":` +
-		intStr(count) + `,"pageInfo":{"hasNextPage":` + hasNextStr + `,"endCursor":"` + cursor + `"},"nodes":[` + nodes + `]}}}`
-}
-
-// intStr converts an int to its decimal string representation without importing strconv.
-func intStr(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	buf := [20]byte{}
-	pos := len(buf)
-	for n > 0 {
-		pos--
-		buf[pos] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		pos--
-		buf[pos] = '-'
-	}
-	return string(buf[pos:])
+		strconv.Itoa(count) + `,"pageInfo":{"hasNextPage":` + hasNextStr + `,"endCursor":"` + cursor + `"},"nodes":[` + nodes + `]}}}`
 }
 
 // ---------------------------------------------------------------------------
@@ -90,17 +78,18 @@ func TestList(t *testing.T) {
 	disabledResp := `{"data":{"repository":{"hasDiscussionsEnabled":false,"discussions":{"totalCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}}}`
 
 	tests := []struct {
-		name       string
-		filters    ListFilters
-		after      string
-		limit      int
-		responses  []string
-		wantErr    string
-		wantTotal  int
-		wantLen    int
-		wantCursor string
-		wantTitles []string
-		wantDisc   *Discussion
+		name          string
+		filters       ListFilters
+		after         string
+		limit         int
+		responses     []string
+		checkVarsFns  []func(*testing.T, map[string]interface{})
+		wantErr       string
+		wantTotal     int
+		wantLen       int
+		wantCursor    string
+		wantTitles    []string
+		wantDisc      *Discussion
 	}{
 		{
 			name:      "maps all fields",
@@ -160,48 +149,143 @@ func TestList(t *testing.T) {
 			limit:     10,
 			after:     "someCursor",
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, "someCursor", vars["after"])
+				},
+			},
 		},
 		{
 			name:      "open state filter",
 			limit:     10,
 			filters:   ListFilters{State: new(FilterStateOpen)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, []interface{}{"OPEN"}, vars["states"])
+				},
+			},
 		},
 		{
 			name:      "closed state filter",
 			limit:     10,
 			filters:   ListFilters{State: new(FilterStateClosed)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, []interface{}{"CLOSED"}, vars["states"])
+				},
+			},
 		},
 		{
 			name:      "answered filter",
 			limit:     10,
 			filters:   ListFilters{Answered: new(true)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, true, vars["answered"])
+				},
+			},
 		},
 		{
 			name:      "unanswered filter",
 			limit:     10,
 			filters:   ListFilters{Answered: new(false)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, false, vars["answered"])
+				},
+			},
 		},
 		{
 			name:      "category ID filter",
 			limit:     10,
 			filters:   ListFilters{CategoryID: "CAT123"},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, "CAT123", vars["categoryId"])
+				},
+			},
 		},
 		{
 			name:      "order by created asc",
 			limit:     10,
 			filters:   ListFilters{OrderBy: OrderByCreated, Direction: OrderDirectionAsc},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					orderBy, ok := vars["orderBy"].(map[string]interface{})
+					require.True(t, ok, "orderBy should be a map")
+					assert.Equal(t, "CREATED_AT", orderBy["field"])
+					assert.Equal(t, "ASC", orderBy["direction"])
+				},
+			},
 		},
 		{
 			name:      "order by updated desc",
 			limit:     10,
 			filters:   ListFilters{OrderBy: OrderByUpdated, Direction: OrderDirectionDesc},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					orderBy, ok := vars["orderBy"].(map[string]interface{})
+					require.True(t, ok, "orderBy should be a map")
+					assert.Equal(t, "UPDATED_AT", orderBy["field"])
+					assert.Equal(t, "DESC", orderBy["direction"])
+				},
+			},
+		},
+		{
+			// Bot actors have no name; ID comes from the Bot.ID field.
+			name:  "bot actor",
+			limit: 10,
+			responses: []string{listResp(false, "", 1, `{"id":"D_bot","number":1,"title":"Bot post","body":"","url":"","closed":false,"stateReason":"","isAnswered":false,"answerChosenAt":"0001-01-01T00:00:00Z","author":{"__typename":"Bot","login":"gh-bot","id":"bot-node-id"},"category":{"id":"C1","name":"General","slug":"general","emoji":"","isAnswerable":false},"answerChosenBy":null,"labels":{"nodes":[]},"reactionGroups":[],"createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","closedAt":"0001-01-01T00:00:00Z","locked":false}`)},
+			wantLen:   1,
+			wantTotal: 1,
+			wantDisc: &Discussion{
+				ID:     "D_bot",
+				Number: 1,
+				Title:  "Bot post",
+				Author: DiscussionActor{ID: "bot-node-id", Login: "gh-bot", Name: ""},
+				Category: DiscussionCategory{ID: "C1", Name: "General", Slug: "general"},
+				Labels:   []DiscussionLabel{},
+				Comments: DiscussionCommentList{},
+				CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			// When limit > 100, the first page requests 100 and the second page
+			// requests the remainder, exercising the per-iteration first variable.
+			name:  "limit greater than 100",
+			limit: 101,
+			responses: []string{
+				listResp(true, "pg2cursor", 101, minimalNodes(100)),
+				listResp(false, "", 101, minimalNode("D101", "Discussion 101")),
+			},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, float64(100), vars["first"])
+				},
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, float64(1), vars["first"])
+				},
+			},
+			wantLen:   101,
+			wantTotal: 101,
 		},
 		{
 			// When the page has more items than requested, NextCursor is set.
@@ -233,8 +317,17 @@ func TestList(t *testing.T) {
 			reg := &httpmock.Registry{}
 			defer reg.Verify(t)
 
-			for _, resp := range tt.responses {
-				reg.Register(httpmock.GraphQL(`query DiscussionList\b`), httpmock.StringResponse(resp))
+			for i, resp := range tt.responses {
+				var responder httpmock.Responder
+				if i < len(tt.checkVarsFns) && tt.checkVarsFns[i] != nil {
+					fn := tt.checkVarsFns[i]
+					responder = httpmock.GraphQLQuery(resp, func(_ string, vars map[string]interface{}) {
+						fn(t, vars)
+					})
+				} else {
+					responder = httpmock.StringResponse(resp)
+				}
+				reg.Register(httpmock.GraphQL(`query DiscussionList\b`), responder)
 			}
 
 			c := newTestDiscussionClient(reg)
@@ -288,17 +381,18 @@ func TestSearch(t *testing.T) {
 	emptyResp := searchResp(false, "", 0, "")
 
 	tests := []struct {
-		name       string
-		filters    SearchFilters
-		after      string
-		limit      int
-		responses  []string
-		wantErr    string
-		wantTotal  int
-		wantLen    int
-		wantCursor string
-		wantTitles []string
-		wantDisc   *Discussion
+		name          string
+		filters       SearchFilters
+		after         string
+		limit         int
+		responses     []string
+		checkVarsFns  []func(*testing.T, map[string]interface{})
+		wantErr       string
+		wantTotal     int
+		wantLen       int
+		wantCursor    string
+		wantTitles    []string
+		wantDisc      *Discussion
 	}{
 		{
 			name:      "maps all fields",
@@ -352,66 +446,156 @@ func TestSearch(t *testing.T) {
 			limit:     10,
 			after:     "someCursor",
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, "someCursor", vars["after"])
+				},
+			},
 		},
 		{
 			name:      "open state filter",
 			limit:     10,
 			filters:   SearchFilters{State: new(FilterStateOpen)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), "is:open")
+				},
+			},
 		},
 		{
 			name:      "closed state filter",
 			limit:     10,
 			filters:   SearchFilters{State: new(FilterStateClosed)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), "is:closed")
+				},
+			},
 		},
 		{
 			name:      "answered filter",
 			limit:     10,
 			filters:   SearchFilters{Answered: new(true)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), "is:answered")
+				},
+			},
 		},
 		{
 			name:      "unanswered filter",
 			limit:     10,
 			filters:   SearchFilters{Answered: new(false)},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), "is:unanswered")
+				},
+			},
 		},
 		{
 			name:      "author filter",
 			limit:     10,
 			filters:   SearchFilters{Author: "alice"},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), `author:"alice"`)
+				},
+			},
 		},
 		{
 			name:      "labels filter",
 			limit:     10,
 			filters:   SearchFilters{Labels: []string{"bug", "enhancement"}},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					q := vars["query"].(string)
+					assert.Contains(t, q, `label:"bug"`)
+					assert.Contains(t, q, `label:"enhancement"`)
+				},
+			},
 		},
 		{
 			name:      "category filter",
 			limit:     10,
 			filters:   SearchFilters{Category: "Q&A"},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), `category:"Q&A"`)
+				},
+			},
 		},
 		{
 			name:      "keywords filter",
 			limit:     10,
 			filters:   SearchFilters{Keywords: "some keyword"},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), "some keyword")
+				},
+			},
 		},
 		{
 			name:      "order by created asc",
 			limit:     10,
 			filters:   SearchFilters{OrderBy: OrderByCreated, Direction: OrderDirectionAsc},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), "sort:created-asc")
+				},
+			},
 		},
 		{
 			name:      "order by updated desc",
 			limit:     10,
 			filters:   SearchFilters{OrderBy: OrderByUpdated, Direction: OrderDirectionDesc},
 			responses: []string{emptyResp},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Contains(t, vars["query"].(string), "sort:updated-desc")
+				},
+			},
+		},
+		{
+			// When limit > 100, the first page requests 100 and the second page
+			// requests the remainder, exercising the per-iteration first variable.
+			name:  "limit greater than 100",
+			limit: 101,
+			responses: []string{
+				searchResp(true, "pg2cursor", 101, minimalNodes(100)),
+				searchResp(false, "", 101, minimalNode("D101", "Discussion 101")),
+			},
+			checkVarsFns: []func(*testing.T, map[string]interface{}){
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, float64(100), vars["first"])
+				},
+				func(t *testing.T, vars map[string]interface{}) {
+					t.Helper()
+					assert.Equal(t, float64(1), vars["first"])
+				},
+			},
+			wantLen:   101,
+			wantTotal: 101,
 		},
 		{
 			// When the page has more items than requested, NextCursor is set.
@@ -443,8 +627,17 @@ func TestSearch(t *testing.T) {
 			reg := &httpmock.Registry{}
 			defer reg.Verify(t)
 
-			for _, resp := range tt.responses {
-				reg.Register(httpmock.GraphQL(`query DiscussionListSearch\b`), httpmock.StringResponse(resp))
+			for i, resp := range tt.responses {
+				var responder httpmock.Responder
+				if i < len(tt.checkVarsFns) && tt.checkVarsFns[i] != nil {
+					fn := tt.checkVarsFns[i]
+					responder = httpmock.GraphQLQuery(resp, func(_ string, vars map[string]interface{}) {
+						fn(t, vars)
+					})
+				} else {
+					responder = httpmock.StringResponse(resp)
+				}
+				reg.Register(httpmock.GraphQL(`query DiscussionListSearch\b`), responder)
 			}
 
 			c := newTestDiscussionClient(reg)
