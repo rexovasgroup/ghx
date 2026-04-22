@@ -78,18 +78,18 @@ func TestList(t *testing.T) {
 	disabledResp := `{"data":{"repository":{"hasDiscussionsEnabled":false,"discussions":{"totalCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}}}`
 
 	tests := []struct {
-		name          string
-		filters       ListFilters
-		after         string
-		limit         int
-		responses     []string
-		checkVarsFns  []func(*testing.T, map[string]interface{})
-		wantErr       string
-		wantTotal     int
-		wantLen       int
-		wantCursor    string
-		wantTitles    []string
-		wantDisc      *Discussion
+		name         string
+		filters      ListFilters
+		after        string
+		limit        int
+		responses    []string
+		checkVarsFns []func(*testing.T, map[string]interface{})
+		wantErr      string
+		wantTotal    int
+		wantLen      int
+		wantCursor   string
+		wantTitles   []string
+		wantDisc     *Discussion
 	}{
 		{
 			name:      "maps all fields",
@@ -99,20 +99,20 @@ func TestList(t *testing.T) {
 			wantLen:   1,
 			wantDisc: &Discussion{
 				ID: "D_rich1", Number: 42, Title: "Rich discussion", Body: "body text here",
-				URL:         "https://github.com/OWNER/REPO/discussions/42",
-				Closed:      true,
-				StateReason: "RESOLVED",
-				Author:      DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
-				Category:    DiscussionCategory{ID: "C1", Name: "Q&A", Slug: "q-a", Emoji: ":question:", IsAnswerable: true},
-				Labels:      []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}, {ID: "L2", Name: "enhancement", Color: "a2eeef"}},
-				Answered:    true,
+				URL:            "https://github.com/OWNER/REPO/discussions/42",
+				Closed:         true,
+				StateReason:    "RESOLVED",
+				Author:         DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
+				Category:       DiscussionCategory{ID: "C1", Name: "Q&A", Slug: "q-a", Emoji: ":question:", IsAnswerable: true},
+				Labels:         []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}, {ID: "L2", Name: "enhancement", Color: "a2eeef"}},
+				Answered:       true,
 				AnswerChosenAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
 				AnswerChosenBy: &DiscussionActor{ID: "U2", Login: "bob", Name: "Bob"},
-				Comments:    DiscussionCommentList{},
-				CreatedAt:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-				UpdatedAt:   time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
-				ClosedAt:    time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
-				Locked:      true,
+				Comments:       DiscussionCommentList{},
+				CreatedAt:      time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt:      time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
+				ClosedAt:       time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+				Locked:         true,
 			},
 		},
 		{
@@ -248,19 +248,19 @@ func TestList(t *testing.T) {
 		},
 		{
 			// Bot actors have no name; ID comes from the Bot.ID field.
-			name:  "bot actor",
-			limit: 10,
+			name:      "bot actor",
+			limit:     10,
 			responses: []string{listResp(false, "", 1, `{"id":"D_bot","number":1,"title":"Bot post","body":"","url":"","closed":false,"stateReason":"","isAnswered":false,"answerChosenAt":"0001-01-01T00:00:00Z","author":{"__typename":"Bot","login":"gh-bot","id":"bot-node-id"},"category":{"id":"C1","name":"General","slug":"general","emoji":"","isAnswerable":false},"answerChosenBy":null,"labels":{"nodes":[]},"reactionGroups":[],"createdAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","closedAt":"0001-01-01T00:00:00Z","locked":false}`)},
 			wantLen:   1,
 			wantTotal: 1,
 			wantDisc: &Discussion{
-				ID:     "D_bot",
-				Number: 1,
-				Title:  "Bot post",
-				Author: DiscussionActor{ID: "bot-node-id", Login: "gh-bot", Name: ""},
-				Category: DiscussionCategory{ID: "C1", Name: "General", Slug: "general"},
-				Labels:   []DiscussionLabel{},
-				Comments: DiscussionCommentList{},
+				ID:        "D_bot",
+				Number:    1,
+				Title:     "Bot post",
+				Author:    DiscussionActor{ID: "bot-node-id", Login: "gh-bot", Name: ""},
+				Category:  DiscussionCategory{ID: "C1", Name: "General", Slug: "general"},
+				Labels:    []DiscussionLabel{},
+				Comments:  DiscussionCommentList{},
 				CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 				UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 			},
@@ -381,18 +381,18 @@ func TestSearch(t *testing.T) {
 	emptyResp := searchResp(false, "", 0, "")
 
 	tests := []struct {
-		name          string
-		filters       SearchFilters
-		after         string
-		limit         int
-		responses     []string
-		checkVarsFns  []func(*testing.T, map[string]interface{})
-		wantErr       string
-		wantTotal     int
-		wantLen       int
-		wantCursor    string
-		wantTitles    []string
-		wantDisc      *Discussion
+		name         string
+		filters      SearchFilters
+		after        string
+		limit        int
+		responses    []string
+		checkVarsFns []func(*testing.T, map[string]interface{})
+		wantErr      string
+		wantTotal    int
+		wantLen      int
+		wantCursor   string
+		wantTitles   []string
+		wantDisc     *Discussion
 	}{
 		{
 			name:      "maps all fields",
@@ -402,20 +402,20 @@ func TestSearch(t *testing.T) {
 			wantLen:   1,
 			wantDisc: &Discussion{
 				ID: "D_rich1", Number: 42, Title: "Rich search result", Body: "body text here",
-				URL:         "https://github.com/OWNER/REPO/discussions/42",
-				Closed:      true,
-				StateReason: "RESOLVED",
-				Author:      DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
-				Category:    DiscussionCategory{ID: "C1", Name: "Q&A", Slug: "q-a", Emoji: ":question:", IsAnswerable: true},
-				Labels:      []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}},
-				Answered:    true,
+				URL:            "https://github.com/OWNER/REPO/discussions/42",
+				Closed:         true,
+				StateReason:    "RESOLVED",
+				Author:         DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
+				Category:       DiscussionCategory{ID: "C1", Name: "Q&A", Slug: "q-a", Emoji: ":question:", IsAnswerable: true},
+				Labels:         []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}},
+				Answered:       true,
 				AnswerChosenAt: time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC),
 				AnswerChosenBy: &DiscussionActor{ID: "U2", Login: "bob", Name: "Bob"},
-				Comments:    DiscussionCommentList{},
-				CreatedAt:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-				UpdatedAt:   time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
-				ClosedAt:    time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
-				Locked:      true,
+				Comments:       DiscussionCommentList{},
+				CreatedAt:      time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt:      time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC),
+				ClosedAt:       time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+				Locked:         true,
 			},
 		},
 		{
@@ -675,10 +675,10 @@ func TestListCategories(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
 
 	tests := []struct {
-		name       string
-		response   string
-		wantErr    string
-		wantCats   []DiscussionCategory
+		name     string
+		response string
+		wantErr  string
+		wantCats []DiscussionCategory
 	}{
 		{
 			name: "maps all fields",
