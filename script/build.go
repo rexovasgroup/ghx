@@ -12,6 +12,9 @@
 //     - GH_OAUTH_CLIENT_SECRET
 //     - SOURCE_DATE_EPOCH: enables reproducible builds
 //     - GO_LDFLAGS
+//     - GO_BUILDTAGS: comma-separated build tags; known tags include:
+//       - "updateable": enable update notifications (used by Homebrew)
+//       - "notelemetry": telemetry disabled by default (users can still opt in)
 //
 //   manpages:
 //     Builds the man pages under `share/man/man1/`.

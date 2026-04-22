@@ -691,7 +691,7 @@ var Options = []ConfigOption{
 	{
 		Key:           telemetryKey,
 		Description:   "whether telemetry is enabled, disabled, or logging",
-		DefaultValue:  "enabled",
+		DefaultValue:  defaultTelemetryState,
 		AllowedValues: []string{"enabled", "disabled", "log"},
 		CurrentValue: func(c gh.Config, hostname string) string {
 			return c.Telemetry().Value
