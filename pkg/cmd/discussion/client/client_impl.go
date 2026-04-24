@@ -11,6 +11,9 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// maxPageSize is the maximum number of items per page allowed by the GitHub GraphQL API.
+const maxPageSize = 100
+
 type discussionClient struct {
 	gql *api.Client
 }
@@ -171,15 +174,9 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 		}
 	}
 
-	perPage := limit
-	if perPage > 100 {
-		perPage = 100
-	}
-
 	variables := map[string]interface{}{
 		"owner":      githubv4.String(repo.RepoOwner()),
 		"name":       githubv4.String(repo.RepoName()),
-		"first":      githubv4.Int(perPage),
 		"after":      (*githubv4.String)(nil),
 		"orderBy":    githubv4.DiscussionOrder{Field: orderField, Direction: orderDir},
 		"categoryId": (*githubv4.ID)(nil),
@@ -214,6 +211,7 @@ func (c *discussionClient) List(repo ghrepo.Interface, filters ListFilters, afte
 	remaining := limit
 
 	for {
+		variables["first"] = githubv4.Int(min(remaining, maxPageSize))
 		if err := c.gql.Query(repo.RepoHost(), "DiscussionList", &query, variables); err != nil {
 			return nil, err
 		}
@@ -318,14 +316,8 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 		searchQuery += " " + filters.Keywords
 	}
 
-	perPage := limit
-	if perPage > 100 {
-		perPage = 100
-	}
-
 	variables := map[string]interface{}{
 		"query": githubv4.String(searchQuery),
-		"first": githubv4.Int(perPage),
 		"after": (*githubv4.String)(nil),
 	}
 	if after != "" {
@@ -336,6 +328,7 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 	remaining := limit
 
 	for {
+		variables["first"] = githubv4.Int(min(remaining, maxPageSize))
 		if err := c.gql.Query(repo.RepoHost(), "DiscussionListSearch", &query, variables); err != nil {
 			return nil, err
 		}
