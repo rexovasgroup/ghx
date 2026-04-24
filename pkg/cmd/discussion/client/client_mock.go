@@ -30,7 +30,7 @@ var _ DiscussionClient = &DiscussionClientMock{}
 //			GetByNumberFunc: func(repo ghrepo.Interface, number int) (*Discussion, error) {
 //				panic("mock out the GetByNumber method")
 //			},
-//			GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, order string) (*Discussion, error) {
+//			GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*Discussion, error) {
 //				panic("mock out the GetWithComments method")
 //			},
 //			ListFunc: func(repo ghrepo.Interface, filters ListFilters, after string, limit int) (*DiscussionListResult, error) {
@@ -80,7 +80,7 @@ type DiscussionClientMock struct {
 	GetByNumberFunc func(repo ghrepo.Interface, number int) (*Discussion, error)
 
 	// GetWithCommentsFunc mocks the GetWithComments method.
-	GetWithCommentsFunc func(repo ghrepo.Interface, number int, commentLimit int, order string) (*Discussion, error)
+	GetWithCommentsFunc func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*Discussion, error)
 
 	// ListFunc mocks the List method.
 	ListFunc func(repo ghrepo.Interface, filters ListFilters, after string, limit int) (*DiscussionListResult, error)
@@ -153,8 +153,10 @@ type DiscussionClientMock struct {
 			Number int
 			// CommentLimit is the commentLimit argument value.
 			CommentLimit int
-			// Order is the order argument value.
-			Order string
+			// After is the after argument value.
+			After string
+			// Newest is the newest argument value.
+			Newest bool
 		}
 		// List holds details about calls to the List method.
 		List []struct {
@@ -401,7 +403,7 @@ func (mock *DiscussionClientMock) GetByNumberCalls() []struct {
 }
 
 // GetWithComments calls GetWithCommentsFunc.
-func (mock *DiscussionClientMock) GetWithComments(repo ghrepo.Interface, number int, commentLimit int, order string) (*Discussion, error) {
+func (mock *DiscussionClientMock) GetWithComments(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*Discussion, error) {
 	if mock.GetWithCommentsFunc == nil {
 		panic("DiscussionClientMock.GetWithCommentsFunc: method is nil but DiscussionClient.GetWithComments was just called")
 	}
@@ -409,17 +411,19 @@ func (mock *DiscussionClientMock) GetWithComments(repo ghrepo.Interface, number 
 		Repo         ghrepo.Interface
 		Number       int
 		CommentLimit int
-		Order        string
+		After        string
+		Newest       bool
 	}{
 		Repo:         repo,
 		Number:       number,
 		CommentLimit: commentLimit,
-		Order:        order,
+		After:        after,
+		Newest:       newest,
 	}
 	mock.lockGetWithComments.Lock()
 	mock.calls.GetWithComments = append(mock.calls.GetWithComments, callInfo)
 	mock.lockGetWithComments.Unlock()
-	return mock.GetWithCommentsFunc(repo, number, commentLimit, order)
+	return mock.GetWithCommentsFunc(repo, number, commentLimit, after, newest)
 }
 
 // GetWithCommentsCalls gets all the calls that were made to GetWithComments.
@@ -430,13 +434,15 @@ func (mock *DiscussionClientMock) GetWithCommentsCalls() []struct {
 	Repo         ghrepo.Interface
 	Number       int
 	CommentLimit int
-	Order        string
+	After        string
+	Newest       bool
 } {
 	var calls []struct {
 		Repo         ghrepo.Interface
 		Number       int
 		CommentLimit int
-		Order        string
+		After        string
+		Newest       bool
 	}
 	mock.lockGetWithComments.RLock()
 	calls = mock.calls.GetWithComments

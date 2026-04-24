@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -355,9 +356,8 @@ func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Disc
 	var query struct {
 		Repository struct {
 			HasDiscussionsEnabled bool
-			Discussion            *struct {
+			Discussion            struct {
 				discussionListNode
-				Body     string
 				Comments struct {
 					TotalCount int
 				}
@@ -371,19 +371,15 @@ func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Disc
 		"number": githubv4.Int(number),
 	}
 
-	err := c.gql.Query(repo.RepoHost(), "DiscussionByNumber", &query, variables)
+	err := c.gql.Query(repo.RepoHost(), "DiscussionMinimal", &query, variables)
 	if err != nil {
 		return nil, err
 	}
 	if !query.Repository.HasDiscussionsEnabled {
 		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 	}
-	if query.Repository.Discussion == nil {
-		return nil, fmt.Errorf("discussion #%d not found in '%s/%s'", number, repo.RepoOwner(), repo.RepoName())
-	}
 
 	d := mapDiscussionFromListNode(query.Repository.Discussion.discussionListNode)
-	d.Body = query.Repository.Discussion.Body
 	d.Comments = DiscussionCommentList{TotalCount: query.Repository.Discussion.Comments.TotalCount}
 
 	for _, rg := range query.Repository.Discussion.ReactionGroups {
@@ -396,12 +392,19 @@ func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Disc
 	return &d, nil
 }
 
-func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, commentLimit int, order string) (*Discussion, error) {
+func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, limit int, after string, newest bool) (*Discussion, error) {
 	// Build the comments field with first/last based on order.
-	// "oldest" uses first (chronological), "newest" uses last (reverse chronological).
+	// oldest uses first+after (chronological), newest uses last+before (reverse).
 	commentDirection := "first"
-	if order == "newest" {
+	cursorDirection := "after"
+	if newest {
 		commentDirection = "last"
+		cursorDirection = "before"
+	}
+
+	cursorArg := ""
+	if after != "" {
+		cursorArg = fmt.Sprintf(`, %s: "%s"`, cursorDirection, after)
 	}
 
 	query := fmt.Sprintf(`query DiscussionWithComments($owner: String!, $name: String!, $number: Int!) {
@@ -426,8 +429,14 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 				updatedAt
 				closedAt
 				locked
-				comments(%s: %d) {
+				comments(%s: %d%s) {
 					totalCount
+					pageInfo {
+						endCursor
+						hasNextPage
+						startCursor
+						hasPreviousPage
+					}
 					nodes {
 						id
 						url
@@ -437,7 +446,7 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 						isAnswer
 						upvoteCount
 						reactionGroups { content users { totalCount } }
-						replies(first: 4) {
+						replies(last: 4) {
 							totalCount
 							nodes {
 								id
@@ -454,7 +463,7 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 				}
 			}
 		}
-	}`, commentDirection, commentLimit)
+	}`, commentDirection, limit, cursorArg)
 
 	variables := map[string]interface{}{
 		"owner":  repo.RepoOwner(),
@@ -525,8 +534,14 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 				ClosedAt       time.Time           `json:"closedAt"`
 				Locked         bool                `json:"locked"`
 				Comments       struct {
-					TotalCount int           `json:"totalCount"`
-					Nodes      []commentJSON `json:"nodes"`
+					TotalCount int `json:"totalCount"`
+					PageInfo   struct {
+						EndCursor       string `json:"endCursor"`
+						HasNextPage     bool   `json:"hasNextPage"`
+						StartCursor     string `json:"startCursor"`
+						HasPreviousPage bool   `json:"hasPreviousPage"`
+					} `json:"pageInfo"`
+					Nodes []commentJSON `json:"nodes"`
 				} `json:"comments"`
 			} `json:"discussion"`
 		} `json:"repository"`
@@ -570,9 +585,9 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 			ReactionGroups: mapReactions(c.ReactionGroups),
 		}
 		if c.Replies != nil {
-			dc.TotalReplies = c.Replies.TotalCount
-			for _, r := range c.Replies.Nodes {
-				dc.Replies = append(dc.Replies, DiscussionComment{
+			replyComments := make([]DiscussionComment, len(c.Replies.Nodes))
+			for i, r := range c.Replies.Nodes {
+				replyComments[i] = DiscussionComment{
 					ID:             r.ID,
 					URL:            r.URL,
 					Author:         mapActor(r.Author),
@@ -581,7 +596,12 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 					IsAnswer:       r.IsAnswer,
 					UpvoteCount:    r.UpvoteCount,
 					ReactionGroups: mapReactions(r.ReactionGroups),
-				})
+				}
+			}
+			dc.Replies = DiscussionCommentList{
+				Comments:   replyComments,
+				TotalCount: c.Replies.TotalCount,
+				Direction:  DiscussionCommentListDirectionBackward, // Since we always fetch the last 4 replies
 			}
 		}
 		return dc
@@ -629,15 +649,32 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, co
 
 	// When using "last" (newest order), the API returns items in chronological
 	// order. Reverse them so the newest comment appears first.
-	if order == "newest" {
-		for i, j := 0, len(comments)-1; i < j; i, j = i+1, j-1 {
-			comments[i], comments[j] = comments[j], comments[i]
+	if newest {
+		slices.Reverse(comments)
+	}
+
+	nextCursor := ""
+	if newest {
+		if src.Comments.PageInfo.HasPreviousPage {
+			nextCursor = src.Comments.PageInfo.StartCursor
 		}
+	} else {
+		if src.Comments.PageInfo.HasNextPage {
+			nextCursor = src.Comments.PageInfo.EndCursor
+		}
+	}
+
+	direction := DiscussionCommentListDirectionForward
+	if newest {
+		direction = DiscussionCommentListDirectionBackward
 	}
 
 	d.Comments = DiscussionCommentList{
 		Comments:   comments,
 		TotalCount: src.Comments.TotalCount,
+		Cursor:     after,
+		NextCursor: nextCursor,
+		Direction:  direction,
 	}
 
 	return &d, nil

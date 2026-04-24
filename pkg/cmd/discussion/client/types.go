@@ -82,10 +82,17 @@ func (d Discussion) ExportData(fields []string) map[string]interface{} {
 			for i, c := range d.Comments.Comments {
 				comments[i] = c.Export()
 			}
-			data[f] = map[string]interface{}{
+			m := map[string]interface{}{
 				"totalCount": d.Comments.TotalCount,
 				"nodes":      comments,
 			}
+			if d.Comments.Cursor != "" {
+				m["cursor"] = d.Comments.Cursor
+			}
+			if d.Comments.NextCursor != "" {
+				m["next"] = d.Comments.NextCursor
+			}
+			data[f] = m
 		case "reactionGroups":
 			reactions := make([]interface{}, len(d.ReactionGroups))
 			for i, rg := range d.ReactionGroups {
@@ -171,14 +178,13 @@ type DiscussionComment struct {
 	IsAnswer       bool
 	UpvoteCount    int
 	ReactionGroups []ReactionGroup
-	Replies        []DiscussionComment
-	TotalReplies   int
+	Replies        DiscussionCommentList
 }
 
 // Export returns the comment as a map for JSON output.
 func (c DiscussionComment) Export() map[string]interface{} {
-	replies := make([]interface{}, len(c.Replies))
-	for i, r := range c.Replies {
+	replies := make([]interface{}, len(c.Replies.Comments))
+	for i, r := range c.Replies.Comments {
 		replies[i] = r.Export()
 	}
 	reactions := make([]interface{}, len(c.ReactionGroups))
@@ -194,15 +200,27 @@ func (c DiscussionComment) Export() map[string]interface{} {
 		"isAnswer":       c.IsAnswer,
 		"upvoteCount":    c.UpvoteCount,
 		"reactionGroups": reactions,
-		"replies":        replies,
-		"totalReplies":   c.TotalReplies,
+		"replies": map[string]interface{}{
+			"totalCount": c.Replies.TotalCount,
+			"nodes":      replies,
+		},
 	}
 }
+
+type DiscussionCommentListDirection string
+
+const (
+	DiscussionCommentListDirectionForward  DiscussionCommentListDirection = "forward"
+	DiscussionCommentListDirectionBackward DiscussionCommentListDirection = "backward"
+)
 
 // DiscussionCommentList represents a paginated list of comments on a discussion.
 type DiscussionCommentList struct {
 	Comments   []DiscussionComment
 	TotalCount int
+	Cursor     string
+	NextCursor string
+	Direction  DiscussionCommentListDirection
 }
 
 // ReactionGroup represents a set of reactions of the same type.

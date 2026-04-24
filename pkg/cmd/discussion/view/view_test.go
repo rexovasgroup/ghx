@@ -8,7 +8,6 @@ import (
 	"github.com/cli/cli/v2/internal/browser"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/cmd/discussion/client"
-	"github.com/cli/cli/v2/pkg/cmd/discussion/shared"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/stretchr/testify/assert"
@@ -192,7 +191,7 @@ func TestViewRun_json(t *testing.T) {
 	}
 
 	exporter := cmdutil.NewJSONExporter()
-	exporter.SetFields(shared.DiscussionFields)
+	exporter.SetFields(discussionFields)
 
 	opts := &ViewOptions{
 		IO: ios,
@@ -367,16 +366,18 @@ func testDiscussionWithComments() *client.Discussion {
 				ReactionGroups: []client.ReactionGroup{
 					{Content: "THUMBS_UP", TotalCount: 3},
 				},
-				Replies: []client.DiscussionComment{
-					{
-						ID:        "C_1_R1",
-						URL:       "https://github.com/OWNER/REPO/discussions/123#discussioncomment-2",
-						Author:    client.DiscussionActor{Login: "hubot"},
-						Body:      "Thanks!",
-						CreatedAt: time.Date(2025, 3, 2, 1, 0, 0, 0, time.UTC),
+				Replies: client.DiscussionCommentList{
+					TotalCount: 5,
+					Comments: []client.DiscussionComment{
+						{
+							ID:        "C_1_R1",
+							URL:       "https://github.com/OWNER/REPO/discussions/123#discussioncomment-2",
+							Author:    client.DiscussionActor{Login: "hubot"},
+							Body:      "Thanks!",
+							CreatedAt: time.Date(2025, 3, 2, 1, 0, 0, 0, time.UTC),
+						},
 					},
 				},
-				TotalReplies: 5,
 			},
 			{
 				ID:        "C_2",
@@ -397,9 +398,9 @@ func TestViewRun_comments_tty(t *testing.T) {
 
 	d := testDiscussionWithComments()
 	mock := &client.DiscussionClientMock{
-		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, order string) (*client.Discussion, error) {
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
 			assert.Equal(t, 30, commentLimit)
-			assert.Equal(t, "oldest", order)
+			assert.Equal(t, false, newest)
 			return d, nil
 		},
 	}
@@ -414,6 +415,7 @@ func TestViewRun_comments_tty(t *testing.T) {
 		},
 		DiscussionNumber: 123,
 		Comments:         true,
+		Limit:            30,
 		Order:            "oldest",
 		Now:              func() time.Time { return time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC) },
 	}
@@ -439,7 +441,7 @@ func TestViewRun_comments_nontty(t *testing.T) {
 
 	d := testDiscussionWithComments()
 	mock := &client.DiscussionClientMock{
-		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, order string) (*client.Discussion, error) {
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
 			return d, nil
 		},
 	}
@@ -454,6 +456,7 @@ func TestViewRun_comments_nontty(t *testing.T) {
 		},
 		DiscussionNumber: 123,
 		Comments:         true,
+		Limit:            30,
 		Order:            "oldest",
 		Now:              time.Now,
 	}
@@ -475,13 +478,13 @@ func TestViewRun_comments_json(t *testing.T) {
 
 	d := testDiscussionWithComments()
 	mock := &client.DiscussionClientMock{
-		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, order string) (*client.Discussion, error) {
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
 			return d, nil
 		},
 	}
 
 	exporter := cmdutil.NewJSONExporter()
-	exporter.SetFields(shared.DiscussionFields)
+	exporter.SetFields(discussionFields)
 
 	opts := &ViewOptions{
 		IO: ios,
@@ -493,6 +496,7 @@ func TestViewRun_comments_json(t *testing.T) {
 		},
 		DiscussionNumber: 123,
 		Comments:         true,
+		Limit:            30,
 		Order:            "oldest",
 		Exporter:         exporter,
 		Now:              time.Now,
@@ -558,4 +562,221 @@ func TestViewRun_noComments_usesGetByNumber(t *testing.T) {
 
 	assert.Equal(t, 1, len(mock.GetByNumberCalls()))
 	assert.Equal(t, 0, len(mock.GetWithCommentsCalls()))
+}
+
+func TestNewCmdView_limitWithoutComments(t *testing.T) {
+	f := &cmdutil.Factory{}
+	ios, _, _, _ := iostreams.Test()
+	f.IOStreams = ios
+	f.BaseRepo = func() (ghrepo.Interface, error) {
+		return ghrepo.New("OWNER", "REPO"), nil
+	}
+	f.Browser = &browser.Stub{}
+
+	cmd := NewCmdView(f, func(opts *ViewOptions) error {
+		return nil
+	})
+
+	cmd.SetArgs([]string{"123", "--limit", "10"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--limit requires --comments")
+}
+
+func TestNewCmdView_afterWithoutComments(t *testing.T) {
+	f := &cmdutil.Factory{}
+	ios, _, _, _ := iostreams.Test()
+	f.IOStreams = ios
+	f.BaseRepo = func() (ghrepo.Interface, error) {
+		return ghrepo.New("OWNER", "REPO"), nil
+	}
+	f.Browser = &browser.Stub{}
+
+	cmd := NewCmdView(f, func(opts *ViewOptions) error {
+		return nil
+	})
+
+	cmd.SetArgs([]string{"123", "--after", "CURSOR_ABC"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--after requires --comments")
+}
+
+func TestNewCmdView_invalidLimit(t *testing.T) {
+	f := &cmdutil.Factory{}
+	ios, _, _, _ := iostreams.Test()
+	f.IOStreams = ios
+	f.BaseRepo = func() (ghrepo.Interface, error) {
+		return ghrepo.New("OWNER", "REPO"), nil
+	}
+	f.Browser = &browser.Stub{}
+
+	cmd := NewCmdView(f, func(opts *ViewOptions) error {
+		return nil
+	})
+
+	cmd.SetArgs([]string{"123", "--comments", "--limit", "0"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid limit")
+}
+
+func TestViewRun_commentsWithPagination_tty(t *testing.T) {
+	ios, _, stdout, _ := iostreams.Test()
+	ios.SetStdoutTTY(true)
+	ios.SetStderrTTY(true)
+
+	d := testDiscussionWithComments()
+	d.Comments.NextCursor = "NEXT_CURSOR_123"
+
+	mock := &client.DiscussionClientMock{
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
+			assert.Equal(t, 10, commentLimit)
+			assert.Equal(t, "CURSOR_ABC", after)
+			assert.Equal(t, false, newest)
+			return d, nil
+		},
+	}
+
+	opts := &ViewOptions{
+		IO: ios,
+		BaseRepo: func() (ghrepo.Interface, error) {
+			return ghrepo.New("OWNER", "REPO"), nil
+		},
+		Client: func() (client.DiscussionClient, error) {
+			return mock, nil
+		},
+		DiscussionNumber: 123,
+		Comments:         true,
+		Limit:            10,
+		After:            "CURSOR_ABC",
+		Order:            "oldest",
+		Now:              func() time.Time { return time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC) },
+	}
+
+	err := viewRun(opts)
+	require.NoError(t, err)
+
+	out := stdout.String()
+	assert.Contains(t, out, "To see more comments, pass: --after NEXT_CURSOR_123")
+}
+
+func TestViewRun_commentsWithPagination_nontty(t *testing.T) {
+	ios, _, stdout, _ := iostreams.Test()
+	ios.SetStdoutTTY(false)
+
+	d := testDiscussionWithComments()
+	d.Comments.NextCursor = "NEXT_CURSOR_456"
+
+	mock := &client.DiscussionClientMock{
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
+			return d, nil
+		},
+	}
+
+	opts := &ViewOptions{
+		IO: ios,
+		BaseRepo: func() (ghrepo.Interface, error) {
+			return ghrepo.New("OWNER", "REPO"), nil
+		},
+		Client: func() (client.DiscussionClient, error) {
+			return mock, nil
+		},
+		DiscussionNumber: 123,
+		Comments:         true,
+		Limit:            30,
+		Order:            "oldest",
+		Now:              time.Now,
+	}
+
+	err := viewRun(opts)
+	require.NoError(t, err)
+
+	out := stdout.String()
+	assert.Contains(t, out, "next:\tNEXT_CURSOR_456")
+}
+
+func TestViewRun_commentsWithPagination_json(t *testing.T) {
+	ios, _, stdout, _ := iostreams.Test()
+	ios.SetStdoutTTY(false)
+
+	d := testDiscussionWithComments()
+	d.Comments.Cursor = "PREV_CURSOR"
+	d.Comments.NextCursor = "NEXT_CURSOR_789"
+
+	mock := &client.DiscussionClientMock{
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
+			return d, nil
+		},
+	}
+
+	exporter := cmdutil.NewJSONExporter()
+	exporter.SetFields(discussionFields)
+
+	opts := &ViewOptions{
+		IO: ios,
+		BaseRepo: func() (ghrepo.Interface, error) {
+			return ghrepo.New("OWNER", "REPO"), nil
+		},
+		Client: func() (client.DiscussionClient, error) {
+			return mock, nil
+		},
+		DiscussionNumber: 123,
+		Comments:         true,
+		Limit:            30,
+		Order:            "oldest",
+		Exporter:         exporter,
+		Now:              time.Now,
+	}
+
+	err := viewRun(opts)
+	require.NoError(t, err)
+
+	out := stdout.String()
+	assert.Contains(t, out, `"cursor":"PREV_CURSOR"`)
+	assert.Contains(t, out, `"next":"NEXT_CURSOR_789"`)
+}
+
+func TestViewRun_noPaginationCursor_tty(t *testing.T) {
+	ios, _, stdout, _ := iostreams.Test()
+	ios.SetStdoutTTY(true)
+	ios.SetStderrTTY(true)
+
+	d := testDiscussionWithComments()
+
+	mock := &client.DiscussionClientMock{
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
+			return d, nil
+		},
+	}
+
+	opts := &ViewOptions{
+		IO: ios,
+		BaseRepo: func() (ghrepo.Interface, error) {
+			return ghrepo.New("OWNER", "REPO"), nil
+		},
+		Client: func() (client.DiscussionClient, error) {
+			return mock, nil
+		},
+		DiscussionNumber: 123,
+		Comments:         true,
+		Limit:            30,
+		Order:            "oldest",
+		Now:              func() time.Time { return time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC) },
+	}
+
+	err := viewRun(opts)
+	require.NoError(t, err)
+
+	out := stdout.String()
+	assert.NotContains(t, out, "--after")
 }

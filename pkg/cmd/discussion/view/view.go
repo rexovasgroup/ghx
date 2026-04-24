@@ -19,6 +19,55 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var discussionFields = []string{
+	"id",
+	"number",
+	"title",
+	"body",
+	"url",
+	"closed",
+	"state",
+	"stateReason",
+	"author",
+	"category",
+	"labels",
+	"answered",
+	"answerChosenAt",
+	"answerChosenBy",
+	"comments",
+	"reactionGroups",
+	"createdAt",
+	"updatedAt",
+	"closedAt",
+	"locked",
+}
+
+var reactionEmoji = map[string]string{
+	"THUMBS_UP":   "\U0001f44d",
+	"THUMBS_DOWN": "\U0001f44e",
+	"LAUGH":       "\U0001f604",
+	"HOORAY":      "\U0001f389",
+	"CONFUSED":    "\U0001f615",
+	"HEART":       "\u2764\ufe0f",
+	"ROCKET":      "\U0001f680",
+	"EYES":        "\U0001f440",
+}
+
+func reactionGroupList(groups []client.ReactionGroup) string {
+	var parts []string
+	for _, g := range groups {
+		if g.TotalCount == 0 {
+			continue
+		}
+		emoji := reactionEmoji[g.Content]
+		if emoji == "" {
+			emoji = g.Content
+		}
+		parts = append(parts, fmt.Sprintf("%s %d", emoji, g.TotalCount))
+	}
+	return strings.Join(parts, " • ")
+}
+
 // ViewOptions holds the configuration for the view command.
 type ViewOptions struct {
 	IO       *iostreams.IOStreams
@@ -29,6 +78,8 @@ type ViewOptions struct {
 	DiscussionNumber int
 	WebMode          bool
 	Comments         bool
+	Limit            int
+	After            string
 	Order            string
 	Exporter         cmdutil.Exporter
 	Now              func() time.Time
@@ -50,6 +101,7 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 
 			With %[1]s--comments%[1]s flag, show threaded comments on the discussion.
 			Use %[1]s--order%[1]s to control comment ordering (oldest or newest first).
+			Use %[1]s--limit%[1]s and %[1]s--after%[1]s for paginating through comments.
 
 			With %[1]s--web%[1]s flag, open the discussion in a web browser instead.
 		`, "`"),
@@ -64,7 +116,13 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 			$ gh discussion view 123 --comments
 
 			# View with newest comments first
-			$ gh discussion view 123 --comments --order newest
+			$ gh discussion view 123 --comments --order oldest
+
+			# Limit to 10 comments
+			$ gh discussion view 123 --comments --limit 10
+
+			# Fetch the next page of comments
+			$ gh discussion view 123 --comments --after CURSOR
 
 			# Open in browser
 			$ gh discussion view 123 --web
@@ -73,6 +131,15 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("order") && !opts.Comments {
 				return cmdutil.FlagErrorf("--order requires --comments")
+			}
+			if cmd.Flags().Changed("limit") && !opts.Comments {
+				return cmdutil.FlagErrorf("--limit requires --comments")
+			}
+			if cmd.Flags().Changed("after") && !opts.Comments {
+				return cmdutil.FlagErrorf("--after requires --comments")
+			}
+			if opts.Limit < 1 {
+				return cmdutil.FlagErrorf("invalid limit: %d", opts.Limit)
 			}
 
 			number, repo, err := shared.ParseDiscussionArg(args[0])
@@ -100,8 +167,10 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 
 	cmd.Flags().BoolVarP(&opts.WebMode, "web", "w", false, "Open a discussion in the browser")
 	cmd.Flags().BoolVarP(&opts.Comments, "comments", "c", false, "View discussion comments")
-	cmdutil.StringEnumFlag(cmd, &opts.Order, "order", "", "oldest", []string{"oldest", "newest"}, "Order of comments")
-	cmdutil.AddJSONFlags(cmd, &opts.Exporter, shared.DiscussionFields)
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum number of comments to fetch")
+	cmd.Flags().StringVar(&opts.After, "after", "", "Cursor for the next page of comments")
+	cmdutil.StringEnumFlag(cmd, &opts.Order, "order", "", "newest", []string{"oldest", "newest"}, "Order of comments")
+	cmdutil.AddJSONFlags(cmd, &opts.Exporter, discussionFields)
 
 	return cmd
 }
@@ -130,7 +199,7 @@ func viewRun(opts *ViewOptions) error {
 
 	var discussion *client.Discussion
 	if opts.Comments {
-		discussion, err = c.GetWithComments(repo, opts.DiscussionNumber, 30, opts.Order)
+		discussion, err = c.GetWithComments(repo, opts.DiscussionNumber, opts.Limit, opts.After, opts.Order == "newest")
 	} else {
 		discussion, err = c.GetByNumber(repo, opts.DiscussionNumber)
 	}
@@ -209,7 +278,7 @@ func printHumanView(opts *ViewOptions, d *client.Discussion) error {
 	}
 	fmt.Fprintf(out, "\n%s\n", md)
 
-	if reactions := shared.ReactionGroupList(d.ReactionGroups); reactions != "" {
+	if reactions := reactionGroupList(d.ReactionGroups); reactions != "" {
 		fmt.Fprintln(out, reactions)
 		fmt.Fprintln(out)
 	}
@@ -226,7 +295,19 @@ func printHumanView(opts *ViewOptions, d *client.Discussion) error {
 		}
 
 		if shown := len(d.Comments.Comments); shown < d.Comments.TotalCount {
-			fmt.Fprintf(out, cs.Muted("  And %d more comments\n"), d.Comments.TotalCount-shown)
+			remaining := d.Comments.TotalCount - shown
+			age := "more"
+			if d.Comments.Direction == client.DiscussionCommentListDirectionForward {
+				age = "newer"
+			} else if d.Comments.Direction == client.DiscussionCommentListDirectionBackward {
+				age = "older"
+			}
+			fmt.Fprintf(out, cs.Muted("  And %d %s comments\n"), remaining, age)
+			fmt.Fprintln(out)
+		}
+
+		if d.Comments.NextCursor != "" {
+			fmt.Fprintf(out, cs.Muted("To see more comments, pass: --after %s\n"), d.Comments.NextCursor)
 			fmt.Fprintln(out)
 		}
 	}
@@ -247,6 +328,9 @@ func printRawView(out io.Writer, d *client.Discussion, showComments bool) error 
 	fmt.Fprintf(out, "author:\t%s\n", d.Author.Login)
 	fmt.Fprintf(out, "labels:\t%s\n", labelList(d.Labels, nil))
 	fmt.Fprintf(out, "comments:\t%d\n", d.Comments.TotalCount)
+	if showComments && d.Comments.NextCursor != "" {
+		fmt.Fprintf(out, "next:\t%s\n", d.Comments.NextCursor)
+	}
 	fmt.Fprintf(out, "number:\t%d\n", d.Number)
 	fmt.Fprintf(out, "url:\t%s\n", d.URL)
 	fmt.Fprintln(out, "--")
@@ -288,20 +372,26 @@ func printHumanComment(opts *ViewOptions, out io.Writer, c client.DiscussionComm
 		fmt.Fprint(out, md)
 	}
 
-	if reactions := shared.ReactionGroupList(c.ReactionGroups); reactions != "" {
+	if reactions := reactionGroupList(c.ReactionGroups); reactions != "" {
 		fmt.Fprintf(out, "%s%s\n", indent, reactions)
 	}
 
 	fmt.Fprintln(out)
 
-	for _, reply := range c.Replies {
+	for _, reply := range c.Replies.Comments {
 		if err := printHumanComment(opts, out, reply, indent+"  "); err != nil {
 			return err
 		}
 	}
 
-	if shown := len(c.Replies); shown < c.TotalReplies {
-		fmt.Fprintf(out, "%s  %s\n\n", indent, cs.Muted(fmt.Sprintf("And %d more replies", c.TotalReplies-shown)))
+	if shown := len(c.Replies.Comments); shown < c.Replies.TotalCount {
+		directionLabel := "more"
+		if c.Replies.Direction == client.DiscussionCommentListDirectionForward {
+			directionLabel = "newer"
+		} else if c.Replies.Direction == client.DiscussionCommentListDirectionBackward {
+			directionLabel = "older"
+		}
+		fmt.Fprintf(out, "%s  %s\n\n", indent, cs.Muted(fmt.Sprintf("And %d %s replies", c.Replies.TotalCount-shown, directionLabel)))
 	}
 
 	return nil
@@ -321,7 +411,7 @@ func printRawComment(out io.Writer, c client.DiscussionComment, indent string) {
 	}
 	fmt.Fprintln(out)
 
-	for _, reply := range c.Replies {
+	for _, reply := range c.Replies.Comments {
 		printRawComment(out, reply, indent+"  ")
 	}
 }
