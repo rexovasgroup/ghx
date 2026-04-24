@@ -77,7 +77,7 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 
 			number, repo, err := shared.ParseDiscussionArg(args[0])
 			if err != nil {
-				return err
+				return cmdutil.FlagErrorf("%s", err)
 			}
 
 			if repo != nil {
