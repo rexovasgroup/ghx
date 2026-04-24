@@ -26,12 +26,12 @@ func ParseDiscussionArg(arg string) (int, ghrepo.Interface, error) {
 
 	u, err := url.Parse(arg)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return 0, nil, fmt.Errorf("invalid discussion argument: %s", arg)
+		return 0, nil, fmt.Errorf("invalid discussion argument: %q", arg)
 	}
 
 	m := discussionURLRE.FindStringSubmatch(u.Path)
 	if m == nil {
-		return 0, nil, fmt.Errorf("invalid discussion URL: %s", arg)
+		return 0, nil, fmt.Errorf("invalid discussion URL: %q", arg)
 	}
 
 	num, _ := strconv.Atoi(m[3])
