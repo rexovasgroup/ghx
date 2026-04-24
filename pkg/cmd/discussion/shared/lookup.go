@@ -9,7 +9,7 @@ import (
 	"github.com/cli/cli/v2/internal/ghrepo"
 )
 
-var discussionURLRE = regexp.MustCompile(`^/([^/]+)/([^/]+)/discussions/(\d+)`)
+var discussionURLRE = regexp.MustCompile(`^/([^/]+)/([^/]+)/discussions/(\d+)$`)
 
 // ParseDiscussionArg parses a discussion number or URL from a command argument.
 // It returns the discussion number and, if the argument was a URL, a repo override.
