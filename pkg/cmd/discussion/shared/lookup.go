@@ -29,6 +29,9 @@ func ParseDiscussionArg(arg string) (int, ghrepo.Interface, error) {
 		return 0, nil, fmt.Errorf("invalid discussion argument: %q", arg)
 	}
 
+	// Note that an HTTP URL is also okay, because we're just using the URL to find
+	// the discussion number, repo and host, and we wont be unsecure HTTP API calls.
+
 	m := discussionURLRE.FindStringSubmatch(u.Path)
 	if m == nil {
 		return 0, nil, fmt.Errorf("invalid discussion URL: %q", arg)
