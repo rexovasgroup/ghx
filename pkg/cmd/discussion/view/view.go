@@ -3,7 +3,7 @@ package view
 import (
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -331,12 +331,13 @@ func labelList(labels []client.DiscussionLabel, cs *iostreams.ColorScheme) strin
 		return ""
 	}
 
-	sort.SliceStable(labels, func(i, j int) bool {
-		return strings.ToLower(labels[i].Name) < strings.ToLower(labels[j].Name)
+	sortedLabels := slices.Clone(labels)
+	slices.SortStableFunc(sortedLabels, func(i, j client.DiscussionLabel) int {
+		return strings.Compare(i.Name, j.Name)
 	})
 
-	names := make([]string, len(labels))
-	for i, l := range labels {
+	names := make([]string, len(sortedLabels))
+	for i, l := range sortedLabels {
 		if cs == nil {
 			names[i] = l.Name
 		} else {
