@@ -116,7 +116,7 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 			$ gh discussion view 123 --comments
 
 			# View with newest comments first
-			$ gh discussion view 123 --comments --order oldest
+			$ gh discussion view 123 --comments --order newest
 
 			# Limit to 10 comments
 			$ gh discussion view 123 --comments --limit 10
@@ -129,13 +129,14 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().Changed("order") && !opts.Comments {
+			commentsMode := opts.Comments || (opts.Exporter != nil && exporterNeedsComments(opts.Exporter))
+			if cmd.Flags().Changed("order") && !commentsMode {
 				return cmdutil.FlagErrorf("--order requires --comments")
 			}
-			if cmd.Flags().Changed("limit") && !opts.Comments {
+			if cmd.Flags().Changed("limit") && !commentsMode {
 				return cmdutil.FlagErrorf("--limit requires --comments")
 			}
-			if cmd.Flags().Changed("after") && !opts.Comments {
+			if cmd.Flags().Changed("after") && !commentsMode {
 				return cmdutil.FlagErrorf("--after requires --comments")
 			}
 			if opts.Limit < 1 {
@@ -175,6 +176,28 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 	return cmd
 }
 
+// exporterNeedsComments returns true when the JSON exporter requests the comments field.
+func exporterNeedsComments(exporter cmdutil.Exporter) bool {
+	for _, f := range exporter.Fields() {
+		if f == "comments" {
+			return true
+		}
+	}
+	return false
+}
+
+// needsComments returns true when the command should fetch full comment data,
+// either because --comments was set or because --json requested the comments field.
+func needsComments(opts *ViewOptions) bool {
+	if opts.Comments {
+		return true
+	}
+	if opts.Exporter != nil {
+		return exporterNeedsComments(opts.Exporter)
+	}
+	return false
+}
+
 func viewRun(opts *ViewOptions) error {
 	repo, err := opts.BaseRepo()
 	if err != nil {
@@ -198,7 +221,7 @@ func viewRun(opts *ViewOptions) error {
 	opts.IO.StartProgressIndicator()
 
 	var discussion *client.Discussion
-	if opts.Comments {
+	if needsComments(opts) {
 		discussion, err = c.GetWithComments(repo, opts.DiscussionNumber, opts.Limit, opts.After, opts.Order == "newest")
 	} else {
 		discussion, err = c.GetByNumber(repo, opts.DiscussionNumber)

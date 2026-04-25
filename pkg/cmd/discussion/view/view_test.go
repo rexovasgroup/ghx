@@ -183,9 +183,9 @@ func TestViewRun_json(t *testing.T) {
 	ios, _, stdout, _ := iostreams.Test()
 	ios.SetStdoutTTY(false)
 
-	d := testDiscussion()
+	d := testDiscussionWithComments()
 	mock := &client.DiscussionClientMock{
-		GetByNumberFunc: func(repo ghrepo.Interface, number int) (*client.Discussion, error) {
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
 			return d, nil
 		},
 	}
@@ -202,6 +202,8 @@ func TestViewRun_json(t *testing.T) {
 			return mock, nil
 		},
 		DiscussionNumber: 123,
+		Limit:            30,
+		Order:            "newest",
 		Exporter:         exporter,
 		Now:              time.Now,
 	}
@@ -779,4 +781,82 @@ func TestViewRun_noPaginationCursor_tty(t *testing.T) {
 
 	out := stdout.String()
 	assert.NotContains(t, out, "--after")
+}
+
+func TestViewRun_jsonComments_usesGetWithComments(t *testing.T) {
+	ios, _, stdout, _ := iostreams.Test()
+	ios.SetStdoutTTY(false)
+
+	d := testDiscussionWithComments()
+	mock := &client.DiscussionClientMock{
+		GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*client.Discussion, error) {
+			return d, nil
+		},
+	}
+
+	exporter := cmdutil.NewJSONExporter()
+	exporter.SetFields([]string{"comments"})
+
+	opts := &ViewOptions{
+		IO: ios,
+		BaseRepo: func() (ghrepo.Interface, error) {
+			return ghrepo.New("OWNER", "REPO"), nil
+		},
+		Client: func() (client.DiscussionClient, error) {
+			return mock, nil
+		},
+		DiscussionNumber: 123,
+		Comments:         false,
+		Limit:            30,
+		Order:            "newest",
+		Exporter:         exporter,
+		Now:              time.Now,
+	}
+
+	err := viewRun(opts)
+	require.NoError(t, err)
+
+	// --json comments should use GetWithComments even without --comments flag
+	assert.Equal(t, 0, len(mock.GetByNumberCalls()))
+	assert.Equal(t, 1, len(mock.GetWithCommentsCalls()))
+
+	out := stdout.String()
+	assert.Contains(t, out, `"totalCount"`)
+	assert.Contains(t, out, `"octocat"`)
+}
+
+func TestViewRun_jsonWithoutComments_usesGetByNumber(t *testing.T) {
+	ios, _, _, _ := iostreams.Test()
+	ios.SetStdoutTTY(false)
+
+	d := testDiscussion()
+	mock := &client.DiscussionClientMock{
+		GetByNumberFunc: func(repo ghrepo.Interface, number int) (*client.Discussion, error) {
+			return d, nil
+		},
+	}
+
+	exporter := cmdutil.NewJSONExporter()
+	exporter.SetFields([]string{"title", "number"})
+
+	opts := &ViewOptions{
+		IO: ios,
+		BaseRepo: func() (ghrepo.Interface, error) {
+			return ghrepo.New("OWNER", "REPO"), nil
+		},
+		Client: func() (client.DiscussionClient, error) {
+			return mock, nil
+		},
+		DiscussionNumber: 123,
+		Comments:         false,
+		Exporter:         exporter,
+		Now:              time.Now,
+	}
+
+	err := viewRun(opts)
+	require.NoError(t, err)
+
+	// --json title,number should NOT fetch comments
+	assert.Equal(t, 1, len(mock.GetByNumberCalls()))
+	assert.Equal(t, 0, len(mock.GetWithCommentsCalls()))
 }

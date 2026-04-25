@@ -393,21 +393,16 @@ func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Disc
 }
 
 func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, limit int, after string, newest bool) (*Discussion, error) {
-	// Build the comments field with first/last based on order.
-	// oldest uses first+after (chronological), newest uses last+before (reverse).
-	commentDirection := "first"
-	cursorDirection := "after"
+	// Use two static query shapes to avoid interpolating user input into the
+	// GraphQL document. The cursor is always passed as a variable.
+	var commentsArg string
 	if newest {
-		commentDirection = "last"
-		cursorDirection = "before"
+		commentsArg = "last: $limit, before: $cursor"
+	} else {
+		commentsArg = "first: $limit, after: $cursor"
 	}
 
-	cursorArg := ""
-	if after != "" {
-		cursorArg = fmt.Sprintf(`, %s: "%s"`, cursorDirection, after)
-	}
-
-	query := fmt.Sprintf(`query DiscussionWithComments($owner: String!, $name: String!, $number: Int!) {
+	query := fmt.Sprintf(`query DiscussionWithComments($owner: String!, $name: String!, $number: Int!, $limit: Int!, $cursor: String) {
 		repository(owner: $owner, name: $name) {
 			hasDiscussionsEnabled
 			discussion(number: $number) {
@@ -429,7 +424,7 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, li
 				updatedAt
 				closedAt
 				locked
-				comments(%s: %d%s) {
+				comments(%s) {
 					totalCount
 					pageInfo {
 						endCursor
@@ -463,12 +458,16 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, li
 				}
 			}
 		}
-	}`, commentDirection, limit, cursorArg)
+	}`, commentsArg)
 
 	variables := map[string]interface{}{
 		"owner":  repo.RepoOwner(),
 		"name":   repo.RepoName(),
 		"number": number,
+		"limit":  limit,
+	}
+	if after != "" {
+		variables["cursor"] = after
 	}
 
 	type actorJSON struct {
