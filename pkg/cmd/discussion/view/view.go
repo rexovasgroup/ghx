@@ -78,6 +78,7 @@ type ViewOptions struct {
 	DiscussionNumber int
 	WebMode          bool
 	Comments         bool
+	Replies          string
 	Limit            int
 	After            string
 	Order            string
@@ -103,6 +104,10 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 			Use %[1]s--order%[1]s to control comment ordering (oldest or newest first).
 			Use %[1]s--limit%[1]s and %[1]s--after%[1]s for paginating through comments.
 
+			With %[1]s--replies%[1]s flag, show paginated replies on a specific comment.
+			Pass the comment node ID (e.g. %[1]sDC_abc123%[1]s) to fetch its replies.
+			Use %[1]s--limit%[1]s, %[1]s--after%[1]s, and %[1]s--order%[1]s to control reply pagination.
+
 			With %[1]s--web%[1]s flag, open the discussion in a web browser instead.
 		`, "`"),
 		Example: heredoc.Doc(`
@@ -124,20 +129,34 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 			# Fetch the next page of comments
 			$ gh discussion view 123 --comments --after CURSOR
 
+			# View replies on a specific comment
+			$ gh discussion view 123 --replies COMMENT-ID
+
+			# Paginate through replies
+			$ gh discussion view 123 --replies COMMENT-ID --limit 10 --after CURSOR
+
 			# Open in browser
 			$ gh discussion view 123 --web
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := cmdutil.MutuallyExclusive("specify only one of --comments, --replies, or --web",
+				opts.Comments, opts.Replies != "", opts.WebMode); err != nil {
+				return err
+			}
+
+			repliesMode := opts.Replies != ""
 			commentsMode := needsComments(opts)
-			if cmd.Flags().Changed("order") && !commentsMode {
-				return cmdutil.FlagErrorf("--order requires --comments")
+
+			paginatedMode := commentsMode || repliesMode
+			if cmd.Flags().Changed("order") && !paginatedMode {
+				return cmdutil.FlagErrorf("--order requires --comments or --replies")
 			}
-			if cmd.Flags().Changed("limit") && !commentsMode {
-				return cmdutil.FlagErrorf("--limit requires --comments")
+			if cmd.Flags().Changed("limit") && !paginatedMode {
+				return cmdutil.FlagErrorf("--limit requires --comments or --replies")
 			}
-			if cmd.Flags().Changed("after") && !commentsMode {
-				return cmdutil.FlagErrorf("--after requires --comments")
+			if cmd.Flags().Changed("after") && !paginatedMode {
+				return cmdutil.FlagErrorf("--after requires --comments or --replies")
 			}
 			if opts.Limit < 1 {
 				return cmdutil.FlagErrorf("invalid limit: %d", opts.Limit)
@@ -168,9 +187,10 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 
 	cmd.Flags().BoolVarP(&opts.WebMode, "web", "w", false, "Open a discussion in the browser")
 	cmd.Flags().BoolVarP(&opts.Comments, "comments", "c", false, "View discussion comments")
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum number of comments to fetch")
-	cmd.Flags().StringVar(&opts.After, "after", "", "Cursor for the next page of comments")
-	cmdutil.StringEnumFlag(cmd, &opts.Order, "order", "", "newest", []string{"oldest", "newest"}, "Order of comments")
+	cmd.Flags().StringVar(&opts.Replies, "replies", "", "View replies on a specific comment by its node ID")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum number of comments or replies to fetch")
+	cmd.Flags().StringVar(&opts.After, "after", "", "Cursor for the next page")
+	cmdutil.StringEnumFlag(cmd, &opts.Order, "order", "", "newest", []string{"oldest", "newest"}, "Order of comments or replies")
 	cmdutil.AddJSONFlags(cmd, &opts.Exporter, discussionFields)
 
 	return cmd
@@ -208,6 +228,29 @@ func viewRun(opts *ViewOptions) error {
 
 	opts.IO.DetectTerminalTheme()
 	opts.IO.StartProgressIndicator()
+
+	if opts.Replies != "" {
+		discussion, err := c.GetCommentReplies(repo, opts.DiscussionNumber, opts.Replies, opts.Limit, opts.After, opts.Order == "newest")
+		opts.IO.StopProgressIndicator()
+		if err != nil {
+			return err
+		}
+
+		if opts.Exporter != nil {
+			return opts.Exporter.Write(opts.IO, discussion)
+		}
+
+		if err := opts.IO.StartPager(); err != nil {
+			fmt.Fprintf(opts.IO.ErrOut, "error starting pager: %v\n", err)
+		}
+		defer opts.IO.StopPager()
+
+		comment := discussion.Comments.Comments[0]
+		if opts.IO.IsStdoutTTY() {
+			return printHumanReplies(opts, &comment)
+		}
+		return printRawReplies(opts.IO.Out, &comment)
+	}
 
 	var discussion *client.Discussion
 	if needsComments(opts) {
@@ -447,4 +490,40 @@ func labelList(labels []client.DiscussionLabel, cs *iostreams.ColorScheme) strin
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+func printHumanReplies(opts *ViewOptions, c *client.DiscussionComment) error {
+	out := opts.IO.Out
+	cs := opts.IO.ColorScheme()
+
+	if err := printHumanComment(opts, out, *c, ""); err != nil {
+		return err
+	}
+
+	if c.Replies.NextCursor != "" {
+		fmt.Fprintf(out, cs.Muted("To see more replies, pass: --after %s\n"), c.Replies.NextCursor)
+		fmt.Fprintln(out)
+	}
+
+	return nil
+}
+
+func printRawReplies(out io.Writer, c *client.DiscussionComment) error {
+	answer := ""
+	if c.IsAnswer {
+		answer = "\tanswer"
+	}
+	fmt.Fprintf(out, "comment:\t%s\t%s\t%s%s\n", c.Author.Login, c.CreatedAt.Format(time.RFC3339), c.URL, answer)
+	fmt.Fprintf(out, "replies:\t%d\n", c.Replies.TotalCount)
+	if c.Replies.NextCursor != "" {
+		fmt.Fprintf(out, "next:\t%s\n", c.Replies.NextCursor)
+	}
+	fmt.Fprintln(out, "--")
+	fmt.Fprintln(out, c.Body)
+
+	for _, reply := range c.Replies.Comments {
+		printRawComment(out, reply, "  ")
+	}
+
+	return nil
 }
