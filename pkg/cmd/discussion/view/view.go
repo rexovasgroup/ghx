@@ -129,7 +129,7 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			commentsMode := opts.Comments || (opts.Exporter != nil && exporterNeedsComments(opts.Exporter))
+			commentsMode := needsComments(opts)
 			if cmd.Flags().Changed("order") && !commentsMode {
 				return cmdutil.FlagErrorf("--order requires --comments")
 			}
@@ -178,24 +178,13 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 
 // exporterNeedsComments returns true when the JSON exporter requests the comments field.
 func exporterNeedsComments(exporter cmdutil.Exporter) bool {
-	for _, f := range exporter.Fields() {
-		if f == "comments" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(exporter.Fields(), "comments")
 }
 
 // needsComments returns true when the command should fetch full comment data,
 // either because --comments was set or because --json requested the comments field.
 func needsComments(opts *ViewOptions) bool {
-	if opts.Comments {
-		return true
-	}
-	if opts.Exporter != nil {
-		return exporterNeedsComments(opts.Exporter)
-	}
-	return false
+	return opts.Comments || opts.Exporter != nil && exporterNeedsComments(opts.Exporter)
 }
 
 func viewRun(opts *ViewOptions) error {
