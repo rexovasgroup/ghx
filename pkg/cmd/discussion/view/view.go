@@ -245,6 +245,9 @@ func viewRun(opts *ViewOptions) error {
 		}
 		defer opts.IO.StopPager()
 
+		if len(discussion.Comments.Comments) == 0 {
+			return fmt.Errorf("no comment found for reply ID %s", opts.Replies)
+		}
 		comment := discussion.Comments.Comments[0]
 		if opts.IO.IsStdoutTTY() {
 			return printHumanReplies(opts, &comment)
