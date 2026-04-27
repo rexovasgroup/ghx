@@ -860,3 +860,288 @@ func TestViewRun_jsonWithoutComments_usesGetByNumber(t *testing.T) {
 	assert.Equal(t, 1, len(mock.GetByNumberCalls()))
 	assert.Equal(t, 0, len(mock.GetWithCommentsCalls()))
 }
+
+// ---------------------------------------------------------------------------
+// --replies flag validation
+// ---------------------------------------------------------------------------
+
+func TestNewCmdView_repliesFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "replies with comments is mutually exclusive",
+			args:    []string{"123", "--replies", "DC_abc", "--comments"},
+			wantErr: "specify only one of --comments, --replies, or --web",
+		},
+		{
+			name:    "replies with web is mutually exclusive",
+			args:    []string{"123", "--replies", "DC_abc", "--web"},
+			wantErr: "specify only one of --comments, --replies, or --web",
+		},
+		{
+			name:    "order requires comments or replies",
+			args:    []string{"123", "--order", "newest"},
+			wantErr: "--order requires --comments or --replies",
+		},
+		{
+			name:    "limit requires comments or replies",
+			args:    []string{"123", "--limit", "5"},
+			wantErr: "--limit requires --comments or --replies",
+		},
+		{
+			name:    "after requires comments or replies",
+			args:    []string{"123", "--after", "CURSOR"},
+			wantErr: "--after requires --comments or --replies",
+		},
+		{
+			name: "order works with replies",
+			args: []string{"123", "--replies", "DC_abc", "--order", "oldest"},
+		},
+		{
+			name: "limit works with replies",
+			args: []string{"123", "--replies", "DC_abc", "--limit", "10"},
+		},
+		{
+			name: "after works with replies",
+			args: []string{"123", "--replies", "DC_abc", "--after", "CURSOR"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &cmdutil.Factory{}
+			ios, _, _, _ := iostreams.Test()
+			f.IOStreams = ios
+			f.BaseRepo = func() (ghrepo.Interface, error) {
+				return ghrepo.New("OWNER", "REPO"), nil
+			}
+			f.Browser = &browser.Stub{}
+
+			cmd := NewCmdView(f, func(opts *ViewOptions) error {
+				return nil
+			})
+
+			cmd.SetArgs(tt.args)
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+
+			err := cmd.Execute()
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// --replies viewRun tests (table-driven)
+// ---------------------------------------------------------------------------
+
+func testDiscussionWithReplies(nextCursor string) *client.Discussion {
+	d := testDiscussion()
+	d.Comments = client.DiscussionCommentList{
+		TotalCount: 1,
+		Comments: []client.DiscussionComment{
+			{
+				ID:        "DC_abc",
+				URL:       "https://github.com/OWNER/REPO/discussions/123#discussioncomment-1",
+				Author:    client.DiscussionActor{Login: "octocat"},
+				Body:      "This is the parent comment",
+				CreatedAt: time.Date(2025, 3, 2, 0, 0, 0, 0, time.UTC),
+				IsAnswer:  true,
+				ReactionGroups: []client.ReactionGroup{
+					{Content: "THUMBS_UP", TotalCount: 3},
+				},
+				Replies: client.DiscussionCommentList{
+					TotalCount: 2,
+					NextCursor: nextCursor,
+					Comments: []client.DiscussionComment{
+						{
+							ID:        "R1",
+							URL:       "https://github.com/OWNER/REPO/discussions/123#discussioncomment-2",
+							Author:    client.DiscussionActor{Login: "hubot"},
+							Body:      "First reply",
+							CreatedAt: time.Date(2025, 3, 2, 1, 0, 0, 0, time.UTC),
+						},
+						{
+							ID:        "R2",
+							URL:       "https://github.com/OWNER/REPO/discussions/123#discussioncomment-3",
+							Author:    client.DiscussionActor{Login: "monalisa"},
+							Body:      "Second reply",
+							CreatedAt: time.Date(2025, 3, 2, 2, 0, 0, 0, time.UTC),
+						},
+					},
+				},
+			},
+		},
+	}
+	return d
+}
+
+func TestViewRun_replies(t *testing.T) {
+	tests := []struct {
+		name         string
+		tty          bool
+		replies      string
+		limit        int
+		after        string
+		order        string
+		exporter     cmdutil.Exporter
+		nextCursor   string
+		wantContains []string
+		wantExcludes []string
+		wantClient   func(*testing.T, *client.DiscussionClientMock)
+	}{
+		{
+			name:    "tty renders comment and replies",
+			tty:     true,
+			replies: "DC_abc",
+			limit:   30,
+			order:   "newest",
+			wantContains: []string{
+				"octocat",
+				"This is the parent comment",
+				"✓ Answer",
+				"hubot",
+				"First reply",
+				"monalisa",
+				"Second reply",
+			},
+		},
+		{
+			name:       "tty shows pagination hint",
+			tty:        true,
+			replies:    "DC_abc",
+			limit:      30,
+			order:      "newest",
+			nextCursor: "NEXT_CUR",
+			wantContains: []string{
+				"--after NEXT_CUR",
+			},
+		},
+		{
+			name:    "tty no pagination hint when no next cursor",
+			tty:     true,
+			replies: "DC_abc",
+			limit:   30,
+			order:   "newest",
+			wantExcludes: []string{
+				"--after",
+			},
+		},
+		{
+			name:    "nontty raw output",
+			tty:     false,
+			replies: "DC_abc",
+			limit:   30,
+			order:   "oldest",
+			wantContains: []string{
+				"comment:\toctocat\t",
+				"answer",
+				"replies:\t2",
+				"This is the parent comment",
+				"hubot",
+				"First reply",
+			},
+		},
+		{
+			name:       "nontty shows next cursor",
+			tty:        false,
+			replies:    "DC_abc",
+			limit:      30,
+			order:      "oldest",
+			nextCursor: "NEXT_CUR_456",
+			wantContains: []string{
+				"next:\tNEXT_CUR_456",
+			},
+		},
+		{
+			name:    "json output",
+			tty:     false,
+			replies: "DC_abc",
+			limit:   30,
+			order:   "newest",
+			exporter: func() cmdutil.Exporter {
+				e := cmdutil.NewJSONExporter()
+				e.SetFields(discussionFields)
+				return e
+			}(),
+			wantContains: []string{
+				`"totalCount"`,
+				`"isAnswer":true`,
+				`"octocat"`,
+			},
+		},
+		{
+			name:    "routes to GetCommentReplies only",
+			tty:     false,
+			replies: "DC_abc",
+			limit:   10,
+			after:   "CUR_A",
+			order:   "oldest",
+			wantClient: func(t *testing.T, mock *client.DiscussionClientMock) {
+				require.Equal(t, 1, len(mock.GetCommentRepliesCalls()))
+				assert.Equal(t, 0, len(mock.GetByNumberCalls()))
+				assert.Equal(t, 0, len(mock.GetWithCommentsCalls()))
+
+				call := mock.GetCommentRepliesCalls()[0]
+				assert.Equal(t, "DC_abc", call.CommentID)
+				assert.Equal(t, 10, call.Limit)
+				assert.Equal(t, "CUR_A", call.After)
+				assert.Equal(t, false, call.Newest)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ios, _, stdout, _ := iostreams.Test()
+			ios.SetStdoutTTY(tt.tty)
+			ios.SetStderrTTY(tt.tty)
+
+			d := testDiscussionWithReplies(tt.nextCursor)
+			mock := &client.DiscussionClientMock{
+				GetCommentRepliesFunc: func(repo ghrepo.Interface, number int, commentID string, limit int, after string, newest bool) (*client.Discussion, error) {
+					return d, nil
+				},
+			}
+
+			opts := &ViewOptions{
+				IO: ios,
+				BaseRepo: func() (ghrepo.Interface, error) {
+					return ghrepo.New("OWNER", "REPO"), nil
+				},
+				Client: func() (client.DiscussionClient, error) {
+					return mock, nil
+				},
+				DiscussionNumber: 123,
+				Replies:          tt.replies,
+				Limit:            tt.limit,
+				After:            tt.after,
+				Order:            tt.order,
+				Exporter:         tt.exporter,
+				Now:              func() time.Time { return time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC) },
+			}
+
+			err := viewRun(opts)
+			require.NoError(t, err)
+
+			out := stdout.String()
+			for _, s := range tt.wantContains {
+				assert.Contains(t, out, s)
+			}
+			for _, s := range tt.wantExcludes {
+				assert.NotContains(t, out, s)
+			}
+			if tt.wantClient != nil {
+				tt.wantClient(t, mock)
+			}
+		})
+	}
+}
