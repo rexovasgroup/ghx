@@ -115,8 +115,8 @@ func NewCmdView(f *cmdutil.Factory, runF func(*ViewOptions) error) *cobra.Comman
 			# View with comments
 			$ gh discussion view 123 --comments
 
-			# View with newest comments first
-			$ gh discussion view 123 --comments --order newest
+			# View with oldest comments first
+			$ gh discussion view 123 --comments --order oldest
 
 			# Limit to 10 comments
 			$ gh discussion view 123 --comments --limit 10
