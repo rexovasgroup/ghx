@@ -392,258 +392,153 @@ func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Disc
 	return &d, nil
 }
 
-func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, limit int, after string, newest bool) (*Discussion, error) {
-	// Use two static query shapes to avoid interpolating user input into the
-	// GraphQL document. The cursor is always passed as a variable.
-	var commentsArg string
-	if newest {
-		commentsArg = "last: $limit, before: $cursor"
-	} else {
-		commentsArg = "first: $limit, after: $cursor"
+// discussionCommentNode is the GraphQL response shape for a discussion comment
+// including nested replies.
+type discussionCommentNode struct {
+	ID             string
+	URL            string    `graphql:"url"`
+	Author         actorNode
+	Body           string
+	CreatedAt      time.Time
+	IsAnswer       bool
+	UpvoteCount    int
+	ReactionGroups []struct {
+		Content string
+		Users   struct {
+			TotalCount int
+		}
 	}
-
-	query := fmt.Sprintf(`query DiscussionWithComments($owner: String!, $name: String!, $number: Int!, $limit: Int!, $cursor: String) {
-		repository(owner: $owner, name: $name) {
-			hasDiscussionsEnabled
-			discussion(number: $number) {
-				id
-				number
-				title
-				body
-				url
-				closed
-				stateReason
-				author { login ... on User { id name } ... on Bot { id } }
-				category { id name slug emoji isAnswerable }
-				labels(first: 20) { nodes { id name color } }
-				isAnswered
-				answerChosenAt
-				answerChosenBy { login ... on User { id name } ... on Bot { id } }
-				reactionGroups { content users { totalCount } }
-				createdAt
-				updatedAt
-				closedAt
-				locked
-				comments(%s) {
-					totalCount
-					pageInfo {
-						endCursor
-						hasNextPage
-						startCursor
-						hasPreviousPage
-					}
-					nodes {
-						id
-						url
-						author { login ... on User { id name } ... on Bot { id } }
-						body
-						createdAt
-						isAnswer
-						upvoteCount
-						reactionGroups { content users { totalCount } }
-						replies(last: 4) {
-							totalCount
-							nodes {
-								id
-								url
-								author { login ... on User { id name } ... on Bot { id } }
-								body
-								createdAt
-								isAnswer
-								upvoteCount
-								reactionGroups { content users { totalCount } }
-							}
-						}
-					}
+	Replies struct {
+		TotalCount int
+		Nodes      []struct {
+			ID             string
+			URL            string    `graphql:"url"`
+			Author         actorNode
+			Body           string
+			CreatedAt      time.Time
+			IsAnswer       bool
+			UpvoteCount    int
+			ReactionGroups []struct {
+				Content string
+				Users   struct {
+					TotalCount int
 				}
 			}
 		}
-	}`, commentsArg)
+	} `graphql:"replies(last: 4)"`
+}
+
+// mapCommentFromNode converts a discussionCommentNode into the domain DiscussionComment type.
+func mapCommentFromNode(n discussionCommentNode) DiscussionComment {
+	dc := DiscussionComment{
+		ID:          n.ID,
+		URL:         n.URL,
+		Author:      mapActorFromListNode(n.Author),
+		Body:        n.Body,
+		CreatedAt:   n.CreatedAt,
+		IsAnswer:    n.IsAnswer,
+		UpvoteCount: n.UpvoteCount,
+	}
+
+	for _, rg := range n.ReactionGroups {
+		dc.ReactionGroups = append(dc.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	replyComments := make([]DiscussionComment, len(n.Replies.Nodes))
+	for i, r := range n.Replies.Nodes {
+		rc := DiscussionComment{
+			ID:          r.ID,
+			URL:         r.URL,
+			Author:      mapActorFromListNode(r.Author),
+			Body:        r.Body,
+			CreatedAt:   r.CreatedAt,
+			IsAnswer:    r.IsAnswer,
+			UpvoteCount: r.UpvoteCount,
+		}
+		for _, rg := range r.ReactionGroups {
+			rc.ReactionGroups = append(rc.ReactionGroups, ReactionGroup{
+				Content:    rg.Content,
+				TotalCount: rg.Users.TotalCount,
+			})
+		}
+		replyComments[i] = rc
+	}
+	dc.Replies = DiscussionCommentList{
+		Comments:   replyComments,
+		TotalCount: n.Replies.TotalCount,
+		Direction:  DiscussionCommentListDirectionBackward,
+	}
+
+	return dc
+}
+
+func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, limit int, after string, newest bool) (*Discussion, error) {
+	var query struct {
+		Repository struct {
+			HasDiscussionsEnabled bool
+			Discussion            struct {
+				discussionListNode
+				Comments struct {
+					TotalCount int
+					PageInfo   struct {
+						EndCursor       string
+						HasNextPage     bool
+						StartCursor     string
+						HasPreviousPage bool
+					}
+					Nodes []discussionCommentNode
+				} `graphql:"comments(first: $first, last: $last, after: $after, before: $before)"`
+			} `graphql:"discussion(number: $number)"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
 
 	variables := map[string]interface{}{
-		"owner":  repo.RepoOwner(),
-		"name":   repo.RepoName(),
-		"number": number,
-		"limit":  limit,
-	}
-	if after != "" {
-		variables["cursor"] = after
-	}
-
-	type actorJSON struct {
-		Login string `json:"login"`
-		ID    string `json:"id"`
-		Name  string `json:"name"`
+		"owner":  githubv4.String(repo.RepoOwner()),
+		"name":   githubv4.String(repo.RepoName()),
+		"number": githubv4.Int(number),
+		"first":  (*githubv4.Int)(nil),
+		"last":   (*githubv4.Int)(nil),
+		"after":  (*githubv4.String)(nil),
+		"before": (*githubv4.String)(nil),
 	}
 
-	type reactionGroupJSON struct {
-		Content string `json:"content"`
-		Users   struct {
-			TotalCount int `json:"totalCount"`
-		} `json:"users"`
+	if newest {
+		variables["last"] = githubv4.Int(limit)
+		if after != "" {
+			variables["before"] = githubv4.String(after)
+		}
+	} else {
+		variables["first"] = githubv4.Int(limit)
+		if after != "" {
+			variables["after"] = githubv4.String(after)
+		}
 	}
 
-	type commentJSON struct {
-		ID             string              `json:"id"`
-		URL            string              `json:"url"`
-		Author         actorJSON           `json:"author"`
-		Body           string              `json:"body"`
-		CreatedAt      time.Time           `json:"createdAt"`
-		IsAnswer       bool                `json:"isAnswer"`
-		UpvoteCount    int                 `json:"upvoteCount"`
-		ReactionGroups []reactionGroupJSON `json:"reactionGroups"`
-		Replies        *struct {
-			TotalCount int           `json:"totalCount"`
-			Nodes      []commentJSON `json:"nodes"`
-		} `json:"replies"`
-	}
-
-	type response struct {
-		Repository struct {
-			HasDiscussionsEnabled bool `json:"hasDiscussionsEnabled"`
-			Discussion            *struct {
-				ID          string    `json:"id"`
-				Number      int       `json:"number"`
-				Title       string    `json:"title"`
-				Body        string    `json:"body"`
-				URL         string    `json:"url"`
-				Closed      bool      `json:"closed"`
-				StateReason string    `json:"stateReason"`
-				Author      actorJSON `json:"author"`
-				Category    struct {
-					ID           string `json:"id"`
-					Name         string `json:"name"`
-					Slug         string `json:"slug"`
-					Emoji        string `json:"emoji"`
-					IsAnswerable bool   `json:"isAnswerable"`
-				} `json:"category"`
-				Labels struct {
-					Nodes []struct {
-						ID    string `json:"id"`
-						Name  string `json:"name"`
-						Color string `json:"color"`
-					} `json:"nodes"`
-				} `json:"labels"`
-				IsAnswered     bool                `json:"isAnswered"`
-				AnswerChosenAt time.Time           `json:"answerChosenAt"`
-				AnswerChosenBy *actorJSON          `json:"answerChosenBy"`
-				ReactionGroups []reactionGroupJSON `json:"reactionGroups"`
-				CreatedAt      time.Time           `json:"createdAt"`
-				UpdatedAt      time.Time           `json:"updatedAt"`
-				ClosedAt       time.Time           `json:"closedAt"`
-				Locked         bool                `json:"locked"`
-				Comments       struct {
-					TotalCount int `json:"totalCount"`
-					PageInfo   struct {
-						EndCursor       string `json:"endCursor"`
-						HasNextPage     bool   `json:"hasNextPage"`
-						StartCursor     string `json:"startCursor"`
-						HasPreviousPage bool   `json:"hasPreviousPage"`
-					} `json:"pageInfo"`
-					Nodes []commentJSON `json:"nodes"`
-				} `json:"comments"`
-			} `json:"discussion"`
-		} `json:"repository"`
-	}
-
-	var data response
-	err := c.gql.GraphQL(repo.RepoHost(), query, variables, &data)
+	err := c.gql.Query(repo.RepoHost(), "DiscussionWithComments", &query, variables)
 	if err != nil {
 		return nil, err
 	}
-	if !data.Repository.HasDiscussionsEnabled {
+	if !query.Repository.HasDiscussionsEnabled {
 		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 	}
-	if data.Repository.Discussion == nil {
-		return nil, fmt.Errorf("discussion #%d not found in '%s/%s'", number, repo.RepoOwner(), repo.RepoName())
-	}
 
-	src := data.Repository.Discussion
+	src := query.Repository.Discussion
 
-	mapActor := func(a actorJSON) DiscussionActor {
-		return DiscussionActor{ID: a.ID, Login: a.Login, Name: a.Name}
-	}
+	d := mapDiscussionFromListNode(src.discussionListNode)
 
-	mapReactions := func(groups []reactionGroupJSON) []ReactionGroup {
-		out := make([]ReactionGroup, len(groups))
-		for i, rg := range groups {
-			out[i] = ReactionGroup{Content: rg.Content, TotalCount: rg.Users.TotalCount}
-		}
-		return out
-	}
-
-	mapComment := func(c commentJSON) DiscussionComment {
-		dc := DiscussionComment{
-			ID:             c.ID,
-			URL:            c.URL,
-			Author:         mapActor(c.Author),
-			Body:           c.Body,
-			CreatedAt:      c.CreatedAt,
-			IsAnswer:       c.IsAnswer,
-			UpvoteCount:    c.UpvoteCount,
-			ReactionGroups: mapReactions(c.ReactionGroups),
-		}
-		if c.Replies != nil {
-			replyComments := make([]DiscussionComment, len(c.Replies.Nodes))
-			for i, r := range c.Replies.Nodes {
-				replyComments[i] = DiscussionComment{
-					ID:             r.ID,
-					URL:            r.URL,
-					Author:         mapActor(r.Author),
-					Body:           r.Body,
-					CreatedAt:      r.CreatedAt,
-					IsAnswer:       r.IsAnswer,
-					UpvoteCount:    r.UpvoteCount,
-					ReactionGroups: mapReactions(r.ReactionGroups),
-				}
-			}
-			dc.Replies = DiscussionCommentList{
-				Comments:   replyComments,
-				TotalCount: c.Replies.TotalCount,
-				Direction:  DiscussionCommentListDirectionBackward, // Since we always fetch the last 4 replies
-			}
-		}
-		return dc
-	}
-
-	d := Discussion{
-		ID:          src.ID,
-		Number:      src.Number,
-		Title:       src.Title,
-		Body:        src.Body,
-		URL:         src.URL,
-		Closed:      src.Closed,
-		StateReason: src.StateReason,
-		Author:      mapActor(src.Author),
-		Category: DiscussionCategory{
-			ID:           src.Category.ID,
-			Name:         src.Category.Name,
-			Slug:         src.Category.Slug,
-			Emoji:        src.Category.Emoji,
-			IsAnswerable: src.Category.IsAnswerable,
-		},
-		Answered:       src.IsAnswered,
-		AnswerChosenAt: src.AnswerChosenAt,
-		ReactionGroups: mapReactions(src.ReactionGroups),
-		CreatedAt:      src.CreatedAt,
-		UpdatedAt:      src.UpdatedAt,
-		ClosedAt:       src.ClosedAt,
-		Locked:         src.Locked,
-	}
-
-	if src.AnswerChosenBy != nil {
-		a := mapActor(*src.AnswerChosenBy)
-		d.AnswerChosenBy = &a
-	}
-
-	d.Labels = make([]DiscussionLabel, len(src.Labels.Nodes))
-	for i, l := range src.Labels.Nodes {
-		d.Labels[i] = DiscussionLabel{ID: l.ID, Name: l.Name, Color: l.Color}
+	for _, rg := range src.ReactionGroups {
+		d.ReactionGroups = append(d.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
 	}
 
 	comments := make([]DiscussionComment, len(src.Comments.Nodes))
 	for i, c := range src.Comments.Nodes {
-		comments[i] = mapComment(c)
+		comments[i] = mapCommentFromNode(c)
 	}
 
 	// When using "last" (newest order), the API returns items in chronological
