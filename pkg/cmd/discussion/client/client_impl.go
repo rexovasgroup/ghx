@@ -396,7 +396,7 @@ func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Disc
 // including nested replies.
 type discussionCommentNode struct {
 	ID             string
-	URL            string    `graphql:"url"`
+	URL            string `graphql:"url"`
 	Author         actorNode
 	Body           string
 	CreatedAt      time.Time
@@ -412,7 +412,7 @@ type discussionCommentNode struct {
 		TotalCount int
 		Nodes      []struct {
 			ID             string
-			URL            string    `graphql:"url"`
+			URL            string `graphql:"url"`
 			Author         actorNode
 			Body           string
 			CreatedAt      time.Time
