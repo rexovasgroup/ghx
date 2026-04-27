@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -351,12 +352,226 @@ func (c *discussionClient) Search(repo ghrepo.Interface, filters SearchFilters, 
 	return &result, nil
 }
 
-func (c *discussionClient) GetByNumber(_ ghrepo.Interface, _ int) (*Discussion, error) {
-	return nil, fmt.Errorf("not implemented")
+func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Discussion, error) {
+	var query struct {
+		Repository struct {
+			HasDiscussionsEnabled bool
+			Discussion            struct {
+				discussionListNode
+				Comments struct {
+					TotalCount int
+				}
+			} `graphql:"discussion(number: $number)"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+
+	variables := map[string]interface{}{
+		"owner":  githubv4.String(repo.RepoOwner()),
+		"name":   githubv4.String(repo.RepoName()),
+		"number": githubv4.Int(number),
+	}
+
+	err := c.gql.Query(repo.RepoHost(), "DiscussionMinimal", &query, variables)
+	if err != nil {
+		return nil, err
+	}
+	if !query.Repository.HasDiscussionsEnabled {
+		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
+	}
+
+	d := mapDiscussionFromListNode(query.Repository.Discussion.discussionListNode)
+	d.Comments = DiscussionCommentList{TotalCount: query.Repository.Discussion.Comments.TotalCount}
+
+	for _, rg := range query.Repository.Discussion.ReactionGroups {
+		d.ReactionGroups = append(d.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	return &d, nil
 }
 
-func (c *discussionClient) GetWithComments(_ ghrepo.Interface, _ int, _ int, _ string) (*Discussion, error) {
-	return nil, fmt.Errorf("not implemented")
+// discussionCommentNode is the GraphQL response shape for a discussion comment
+// including nested replies.
+type discussionCommentNode struct {
+	ID             string
+	URL            string `graphql:"url"`
+	Author         actorNode
+	Body           string
+	CreatedAt      time.Time
+	IsAnswer       bool
+	UpvoteCount    int
+	ReactionGroups []struct {
+		Content string
+		Users   struct {
+			TotalCount int
+		}
+	}
+	Replies struct {
+		TotalCount int
+		Nodes      []struct {
+			ID             string
+			URL            string `graphql:"url"`
+			Author         actorNode
+			Body           string
+			CreatedAt      time.Time
+			IsAnswer       bool
+			UpvoteCount    int
+			ReactionGroups []struct {
+				Content string
+				Users   struct {
+					TotalCount int
+				}
+			}
+		}
+	} `graphql:"replies(last: 4)"`
+}
+
+// mapCommentFromNode converts a discussionCommentNode into the domain DiscussionComment type.
+func mapCommentFromNode(n discussionCommentNode) DiscussionComment {
+	dc := DiscussionComment{
+		ID:          n.ID,
+		URL:         n.URL,
+		Author:      mapActorFromListNode(n.Author),
+		Body:        n.Body,
+		CreatedAt:   n.CreatedAt,
+		IsAnswer:    n.IsAnswer,
+		UpvoteCount: n.UpvoteCount,
+	}
+
+	for _, rg := range n.ReactionGroups {
+		dc.ReactionGroups = append(dc.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	replyComments := make([]DiscussionComment, len(n.Replies.Nodes))
+	for i, r := range n.Replies.Nodes {
+		rc := DiscussionComment{
+			ID:          r.ID,
+			URL:         r.URL,
+			Author:      mapActorFromListNode(r.Author),
+			Body:        r.Body,
+			CreatedAt:   r.CreatedAt,
+			IsAnswer:    r.IsAnswer,
+			UpvoteCount: r.UpvoteCount,
+		}
+		for _, rg := range r.ReactionGroups {
+			rc.ReactionGroups = append(rc.ReactionGroups, ReactionGroup{
+				Content:    rg.Content,
+				TotalCount: rg.Users.TotalCount,
+			})
+		}
+		replyComments[i] = rc
+	}
+	dc.Replies = DiscussionCommentList{
+		Comments:   replyComments,
+		TotalCount: n.Replies.TotalCount,
+		Direction:  DiscussionCommentListDirectionBackward,
+	}
+
+	return dc
+}
+
+func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, limit int, after string, newest bool) (*Discussion, error) {
+	var query struct {
+		Repository struct {
+			HasDiscussionsEnabled bool
+			Discussion            struct {
+				discussionListNode
+				Comments struct {
+					TotalCount int
+					PageInfo   struct {
+						EndCursor       string
+						HasNextPage     bool
+						StartCursor     string
+						HasPreviousPage bool
+					}
+					Nodes []discussionCommentNode
+				} `graphql:"comments(first: $first, last: $last, after: $after, before: $before)"`
+			} `graphql:"discussion(number: $number)"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+
+	variables := map[string]interface{}{
+		"owner":  githubv4.String(repo.RepoOwner()),
+		"name":   githubv4.String(repo.RepoName()),
+		"number": githubv4.Int(number),
+		"first":  (*githubv4.Int)(nil),
+		"last":   (*githubv4.Int)(nil),
+		"after":  (*githubv4.String)(nil),
+		"before": (*githubv4.String)(nil),
+	}
+
+	if newest {
+		variables["last"] = githubv4.Int(limit)
+		if after != "" {
+			variables["before"] = githubv4.String(after)
+		}
+	} else {
+		variables["first"] = githubv4.Int(limit)
+		if after != "" {
+			variables["after"] = githubv4.String(after)
+		}
+	}
+
+	err := c.gql.Query(repo.RepoHost(), "DiscussionWithComments", &query, variables)
+	if err != nil {
+		return nil, err
+	}
+	if !query.Repository.HasDiscussionsEnabled {
+		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
+	}
+
+	src := query.Repository.Discussion
+
+	d := mapDiscussionFromListNode(src.discussionListNode)
+
+	for _, rg := range src.ReactionGroups {
+		d.ReactionGroups = append(d.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	comments := make([]DiscussionComment, len(src.Comments.Nodes))
+	for i, c := range src.Comments.Nodes {
+		comments[i] = mapCommentFromNode(c)
+	}
+
+	// When using "last" (newest order), the API returns items in chronological
+	// order. Reverse them so the newest comment appears first.
+	if newest {
+		slices.Reverse(comments)
+	}
+
+	nextCursor := ""
+	if newest {
+		if src.Comments.PageInfo.HasPreviousPage {
+			nextCursor = src.Comments.PageInfo.StartCursor
+		}
+	} else {
+		if src.Comments.PageInfo.HasNextPage {
+			nextCursor = src.Comments.PageInfo.EndCursor
+		}
+	}
+
+	direction := DiscussionCommentListDirectionForward
+	if newest {
+		direction = DiscussionCommentListDirectionBackward
+	}
+
+	d.Comments = DiscussionCommentList{
+		Comments:   comments,
+		TotalCount: src.Comments.TotalCount,
+		Cursor:     after,
+		NextCursor: nextCursor,
+		Direction:  direction,
+	}
+
+	return &d, nil
 }
 
 func (c *discussionClient) ListCategories(repo ghrepo.Interface) ([]DiscussionCategory, error) {
