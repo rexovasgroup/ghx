@@ -392,6 +392,43 @@ func (c *discussionClient) GetByNumber(repo ghrepo.Interface, number int) (*Disc
 	return &d, nil
 }
 
+// discussionReplyNode is the GraphQL response shape for a reply to a discussion comment.
+type discussionReplyNode struct {
+	ID             string
+	URL            string `graphql:"url"`
+	Author         actorNode
+	Body           string
+	CreatedAt      time.Time
+	IsAnswer       bool
+	UpvoteCount    int
+	ReactionGroups []struct {
+		Content string
+		Users   struct {
+			TotalCount int
+		}
+	}
+}
+
+// mapReplyFromNode converts a discussionReplyNode into the domain DiscussionComment type.
+func mapReplyFromNode(n discussionReplyNode) DiscussionComment {
+	rc := DiscussionComment{
+		ID:          n.ID,
+		URL:         n.URL,
+		Author:      mapActorFromListNode(n.Author),
+		Body:        n.Body,
+		CreatedAt:   n.CreatedAt,
+		IsAnswer:    n.IsAnswer,
+		UpvoteCount: n.UpvoteCount,
+	}
+	for _, rg := range n.ReactionGroups {
+		rc.ReactionGroups = append(rc.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+	return rc
+}
+
 // discussionCommentNode is the GraphQL response shape for a discussion comment
 // including nested replies.
 type discussionCommentNode struct {
@@ -410,21 +447,7 @@ type discussionCommentNode struct {
 	}
 	Replies struct {
 		TotalCount int
-		Nodes      []struct {
-			ID             string
-			URL            string `graphql:"url"`
-			Author         actorNode
-			Body           string
-			CreatedAt      time.Time
-			IsAnswer       bool
-			UpvoteCount    int
-			ReactionGroups []struct {
-				Content string
-				Users   struct {
-					TotalCount int
-				}
-			}
-		}
+		Nodes      []discussionReplyNode
 	} `graphql:"replies(last: 4)"`
 }
 
@@ -449,22 +472,7 @@ func mapCommentFromNode(n discussionCommentNode) DiscussionComment {
 
 	replyComments := make([]DiscussionComment, len(n.Replies.Nodes))
 	for i, r := range n.Replies.Nodes {
-		rc := DiscussionComment{
-			ID:          r.ID,
-			URL:         r.URL,
-			Author:      mapActorFromListNode(r.Author),
-			Body:        r.Body,
-			CreatedAt:   r.CreatedAt,
-			IsAnswer:    r.IsAnswer,
-			UpvoteCount: r.UpvoteCount,
-		}
-		for _, rg := range r.ReactionGroups {
-			rc.ReactionGroups = append(rc.ReactionGroups, ReactionGroup{
-				Content:    rg.Content,
-				TotalCount: rg.Users.TotalCount,
-			})
-		}
-		replyComments[i] = rc
+		replyComments[i] = mapReplyFromNode(r)
 	}
 	dc.Replies = DiscussionCommentList{
 		Comments:   replyComments,
@@ -569,6 +577,156 @@ func (c *discussionClient) GetWithComments(repo ghrepo.Interface, number int, li
 		Cursor:     after,
 		NextCursor: nextCursor,
 		Direction:  direction,
+	}
+
+	return &d, nil
+}
+
+// GetCommentReplies fetches a discussion and a single comment with its
+// paginated replies. It uses the top-level node(id:) query for the comment
+// because the Discussion type does not expose a comment(id:) field.
+func (c *discussionClient) GetCommentReplies(repo ghrepo.Interface, number int, commentID string, limit int, after string, newest bool) (*Discussion, error) {
+	var query struct {
+		Repository struct {
+			HasDiscussionsEnabled bool
+			Discussion            struct {
+				discussionListNode
+			} `graphql:"discussion(number: $number)"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
+		Node *struct {
+			DiscussionComment struct {
+				ID             string
+				URL            string `graphql:"url"`
+				Author         actorNode
+				Body           string
+				CreatedAt      time.Time
+				IsAnswer       bool
+				UpvoteCount    int
+				ReactionGroups []struct {
+					Content string
+					Users   struct {
+						TotalCount int
+					}
+				}
+				Replies struct {
+					TotalCount int
+					PageInfo   struct {
+						EndCursor       string
+						HasNextPage     bool
+						StartCursor     string
+						HasPreviousPage bool
+					}
+					Nodes []discussionReplyNode
+				} `graphql:"replies(first: $first, last: $last, after: $after, before: $before)"`
+			} `graphql:"... on DiscussionComment"`
+		} `graphql:"node(id: $commentID)"`
+	}
+
+	variables := map[string]interface{}{
+		"owner":     githubv4.String(repo.RepoOwner()),
+		"name":      githubv4.String(repo.RepoName()),
+		"number":    githubv4.Int(number),
+		"commentID": githubv4.ID(commentID),
+		"first":     (*githubv4.Int)(nil),
+		"last":      (*githubv4.Int)(nil),
+		"after":     (*githubv4.String)(nil),
+		"before":    (*githubv4.String)(nil),
+	}
+
+	if newest {
+		variables["last"] = githubv4.Int(limit)
+		if after != "" {
+			variables["before"] = githubv4.String(after)
+		}
+	} else {
+		variables["first"] = githubv4.Int(limit)
+		if after != "" {
+			variables["after"] = githubv4.String(after)
+		}
+	}
+
+	err := c.gql.Query(repo.RepoHost(), "DiscussionCommentReplies", &query, variables)
+	if err != nil {
+		return nil, err
+	}
+	if !query.Repository.HasDiscussionsEnabled {
+		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
+	}
+
+	// The query above should already error for an invalid node ID, but guard against nil.
+	if query.Node == nil {
+		return nil, fmt.Errorf("comment %s not found", commentID)
+	}
+
+	src := query.Node.DiscussionComment
+	if src.ID == "" {
+		return nil, fmt.Errorf("node %s is not a discussion comment", commentID)
+	}
+
+	d := mapDiscussionFromListNode(query.Repository.Discussion.discussionListNode)
+
+	for _, rg := range query.Repository.Discussion.ReactionGroups {
+		d.ReactionGroups = append(d.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	dc := DiscussionComment{
+		ID:          src.ID,
+		URL:         src.URL,
+		Author:      mapActorFromListNode(src.Author),
+		Body:        src.Body,
+		CreatedAt:   src.CreatedAt,
+		IsAnswer:    src.IsAnswer,
+		UpvoteCount: src.UpvoteCount,
+	}
+
+	for _, rg := range src.ReactionGroups {
+		dc.ReactionGroups = append(dc.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	replies := make([]DiscussionComment, len(src.Replies.Nodes))
+	for i, r := range src.Replies.Nodes {
+		replies[i] = mapReplyFromNode(r)
+	}
+
+	// When using "last" (newest order), the API returns items in chronological
+	// order. Reverse them so the newest reply appears first.
+	if newest {
+		slices.Reverse(replies)
+	}
+
+	nextCursor := ""
+	if newest {
+		if src.Replies.PageInfo.HasPreviousPage {
+			nextCursor = src.Replies.PageInfo.StartCursor
+		}
+	} else {
+		if src.Replies.PageInfo.HasNextPage {
+			nextCursor = src.Replies.PageInfo.EndCursor
+		}
+	}
+
+	direction := DiscussionCommentListDirectionForward
+	if newest {
+		direction = DiscussionCommentListDirectionBackward
+	}
+
+	dc.Replies = DiscussionCommentList{
+		Comments:   replies,
+		TotalCount: src.Replies.TotalCount,
+		Cursor:     after,
+		NextCursor: nextCursor,
+		Direction:  direction,
+	}
+
+	d.Comments = DiscussionCommentList{
+		Comments:   []DiscussionComment{dc},
+		TotalCount: 1,
 	}
 
 	return &d, nil

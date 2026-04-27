@@ -30,6 +30,9 @@ var _ DiscussionClient = &DiscussionClientMock{}
 //			GetByNumberFunc: func(repo ghrepo.Interface, number int) (*Discussion, error) {
 //				panic("mock out the GetByNumber method")
 //			},
+//			GetCommentRepliesFunc: func(repo ghrepo.Interface, number int, commentID string, limit int, after string, newest bool) (*Discussion, error) {
+//				panic("mock out the GetCommentReplies method")
+//			},
 //			GetWithCommentsFunc: func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*Discussion, error) {
 //				panic("mock out the GetWithComments method")
 //			},
@@ -78,6 +81,9 @@ type DiscussionClientMock struct {
 
 	// GetByNumberFunc mocks the GetByNumber method.
 	GetByNumberFunc func(repo ghrepo.Interface, number int) (*Discussion, error)
+
+	// GetCommentRepliesFunc mocks the GetCommentReplies method.
+	GetCommentRepliesFunc func(repo ghrepo.Interface, number int, commentID string, limit int, after string, newest bool) (*Discussion, error)
 
 	// GetWithCommentsFunc mocks the GetWithComments method.
 	GetWithCommentsFunc func(repo ghrepo.Interface, number int, commentLimit int, after string, newest bool) (*Discussion, error)
@@ -144,6 +150,21 @@ type DiscussionClientMock struct {
 			Repo ghrepo.Interface
 			// Number is the number argument value.
 			Number int
+		}
+		// GetCommentReplies holds details about calls to the GetCommentReplies method.
+		GetCommentReplies []struct {
+			// Repo is the repo argument value.
+			Repo ghrepo.Interface
+			// Number is the number argument value.
+			Number int
+			// CommentID is the commentID argument value.
+			CommentID string
+			// Limit is the limit argument value.
+			Limit int
+			// After is the after argument value.
+			After string
+			// Newest is the newest argument value.
+			Newest bool
 		}
 		// GetWithComments holds details about calls to the GetWithComments method.
 		GetWithComments []struct {
@@ -230,20 +251,21 @@ type DiscussionClientMock struct {
 			Input UpdateDiscussionInput
 		}
 	}
-	lockAddComment      sync.RWMutex
-	lockClose           sync.RWMutex
-	lockCreate          sync.RWMutex
-	lockGetByNumber     sync.RWMutex
-	lockGetWithComments sync.RWMutex
-	lockList            sync.RWMutex
-	lockListCategories  sync.RWMutex
-	lockLock            sync.RWMutex
-	lockMarkAnswer      sync.RWMutex
-	lockReopen          sync.RWMutex
-	lockSearch          sync.RWMutex
-	lockUnlock          sync.RWMutex
-	lockUnmarkAnswer    sync.RWMutex
-	lockUpdate          sync.RWMutex
+	lockAddComment        sync.RWMutex
+	lockClose             sync.RWMutex
+	lockCreate            sync.RWMutex
+	lockGetByNumber       sync.RWMutex
+	lockGetCommentReplies sync.RWMutex
+	lockGetWithComments   sync.RWMutex
+	lockList              sync.RWMutex
+	lockListCategories    sync.RWMutex
+	lockLock              sync.RWMutex
+	lockMarkAnswer        sync.RWMutex
+	lockReopen            sync.RWMutex
+	lockSearch            sync.RWMutex
+	lockUnlock            sync.RWMutex
+	lockUnmarkAnswer      sync.RWMutex
+	lockUpdate            sync.RWMutex
 }
 
 // AddComment calls AddCommentFunc.
@@ -399,6 +421,58 @@ func (mock *DiscussionClientMock) GetByNumberCalls() []struct {
 	mock.lockGetByNumber.RLock()
 	calls = mock.calls.GetByNumber
 	mock.lockGetByNumber.RUnlock()
+	return calls
+}
+
+// GetCommentReplies calls GetCommentRepliesFunc.
+func (mock *DiscussionClientMock) GetCommentReplies(repo ghrepo.Interface, number int, commentID string, limit int, after string, newest bool) (*Discussion, error) {
+	if mock.GetCommentRepliesFunc == nil {
+		panic("DiscussionClientMock.GetCommentRepliesFunc: method is nil but DiscussionClient.GetCommentReplies was just called")
+	}
+	callInfo := struct {
+		Repo      ghrepo.Interface
+		Number    int
+		CommentID string
+		Limit     int
+		After     string
+		Newest    bool
+	}{
+		Repo:      repo,
+		Number:    number,
+		CommentID: commentID,
+		Limit:     limit,
+		After:     after,
+		Newest:    newest,
+	}
+	mock.lockGetCommentReplies.Lock()
+	mock.calls.GetCommentReplies = append(mock.calls.GetCommentReplies, callInfo)
+	mock.lockGetCommentReplies.Unlock()
+	return mock.GetCommentRepliesFunc(repo, number, commentID, limit, after, newest)
+}
+
+// GetCommentRepliesCalls gets all the calls that were made to GetCommentReplies.
+// Check the length with:
+//
+//	len(mockedDiscussionClient.GetCommentRepliesCalls())
+func (mock *DiscussionClientMock) GetCommentRepliesCalls() []struct {
+	Repo      ghrepo.Interface
+	Number    int
+	CommentID string
+	Limit     int
+	After     string
+	Newest    bool
+} {
+	var calls []struct {
+		Repo      ghrepo.Interface
+		Number    int
+		CommentID string
+		Limit     int
+		After     string
+		Newest    bool
+	}
+	mock.lockGetCommentReplies.RLock()
+	calls = mock.calls.GetCommentReplies
+	mock.lockGetCommentReplies.RUnlock()
 	return calls
 }
 
