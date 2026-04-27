@@ -185,8 +185,37 @@ type DiscussionComment struct {
 func (c DiscussionComment) Export() map[string]interface{} {
 	replies := make([]interface{}, len(c.Replies.Comments))
 	for i, r := range c.Replies.Comments {
-		replies[i] = r.Export()
+		replies[i] = r.ExportReply()
 	}
+	reactions := make([]interface{}, len(c.ReactionGroups))
+	for i, rg := range c.ReactionGroups {
+		reactions[i] = rg.Export()
+	}
+	repliesMap := map[string]interface{}{
+		"totalCount": c.Replies.TotalCount,
+		"nodes":      replies,
+	}
+	if c.Replies.Cursor != "" {
+		repliesMap["cursor"] = c.Replies.Cursor
+	}
+	if c.Replies.NextCursor != "" {
+		repliesMap["next"] = c.Replies.NextCursor
+	}
+	return map[string]interface{}{
+		"id":             c.ID,
+		"url":            c.URL,
+		"author":         c.Author.Export(),
+		"body":           c.Body,
+		"createdAt":      c.CreatedAt,
+		"isAnswer":       c.IsAnswer,
+		"upvoteCount":    c.UpvoteCount,
+		"reactionGroups": reactions,
+		"replies":        repliesMap,
+	}
+}
+
+// ExportReply returns a reply as a map for JSON output, without nested replies.
+func (c DiscussionComment) ExportReply() map[string]interface{} {
 	reactions := make([]interface{}, len(c.ReactionGroups))
 	for i, rg := range c.ReactionGroups {
 		reactions[i] = rg.Export()
@@ -200,10 +229,6 @@ func (c DiscussionComment) Export() map[string]interface{} {
 		"isAnswer":       c.IsAnswer,
 		"upvoteCount":    c.UpvoteCount,
 		"reactionGroups": reactions,
-		"replies": map[string]interface{}{
-			"totalCount": c.Replies.TotalCount,
-			"nodes":      replies,
-		},
 	}
 }
 
