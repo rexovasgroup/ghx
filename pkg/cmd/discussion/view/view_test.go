@@ -10,6 +10,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmd/discussion/client"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
+	"github.com/google/shlex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,35 +41,181 @@ func testDiscussion() *client.Discussion {
 
 func TestNewCmdView(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    []string
-		wantNum int
-		wantErr string
+		name     string
+		args     string
+		wantErr  string
+		wantOpts ViewOptions
+		wantRepo string
 	}{
 		{
-			name:    "number argument",
-			args:    []string{"123"},
-			wantNum: 123,
+			name: "number argument",
+			args: "123",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Limit:            30,
+				Order:            "newest",
+			},
 		},
 		{
-			name:    "hash number argument",
-			args:    []string{"#456"},
-			wantNum: 456,
+			name: "hash number argument",
+			args: "'#456'",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 456,
+				Limit:            30,
+				Order:            "newest",
+			},
 		},
 		{
-			name:    "URL argument",
-			args:    []string{"https://github.com/OWNER/REPO/discussions/789"},
-			wantNum: 789,
+			name: "URL argument",
+			args: "https://github.com/OTHER/REPO/discussions/789",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 789,
+				Limit:            30,
+				Order:            "newest",
+			},
+			wantRepo: "OTHER/REPO",
 		},
 		{
 			name:    "invalid argument",
-			args:    []string{"not-a-number"},
+			args:    "not-a-number",
 			wantErr: "invalid discussion argument",
 		},
 		{
 			name:    "no arguments",
-			args:    []string{},
+			args:    "",
 			wantErr: "accepts 1 arg(s), received 0",
+		},
+		{
+			name: "web flag",
+			args: "123 --web",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				WebMode:          true,
+				Limit:            30,
+				Order:            "newest",
+			},
+		},
+		{
+			name: "comments flag",
+			args: "123 --comments",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Comments:         true,
+				Limit:            30,
+				Order:            "newest",
+			},
+		},
+		{
+			name: "comments with limit",
+			args: "123 --comments --limit 10",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Comments:         true,
+				Limit:            10,
+				Order:            "newest",
+			},
+		},
+		{
+			name: "comments with after",
+			args: "123 --comments --after CURSOR_ABC",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Comments:         true,
+				Limit:            30,
+				After:            "CURSOR_ABC",
+				Order:            "newest",
+			},
+		},
+		{
+			name: "comments with order oldest",
+			args: "123 --comments --order oldest",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Comments:         true,
+				Limit:            30,
+				Order:            "oldest",
+			},
+		},
+		{
+			name: "replies flag",
+			args: "123 --replies DC_abc",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Replies:          "DC_abc",
+				Limit:            30,
+				Order:            "newest",
+			},
+		},
+		{
+			name: "replies with limit",
+			args: "123 --replies DC_abc --limit 10",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Replies:          "DC_abc",
+				Limit:            10,
+				Order:            "newest",
+			},
+		},
+		{
+			name: "replies with after",
+			args: "123 --replies DC_abc --after CURSOR",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Replies:          "DC_abc",
+				Limit:            30,
+				After:            "CURSOR",
+				Order:            "newest",
+			},
+		},
+		{
+			name: "replies with order oldest",
+			args: "123 --replies DC_abc --order oldest",
+			wantOpts: ViewOptions{
+				DiscussionNumber: 123,
+				Replies:          "DC_abc",
+				Limit:            30,
+				Order:            "oldest",
+			},
+		},
+		{
+			name:    "replies with comments is mutually exclusive",
+			args:    "123 --replies DC_abc --comments",
+			wantErr: "specify only one of --comments, --replies, or --web",
+		},
+		{
+			name:    "replies with web is mutually exclusive",
+			args:    "123 --replies DC_abc --web",
+			wantErr: "specify only one of --comments, --replies, or --web",
+		},
+		{
+			name:    "comments with web is mutually exclusive",
+			args:    "123 --comments --web",
+			wantErr: "specify only one of --comments, --replies, or --web",
+		},
+		{
+			name:    "order requires comments or replies",
+			args:    "123 --order newest",
+			wantErr: "--order requires --comments or --replies",
+		},
+		{
+			name:    "limit requires comments or replies",
+			args:    "123 --limit 5",
+			wantErr: "--limit requires --comments or --replies",
+		},
+		{
+			name:    "after requires comments or replies",
+			args:    "123 --after CURSOR",
+			wantErr: "--after requires --comments or --replies",
+		},
+		{
+			name:    "invalid limit zero",
+			args:    "123 --comments --limit 0",
+			wantErr: "invalid limit",
+		},
+		{
+			name:    "invalid limit negative",
+			args:    "123 --comments --limit -5",
+			wantErr: "invalid limit",
 		},
 	}
 
@@ -88,18 +235,31 @@ func TestNewCmdView(t *testing.T) {
 				return nil
 			})
 
-			cmd.SetArgs(tt.args)
+			argv, err := shlex.Split(tt.args)
+			require.NoError(t, err)
+			cmd.SetArgs(argv)
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 
-			err := cmd.Execute()
+			_, err = cmd.ExecuteC()
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantNum, gotOpts.DiscussionNumber)
+			repo, err := gotOpts.BaseRepo()
+			require.NoError(t, err)
+			if tt.wantRepo != "" {
+				assert.Equal(t, tt.wantRepo, ghrepo.FullName(repo))
+			}
+			assert.Equal(t, tt.wantOpts.DiscussionNumber, gotOpts.DiscussionNumber)
+			assert.Equal(t, tt.wantOpts.WebMode, gotOpts.WebMode)
+			assert.Equal(t, tt.wantOpts.Comments, gotOpts.Comments)
+			assert.Equal(t, tt.wantOpts.Replies, gotOpts.Replies)
+			assert.Equal(t, tt.wantOpts.Limit, gotOpts.Limit)
+			assert.Equal(t, tt.wantOpts.After, gotOpts.After)
+			assert.Equal(t, tt.wantOpts.Order, gotOpts.Order)
 		})
 	}
 }
