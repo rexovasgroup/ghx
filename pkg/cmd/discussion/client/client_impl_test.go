@@ -1164,22 +1164,6 @@ func TestGetByNumber(t *testing.T) {
 // GetWithComments
 // ---------------------------------------------------------------------------
 
-// replyNode builds a JSON reply node.
-func replyNode(id, login, body string) string {
-	return heredoc.Docf(`
-		{
-			"id": %q,
-			"url": "https://github.com/OWNER/REPO/discussions/1#reply-%s",
-			"author": {"__typename": "User", "login": %q},
-			"body": %q,
-			"createdAt": "2025-02-01T00:00:00Z",
-			"isAnswer": false,
-			"upvoteCount": 0,
-			"reactionGroups": []
-		}
-	`, id, id, login, body)
-}
-
 func TestGetWithComments(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
 
@@ -1842,68 +1826,18 @@ func TestGetWithComments(t *testing.T) {
 // GetCommentReplies
 // ---------------------------------------------------------------------------
 
-// getCommentRepliesResp builds a mock DiscussionCommentReplies JSON response.
-// The shurcooL graphql library treats inline fragments as transparent — the
-// comment fields are placed directly inside the "node" object, not nested
-// under a "DiscussionComment" key.
-func getCommentRepliesResp(hasDiscussions bool, discNode string, commentNode *string, replyNodes string, replyTotal int, hasNext, hasPrev bool, endCursor, startCursor string) string {
-	nodeBlock := "null"
-	if commentNode != nil {
-		nodeBlock = wrapRepliesBlock(*commentNode, replyNodes, replyTotal, hasNext, hasPrev, endCursor, startCursor)
-	}
-	return heredoc.Docf(`
-		{
-			"data": {
-				"repository": {
-					"hasDiscussionsEnabled": %t,
-					"discussion": %s
-				},
-				"node": %s
-			}
-		}
-	`, hasDiscussions, discNode, nodeBlock)
-}
-
-func wrapRepliesBlock(commentJSON string, replyNodes string, total int, hasNext, hasPrev bool, endCursor, startCursor string) string {
-	trimmed := strings.TrimRight(commentJSON, " \t\n")
-	trimmed = trimmed[:len(trimmed)-1]
-	return fmt.Sprintf(`%s, "replies": {"totalCount": %d, "pageInfo": {"endCursor": %q, "hasNextPage": %t, "startCursor": %q, "hasPreviousPage": %t}, "nodes": [%s]}}`,
-		trimmed, total, endCursor, hasNext, startCursor, hasPrev, replyNodes)
-}
-
-// bareCommentNode builds a comment JSON node without replies (used for GetCommentReplies).
-func bareCommentNode(id, login, body string, isAnswer bool) string {
-	return heredoc.Docf(`
-		{
-			"id": %q,
-			"url": "https://github.com/OWNER/REPO/discussions/1#comment-%s",
-			"author": {"__typename": "User", "login": %q},
-			"body": %q,
-			"createdAt": "2025-01-01T00:00:00Z",
-			"isAnswer": %t,
-			"upvoteCount": 2,
-			"reactionGroups": [{"content": "HEART", "users": {"totalCount": 1}}]
-		}
-	`, id, id, login, body, isAnswer)
-}
-
 func TestGetCommentReplies(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
 
 	tests := []struct {
-		name          string
-		commentID     string
-		limit         int
-		after         string
-		newest        bool
-		httpStubs     func(*testing.T, *httpmock.Registry)
-		wantErr       string
-		wantReplies   int
-		wantTotal     int
-		wantCursor    string
-		wantNext      string
-		wantDirection DiscussionCommentListDirection
-		wantDisc      func(*testing.T, *Discussion)
+		name       string
+		commentID  string
+		limit      int
+		after      string
+		newest     bool
+		httpStubs  func(*testing.T, *httpmock.Registry)
+		wantErr    string
+		assertDisc func(*testing.T, *Discussion)
 	}{
 		{
 			name:      "maps all fields",
@@ -1911,31 +1845,123 @@ func TestGetCommentReplies(t *testing.T) {
 			limit:     10,
 			newest:    false,
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				discNode := minimalNode("D_1", "Test Discussion")
-				comment := bareCommentNode("DC_abc", "octocat", "Top-level comment", true)
-				reply := replyNode("R1", "hubot", "A reply")
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
-					httpmock.StringResponse(getCommentRepliesResp(true, discNode, &comment, reply, 1, false, false, "", "")),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 42,
+										"title": "Test Discussion",
+										"body": "Discussion body",
+										"url": "https://github.com/OWNER/REPO/discussions/42",
+										"closed": true,
+										"stateReason": "RESOLVED",
+										"isAnswered": true,
+										"answerChosenAt": "2025-06-01T12:00:00Z",
+										"author": {"__typename": "User", "login": "alice", "id": "U_alice", "name": "Alice"},
+										"category": {"id": "CAT1", "name": "Q&A", "slug": "q-a", "emoji": ":question:", "isAnswerable": true},
+										"answerChosenBy": {"__typename": "User", "login": "bob", "id": "U_bob", "name": "Bob"},
+										"labels": {"nodes": [{"id": "L1", "name": "bug", "color": "d73a4a"}]},
+										"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 3}}],
+										"createdAt": "2025-01-01T00:00:00Z",
+										"updatedAt": "2025-01-02T00:00:00Z",
+										"closedAt": "2025-06-01T00:00:00Z",
+										"locked": true
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "https://github.com/OWNER/REPO/discussions/42#discussioncomment-1",
+									"author": {"__typename": "User", "login": "octocat", "id": "U_octocat", "name": "Octocat"},
+									"body": "Top-level comment",
+									"createdAt": "2025-03-01T00:00:00Z",
+									"isAnswer": true,
+									"upvoteCount": 5,
+									"reactionGroups": [{"content": "HEART", "users": {"totalCount": 2}}],
+									"replies": {
+										"totalCount": 1,
+										"pageInfo": {"endCursor": "REP_CUR", "hasNextPage": true, "startCursor": "REP_START", "hasPreviousPage": false},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "https://github.com/OWNER/REPO/discussions/42#discussioncomment-2",
+												"author": {"__typename": "User", "login": "hubot", "id": "U_hubot", "name": "Hubot"},
+												"body": "A reply",
+												"createdAt": "2025-04-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 1,
+												"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 1}}]
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
 				)
 			},
-			wantReplies:   1,
-			wantTotal:     1,
-			wantDirection: DiscussionCommentListDirectionForward,
-			wantDisc: func(t *testing.T, d *Discussion) {
-				assert.Equal(t, "Test Discussion", d.Title)
-				require.Len(t, d.Comments.Comments, 1)
-				c := d.Comments.Comments[0]
-				assert.Equal(t, "DC_abc", c.ID)
-				assert.Equal(t, "octocat", c.Author.Login)
-				assert.Equal(t, "Top-level comment", c.Body)
-				assert.True(t, c.IsAnswer)
-				assert.Equal(t, 2, c.UpvoteCount)
-				require.Len(t, c.ReactionGroups, 1)
-				assert.Equal(t, "HEART", c.ReactionGroups[0].Content)
-				require.Len(t, c.Replies.Comments, 1)
-				assert.Equal(t, "R1", c.Replies.Comments[0].ID)
-				assert.Equal(t, "hubot", c.Replies.Comments[0].Author.Login)
+			assertDisc: func(t *testing.T, d *Discussion) {
+				assert.Equal(t, Discussion{
+					ID:          "D_1",
+					Number:      42,
+					Title:       "Test Discussion",
+					Body:        "Discussion body",
+					URL:         "https://github.com/OWNER/REPO/discussions/42",
+					Closed:      true,
+					StateReason: "RESOLVED",
+					Author:      DiscussionActor{ID: "U_alice", Login: "alice", Name: "Alice"},
+					Category: DiscussionCategory{
+						ID:           "CAT1",
+						Name:         "Q&A",
+						Slug:         "q-a",
+						Emoji:        ":question:",
+						IsAnswerable: true,
+					},
+					Labels:         []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}},
+					Answered:       true,
+					AnswerChosenAt: time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC),
+					AnswerChosenBy: &DiscussionActor{ID: "U_bob", Login: "bob", Name: "Bob"},
+					ReactionGroups: []ReactionGroup{{Content: "THUMBS_UP", TotalCount: 3}},
+					CreatedAt:      time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					UpdatedAt:      time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+					ClosedAt:       time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Locked:         true,
+					Comments: DiscussionCommentList{
+						TotalCount: 1,
+						Comments: []DiscussionComment{
+							{
+								ID:             "DC_abc",
+								URL:            "https://github.com/OWNER/REPO/discussions/42#discussioncomment-1",
+								Author:         DiscussionActor{ID: "U_octocat", Login: "octocat", Name: "Octocat"},
+								Body:           "Top-level comment",
+								CreatedAt:      time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC),
+								IsAnswer:       true,
+								UpvoteCount:    5,
+								ReactionGroups: []ReactionGroup{{Content: "HEART", TotalCount: 2}},
+								Replies: DiscussionCommentList{
+									TotalCount: 1,
+									NextCursor: "REP_CUR",
+									Direction:  DiscussionCommentListDirectionForward,
+									Comments: []DiscussionComment{
+										{
+											ID:             "R1",
+											URL:            "https://github.com/OWNER/REPO/discussions/42#discussioncomment-2",
+											Author:         DiscussionActor{ID: "U_hubot", Login: "hubot", Name: "Hubot"},
+											Body:           "A reply",
+											CreatedAt:      time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
+											UpvoteCount:    1,
+											ReactionGroups: []ReactionGroup{{Content: "THUMBS_UP", TotalCount: 1}},
+										},
+									},
+								},
+							},
+						},
+					},
+				}, *d)
 			},
 		},
 		{
@@ -1945,19 +1971,85 @@ func TestGetCommentReplies(t *testing.T) {
 			after:     "CUR_A",
 			newest:    false,
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				discNode := minimalNode("D_1", "Test")
-				comment := bareCommentNode("DC_abc", "alice", "Comment", false)
-				r1 := replyNode("R1", "bob", "Reply 1")
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
-					httpmock.StringResponse(getCommentRepliesResp(true, discNode, &comment, r1, 3, true, false, "CUR_B", "")),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 3,
+										"pageInfo": {"endCursor": "CUR_B", "hasNextPage": true, "startCursor": "CUR_A", "hasPreviousPage": false},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Reply 1",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											},
+											{
+												"id": "R2",
+												"url": "",
+												"author": {"__typename": "User", "login": "carol"},
+												"body": "Reply 2",
+												"createdAt": "2025-03-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
 				)
 			},
-			wantReplies:   1,
-			wantTotal:     3,
-			wantCursor:    "CUR_A",
-			wantNext:      "CUR_B",
-			wantDirection: DiscussionCommentListDirectionForward,
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 2)
+				assert.Equal(t, 3, replies.TotalCount)
+				assert.Equal(t, "CUR_A", replies.Cursor)
+				assert.Equal(t, "CUR_B", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionForward, replies.Direction)
+				assert.Equal(t, "R1", replies.Comments[0].ID, "forward mode should preserve chronological order")
+				assert.Equal(t, "R2", replies.Comments[1].ID)
+			},
 		},
 		{
 			name:      "pagination backward newest reverses replies",
@@ -1966,24 +2058,170 @@ func TestGetCommentReplies(t *testing.T) {
 			after:     "CUR_X",
 			newest:    true,
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				discNode := minimalNode("D_1", "Test")
-				comment := bareCommentNode("DC_abc", "alice", "Comment", false)
-				r1 := replyNode("R1", "bob", "Older")
-				r2 := replyNode("R2", "carol", "Newer")
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
-					httpmock.StringResponse(getCommentRepliesResp(true, discNode, &comment, r1+","+r2, 5, false, true, "", "CUR_Y")),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 5,
+										"pageInfo": {"endCursor": "CUR_END", "hasNextPage": false, "startCursor": "CUR_Y", "hasPreviousPage": true},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Older",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											},
+											{
+												"id": "R2",
+												"url": "",
+												"author": {"__typename": "User", "login": "carol"},
+												"body": "Newer",
+												"createdAt": "2025-03-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
 				)
 			},
-			wantReplies:   2,
-			wantTotal:     5,
-			wantCursor:    "CUR_X",
-			wantNext:      "CUR_Y",
-			wantDirection: DiscussionCommentListDirectionBackward,
-			wantDisc: func(t *testing.T, d *Discussion) {
-				replies := d.Comments.Comments[0].Replies.Comments
-				assert.Equal(t, "R2", replies[0].ID, "newest mode should reverse replies")
-				assert.Equal(t, "R1", replies[1].ID)
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 2)
+				assert.Equal(t, 5, replies.TotalCount)
+				assert.Equal(t, "CUR_X", replies.Cursor)
+				assert.Equal(t, "CUR_Y", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionBackward, replies.Direction)
+				assert.Equal(t, "R2", replies.Comments[0].ID, "newest mode should reverse replies")
+				assert.Equal(t, "R1", replies.Comments[1].ID)
+			},
+		},
+		{
+			name:      "first page newest reverses replies",
+			commentID: "DC_abc",
+			limit:     5,
+			newest:    true,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 3,
+										"pageInfo": {"endCursor": "", "hasNextPage": false, "startCursor": "CUR_START", "hasPreviousPage": true},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Older",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											},
+											{
+												"id": "R2",
+												"url": "",
+												"author": {"__typename": "User", "login": "carol"},
+												"body": "Newer",
+												"createdAt": "2025-03-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 2)
+				assert.Equal(t, 3, replies.TotalCount)
+				assert.Equal(t, "", replies.Cursor)
+				assert.Equal(t, "CUR_START", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionBackward, replies.Direction)
+				assert.Equal(t, "R2", replies.Comments[0].ID, "newest mode should reverse replies")
+				assert.Equal(t, "R1", replies.Comments[1].ID)
 			},
 		},
 		{
@@ -1992,18 +2230,72 @@ func TestGetCommentReplies(t *testing.T) {
 			limit:     10,
 			newest:    false,
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				discNode := minimalNode("D_1", "Test")
-				comment := bareCommentNode("DC_abc", "alice", "Comment", false)
-				r1 := replyNode("R1", "bob", "Only reply")
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
-					httpmock.StringResponse(getCommentRepliesResp(true, discNode, &comment, r1, 1, false, false, "", "")),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 1,
+										"pageInfo": {"endCursor": "CUR_ONLY", "hasNextPage": false, "startCursor": "CUR_ONLY", "hasPreviousPage": false},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Only reply",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
 				)
 			},
-			wantReplies:   1,
-			wantTotal:     1,
-			wantNext:      "",
-			wantDirection: DiscussionCommentListDirectionForward,
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 1)
+				assert.Equal(t, 1, replies.TotalCount)
+				assert.Equal(t, "", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionForward, replies.Direction)
+			},
 		},
 		{
 			name:      "discussions disabled",
@@ -2011,28 +2303,119 @@ func TestGetCommentReplies(t *testing.T) {
 			limit:     10,
 			newest:    false,
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				discNode := minimalNode("D_1", "Test")
-				comment := bareCommentNode("DC_abc", "alice", "Comment", false)
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
-					httpmock.StringResponse(getCommentRepliesResp(false, discNode, &comment, "", 0, false, false, "", "")),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": false,
+									"discussion": null
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 0,
+										"pageInfo": {"endCursor": null, "hasNextPage": false, "startCursor": null, "hasPreviousPage": false},
+										"nodes": []
+									}
+								}
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository", "discussion"],
+									"message": "Could not resolve to a Discussion with the number of 1."
+								}
+							]
+						}
+					`)),
 				)
 			},
-			wantErr: "discussions disabled",
+			wantErr: "Could not resolve to a Discussion",
 		},
 		{
-			name:      "node not found nil",
+			name:      "repo not found",
+			commentID: "DC_abc",
+			limit:     10,
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": null,
+								"node": null
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository"],
+									"message": "Could not resolve to a Repository with the name 'OWNER/REPO'."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Repository",
+		},
+		{
+			name:      "reply node not found",
 			commentID: "DC_invalid",
 			limit:     10,
 			newest:    false,
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				discNode := minimalNode("D_1", "Test")
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
-					httpmock.StringResponse(getCommentRepliesResp(true, discNode, nil, "", 0, false, false, "", "")),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": null
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["node"],
+									"message": "Could not resolve to a node with the global id of 'DC_invalid'"
+								}
+							]
+						}
+					`)),
 				)
 			},
-			wantErr: "comment DC_invalid not found",
+			wantErr: "Could not resolve to a node",
 		},
 		{
 			name:      "node is not a discussion comment",
@@ -2040,12 +2423,38 @@ func TestGetCommentReplies(t *testing.T) {
 			limit:     10,
 			newest:    false,
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				discNode := minimalNode("D_1", "Test")
-				// Return a node with an empty DiscussionComment (wrong type)
-				emptyComment := `{"id":"","url":"","author":{"__typename":"User","login":""},"body":"","createdAt":"0001-01-01T00:00:00Z","isAnswer":false,"upvoteCount":0,"reactionGroups":[]}`
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
-					httpmock.StringResponse(getCommentRepliesResp(true, discNode, &emptyComment, "", 0, false, false, "", "")),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {}
+							}
+						}
+					`)),
 				)
 			},
 			wantErr: "node I_notacomment is not a discussion comment",
@@ -2073,16 +2482,8 @@ func TestGetCommentReplies(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, d)
 			require.Len(t, d.Comments.Comments, 1, "GetCommentReplies should return exactly one comment")
-
-			comment := d.Comments.Comments[0]
-			assert.Len(t, comment.Replies.Comments, tt.wantReplies)
-			assert.Equal(t, tt.wantTotal, comment.Replies.TotalCount)
-			assert.Equal(t, tt.wantCursor, comment.Replies.Cursor)
-			assert.Equal(t, tt.wantNext, comment.Replies.NextCursor)
-			assert.Equal(t, tt.wantDirection, comment.Replies.Direction)
-			if tt.wantDisc != nil {
-				tt.wantDisc(t, d)
-			}
+			require.NotNil(t, tt.assertDisc, "assertDisc must be set for non-error cases")
+			tt.assertDisc(t, d)
 		})
 	}
 }
