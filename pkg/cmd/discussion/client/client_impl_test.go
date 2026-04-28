@@ -1007,93 +1007,130 @@ func TestListCategories(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// GetByNumber
-// ---------------------------------------------------------------------------
-
-// getByNumberResp builds a mock DiscussionMinimal JSON response.
-func getByNumberResp(hasDiscussions bool, commentTotal int, node string) string {
-	return heredoc.Docf(`
-		{
-			"data": {
-				"repository": {
-					"hasDiscussionsEnabled": %t,
-					"discussion": %s
-				}
-			}
-		}
-	`, hasDiscussions, wrapCommentTotal(node, commentTotal))
-}
-
-// wrapCommentTotal merges a `comments` block into a discussion JSON node.
-func wrapCommentTotal(node string, total int) string {
-	// Insert "comments":{"totalCount": N} right before the closing brace.
-	trimmed := strings.TrimRight(node, " \t\n")
-	trimmed = trimmed[:len(trimmed)-1] // strip trailing }
-	return fmt.Sprintf(`%s, "comments": {"totalCount": %d}}`, trimmed, total)
-}
-
 func TestGetByNumber(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
 
 	tests := []struct {
-		name      string
-		httpStubs func(*testing.T, *httpmock.Registry)
-		wantErr   string
-		wantDisc  func(*testing.T, *Discussion)
+		name       string
+		httpStubs  func(*testing.T, *httpmock.Registry)
+		wantErr    string
+		assertDisc *Discussion
 	}{
 		{
 			name: "maps all fields",
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				node := heredoc.Doc(`
-					{
-						"id": "D_1",
-						"number": 42,
-						"title": "Test Discussion",
-						"body": "This is a test",
-						"url": "https://github.com/OWNER/REPO/discussions/42",
-						"closed": false,
-						"stateReason": "",
-						"isAnswered": false,
-						"answerChosenAt": "0001-01-01T00:00:00Z",
-						"author": {"__typename": "User", "login": "alice"},
-						"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
-						"answerChosenBy": null,
-						"labels": {"nodes": []},
-						"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 3}}],
-						"createdAt": "2025-01-01T00:00:00Z",
-						"updatedAt": "2025-01-02T00:00:00Z",
-						"closedAt": "0001-01-01T00:00:00Z",
-						"locked": false
-					}
-				`)
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionMinimal\b`),
-					httpmock.StringResponse(getByNumberResp(true, 5, node)),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 42,
+										"title": "Test Discussion",
+										"body": "This is a test",
+										"url": "https://github.com/OWNER/REPO/discussions/42",
+										"closed": true,
+										"stateReason": "RESOLVED",
+										"isAnswered": true,
+										"answerChosenAt": "2025-06-01T12:00:00Z",
+										"author": {"__typename": "User", "login": "alice", "id": "U1", "name": "Alice"},
+										"category": {"id": "C1", "name": "Q&A", "slug": "q-a", "emoji": ":question:", "isAnswerable": true},
+										"answerChosenBy": {"__typename": "User", "login": "bob", "id": "U2", "name": "Bob"},
+										"labels": {"nodes": [{"id": "L1", "name": "bug", "color": "d73a4a"}]},
+										"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 3}}],
+										"createdAt": "2025-01-01T00:00:00Z",
+										"updatedAt": "2025-01-02T00:00:00Z",
+										"closedAt": "2025-06-01T00:00:00Z",
+										"locked": true,
+										"comments": {"totalCount": 5}
+									}
+								}
+							}
+						}
+					`)),
 				)
 			},
-			wantDisc: func(t *testing.T, d *Discussion) {
-				assert.Equal(t, "D_1", d.ID)
-				assert.Equal(t, 42, d.Number)
-				assert.Equal(t, "Test Discussion", d.Title)
-				assert.Equal(t, "This is a test", d.Body)
-				assert.Equal(t, "alice", d.Author.Login)
-				assert.Equal(t, 5, d.Comments.TotalCount)
-				require.Len(t, d.ReactionGroups, 1)
-				assert.Equal(t, "THUMBS_UP", d.ReactionGroups[0].Content)
-				assert.Equal(t, 3, d.ReactionGroups[0].TotalCount)
+			assertDisc: &Discussion{
+				ID:          "D_1",
+				Number:      42,
+				Title:       "Test Discussion",
+				Body:        "This is a test",
+				URL:         "https://github.com/OWNER/REPO/discussions/42",
+				Closed:      true,
+				StateReason: "RESOLVED",
+				Author:      DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
+				Category: DiscussionCategory{
+					ID:           "C1",
+					Name:         "Q&A",
+					Slug:         "q-a",
+					Emoji:        ":question:",
+					IsAnswerable: true,
+				},
+				Labels:         []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}},
+				Answered:       true,
+				AnswerChosenAt: time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC),
+				AnswerChosenBy: &DiscussionActor{ID: "U2", Login: "bob", Name: "Bob"},
+				ReactionGroups: []ReactionGroup{
+					{Content: "THUMBS_UP", TotalCount: 3},
+				},
+				Comments:  DiscussionCommentList{TotalCount: 5},
+				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+				ClosedAt:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+				Locked:    true,
 			},
 		},
 		{
 			name: "discussions disabled",
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				node := minimalNode("D_1", "Test")
 				reg.Register(
 					httpmock.GraphQL(`query DiscussionMinimal\b`),
-					httpmock.StringResponse(getByNumberResp(false, 0, node)),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": false,
+									"discussion": null
+								}
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository", "discussion"],
+									"message": "Could not resolve to a Discussion with the number of 42."
+								}
+							]
+						}
+					`)),
 				)
 			},
-			wantErr: "discussions disabled",
+			wantErr: "Could not resolve to a Discussion with the number of 42.",
+		},
+		{
+			name: "repo not found",
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionMinimal\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": null
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository"],
+									"message": "Could not resolve to a Repository with the name 'OWNER/REPO'."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Repository with the name 'OWNER/REPO'.",
 		},
 	}
 
@@ -1117,9 +1154,8 @@ func TestGetByNumber(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, d)
-			if tt.wantDisc != nil {
-				tt.wantDisc(t, d)
-			}
+			require.NotNil(t, tt.assertDisc, "assertDisc must be set for non-error cases")
+			assert.Equal(t, tt.assertDisc, d)
 		})
 	}
 }
