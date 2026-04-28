@@ -166,7 +166,7 @@ func TestList(t *testing.T) {
 						"totalCount": 0,
 						"pageInfo": {
 							"hasNextPage": false,
-							"endCursor": ""
+							"endCursor": null
 						},
 						"nodes": []
 					}
