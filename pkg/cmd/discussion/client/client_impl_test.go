@@ -105,10 +105,6 @@ func searchResp(hasNext bool, cursor string, count int, nodes string) string {
 	`, count, hasNext, cursor, nodes)
 }
 
-// ---------------------------------------------------------------------------
-// List
-// ---------------------------------------------------------------------------
-
 func TestList(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
 
@@ -1160,10 +1156,6 @@ func TestGetByNumber(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// GetWithComments
-// ---------------------------------------------------------------------------
-
 func TestGetWithComments(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
 
@@ -1821,10 +1813,6 @@ func TestGetWithComments(t *testing.T) {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// GetCommentReplies
-// ---------------------------------------------------------------------------
 
 func TestGetCommentReplies(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
