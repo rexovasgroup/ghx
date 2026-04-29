@@ -105,10 +105,6 @@ func searchResp(hasNext bool, cursor string, count int, nodes string) string {
 	`, count, hasNext, cursor, nodes)
 }
 
-// ---------------------------------------------------------------------------
-// List
-// ---------------------------------------------------------------------------
-
 func TestList(t *testing.T) {
 	repo := ghrepo.New("OWNER", "REPO")
 
@@ -166,7 +162,7 @@ func TestList(t *testing.T) {
 						"totalCount": 0,
 						"pageInfo": {
 							"hasNextPage": false,
-							"endCursor": ""
+							"endCursor": null
 						},
 						"nodes": []
 					}
@@ -1003,6 +999,1479 @@ func TestListCategories(t *testing.T) {
 			for i, want := range tt.wantCats {
 				assert.Equal(t, want, categories[i])
 			}
+		})
+	}
+}
+
+func TestGetByNumber(t *testing.T) {
+	repo := ghrepo.New("OWNER", "REPO")
+
+	tests := []struct {
+		name       string
+		httpStubs  func(*testing.T, *httpmock.Registry)
+		wantErr    string
+		assertDisc *Discussion
+	}{
+		{
+			name: "maps all fields",
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionMinimal\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 42,
+										"title": "Test Discussion",
+										"body": "This is a test",
+										"url": "https://github.com/OWNER/REPO/discussions/42",
+										"closed": true,
+										"stateReason": "RESOLVED",
+										"isAnswered": true,
+										"answerChosenAt": "2025-06-01T12:00:00Z",
+										"author": {"__typename": "User", "login": "alice", "id": "U1", "name": "Alice"},
+										"category": {"id": "C1", "name": "Q&A", "slug": "q-a", "emoji": ":question:", "isAnswerable": true},
+										"answerChosenBy": {"__typename": "User", "login": "bob", "id": "U2", "name": "Bob"},
+										"labels": {"nodes": [{"id": "L1", "name": "bug", "color": "d73a4a"}]},
+										"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 3}}],
+										"createdAt": "2025-01-01T00:00:00Z",
+										"updatedAt": "2025-01-02T00:00:00Z",
+										"closedAt": "2025-06-01T00:00:00Z",
+										"locked": true,
+										"comments": {"totalCount": 5}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: &Discussion{
+				ID:          "D_1",
+				Number:      42,
+				Title:       "Test Discussion",
+				Body:        "This is a test",
+				URL:         "https://github.com/OWNER/REPO/discussions/42",
+				Closed:      true,
+				StateReason: "RESOLVED",
+				Author:      DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
+				Category: DiscussionCategory{
+					ID:           "C1",
+					Name:         "Q&A",
+					Slug:         "q-a",
+					Emoji:        ":question:",
+					IsAnswerable: true,
+				},
+				Labels:         []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}},
+				Answered:       true,
+				AnswerChosenAt: time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC),
+				AnswerChosenBy: &DiscussionActor{ID: "U2", Login: "bob", Name: "Bob"},
+				ReactionGroups: []ReactionGroup{
+					{Content: "THUMBS_UP", TotalCount: 3},
+				},
+				Comments:  DiscussionCommentList{TotalCount: 5},
+				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+				ClosedAt:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+				Locked:    true,
+			},
+		},
+		{
+			name: "discussions disabled",
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionMinimal\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": false,
+									"discussion": null
+								}
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository", "discussion"],
+									"message": "Could not resolve to a Discussion with the number of 42."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Discussion with the number of 42.",
+		},
+		{
+			name: "repo not found",
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionMinimal\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": null
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository"],
+									"message": "Could not resolve to a Repository with the name 'OWNER/REPO'."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Repository with the name 'OWNER/REPO'.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+
+			if tt.httpStubs != nil {
+				tt.httpStubs(t, reg)
+			}
+
+			c := newTestDiscussionClient(reg)
+			d, err := c.GetByNumber(repo, 42)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, d)
+			require.NotNil(t, tt.assertDisc, "assertDisc must be set for non-error cases")
+			assert.Equal(t, tt.assertDisc, d)
+		})
+	}
+}
+
+func TestGetWithComments(t *testing.T) {
+	repo := ghrepo.New("OWNER", "REPO")
+
+	tests := []struct {
+		name       string
+		limit      int
+		after      string
+		newest     bool
+		httpStubs  func(*testing.T, *httpmock.Registry)
+		wantErr    string
+		assertDisc func(*testing.T, *Discussion)
+	}{
+		{
+			name:   "maps comments with replies",
+			limit:  10,
+			newest: false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 42,
+										"title": "Test Discussion",
+										"body": "Discussion body",
+										"url": "https://github.com/OWNER/REPO/discussions/42",
+										"closed": true,
+										"stateReason": "RESOLVED",
+										"isAnswered": true,
+										"answerChosenAt": "2025-06-01T12:00:00Z",
+										"author": {"__typename": "User", "login": "alice", "id": "U_alice", "name": "Alice"},
+										"category": {"id": "CAT1", "name": "Q&A", "slug": "q-a", "emoji": ":question:", "isAnswerable": true},
+										"answerChosenBy": {"__typename": "User", "login": "bob", "id": "U_bob", "name": "Bob"},
+										"labels": {"nodes": [{"id": "L1", "name": "bug", "color": "d73a4a"}]},
+										"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 3}}],
+										"createdAt": "2025-01-01T00:00:00Z",
+										"updatedAt": "2025-01-02T00:00:00Z",
+										"closedAt": "2025-06-01T00:00:00Z",
+										"locked": true,
+										"comments": {
+											"totalCount": 1,
+											"pageInfo": {"endCursor": "COM_CUR", "hasNextPage": true, "startCursor": "COM_START", "hasPreviousPage": false},
+											"nodes": [
+												{
+													"id": "C1",
+													"url": "https://github.com/OWNER/REPO/discussions/42#comment-1",
+													"author": {"__typename": "User", "login": "octocat", "id": "U_octocat", "name": "Octocat"},
+													"body": "Main comment",
+													"createdAt": "2025-03-01T00:00:00Z",
+													"isAnswer": true,
+													"upvoteCount": 5,
+													"reactionGroups": [{"content": "HEART", "users": {"totalCount": 2}}],
+													"replies": {
+														"totalCount": 1,
+														"nodes": [
+															{
+																"id": "R1",
+																"url": "https://github.com/OWNER/REPO/discussions/42#reply-1",
+																"author": {"__typename": "User", "login": "hubot", "id": "U_hubot", "name": "Hubot"},
+																"body": "Thanks!",
+																"createdAt": "2025-04-01T00:00:00Z",
+																"isAnswer": false,
+																"upvoteCount": 1,
+																"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 1}}]
+															}
+														]
+													}
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				assert.Equal(t, Discussion{
+					ID:          "D_1",
+					Number:      42,
+					Title:       "Test Discussion",
+					Body:        "Discussion body",
+					URL:         "https://github.com/OWNER/REPO/discussions/42",
+					Closed:      true,
+					StateReason: "RESOLVED",
+					Author:      DiscussionActor{ID: "U_alice", Login: "alice", Name: "Alice"},
+					Category: DiscussionCategory{
+						ID:           "CAT1",
+						Name:         "Q&A",
+						Slug:         "q-a",
+						Emoji:        ":question:",
+						IsAnswerable: true,
+					},
+					Labels:         []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}},
+					Answered:       true,
+					AnswerChosenAt: time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC),
+					AnswerChosenBy: &DiscussionActor{ID: "U_bob", Login: "bob", Name: "Bob"},
+					ReactionGroups: []ReactionGroup{{Content: "THUMBS_UP", TotalCount: 3}},
+					CreatedAt:      time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					UpdatedAt:      time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+					ClosedAt:       time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Locked:         true,
+					Comments: DiscussionCommentList{
+						TotalCount: 1,
+						NextCursor: "COM_CUR",
+						Direction:  DiscussionCommentListDirectionForward,
+						Comments: []DiscussionComment{
+							{
+								ID:             "C1",
+								URL:            "https://github.com/OWNER/REPO/discussions/42#comment-1",
+								Author:         DiscussionActor{ID: "U_octocat", Login: "octocat", Name: "Octocat"},
+								Body:           "Main comment",
+								CreatedAt:      time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC),
+								IsAnswer:       true,
+								UpvoteCount:    5,
+								ReactionGroups: []ReactionGroup{{Content: "HEART", TotalCount: 2}},
+								Replies: DiscussionCommentList{
+									TotalCount: 1,
+									Direction:  DiscussionCommentListDirectionBackward,
+									Comments: []DiscussionComment{
+										{
+											ID:             "R1",
+											URL:            "https://github.com/OWNER/REPO/discussions/42#reply-1",
+											Author:         DiscussionActor{ID: "U_hubot", Login: "hubot", Name: "Hubot"},
+											Body:           "Thanks!",
+											CreatedAt:      time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
+											UpvoteCount:    1,
+											ReactionGroups: []ReactionGroup{{Content: "THUMBS_UP", TotalCount: 1}},
+										},
+									},
+								},
+							},
+						},
+					},
+				}, *d)
+			},
+		},
+		{
+			name:   "pagination forward",
+			limit:  5,
+			after:  "CUR_A",
+			newest: false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {
+											"totalCount": 3,
+											"pageInfo": {"endCursor": "CUR_B", "hasNextPage": true, "startCursor": "", "hasPreviousPage": false},
+											"nodes": [
+												{
+													"id": "C1",
+													"url": "",
+													"author": {"__typename": "User", "login": "alice"},
+													"body": "Hello",
+													"createdAt": "2025-01-01T00:00:00Z",
+													"isAnswer": false,
+													"upvoteCount": 0,
+													"reactionGroups": [],
+													"replies": {"totalCount": 0, "nodes": []}
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				comments := d.Comments
+				assert.Len(t, comments.Comments, 1)
+				assert.Equal(t, 3, comments.TotalCount)
+				assert.Equal(t, "CUR_A", comments.Cursor)
+				assert.Equal(t, "CUR_B", comments.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionForward, comments.Direction)
+			},
+		},
+		{
+			name:   "pagination backward newest",
+			limit:  5,
+			after:  "CUR_X",
+			newest: true,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {
+											"totalCount": 5,
+											"pageInfo": {"endCursor": "", "hasNextPage": false, "startCursor": "CUR_Y", "hasPreviousPage": true},
+											"nodes": [
+												{
+													"id": "C1",
+													"url": "",
+													"author": {"__typename": "User", "login": "alice"},
+													"body": "First",
+													"createdAt": "2025-01-01T00:00:00Z",
+													"isAnswer": false,
+													"upvoteCount": 0,
+													"reactionGroups": [],
+													"replies": {"totalCount": 0, "nodes": []}
+												},
+												{
+													"id": "C2",
+													"url": "",
+													"author": {"__typename": "User", "login": "bob"},
+													"body": "Second",
+													"createdAt": "2025-01-02T00:00:00Z",
+													"isAnswer": false,
+													"upvoteCount": 0,
+													"reactionGroups": [],
+													"replies": {"totalCount": 0, "nodes": []}
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				comments := d.Comments
+				assert.Len(t, comments.Comments, 2)
+				assert.Equal(t, 5, comments.TotalCount)
+				assert.Equal(t, "CUR_X", comments.Cursor)
+				assert.Equal(t, "CUR_Y", comments.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionBackward, comments.Direction)
+				assert.Equal(t, "C2", comments.Comments[0].ID, "newest mode should reverse comments")
+				assert.Equal(t, "C1", comments.Comments[1].ID)
+			},
+		},
+		{
+			name:   "no more pages",
+			limit:  10,
+			newest: false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {
+											"totalCount": 1,
+											"pageInfo": {"endCursor": "", "hasNextPage": false, "startCursor": "", "hasPreviousPage": false},
+											"nodes": [
+												{
+													"id": "C1",
+													"url": "",
+													"author": {"__typename": "User", "login": "alice"},
+													"body": "Only one",
+													"createdAt": "2025-01-01T00:00:00Z",
+													"isAnswer": false,
+													"upvoteCount": 0,
+													"reactionGroups": [],
+													"replies": {"totalCount": 0, "nodes": []}
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				comments := d.Comments
+				assert.Len(t, comments.Comments, 1)
+				assert.Equal(t, 1, comments.TotalCount)
+				assert.Equal(t, "", comments.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionForward, comments.Direction)
+			},
+		},
+		{
+			name:   "discussions disabled",
+			limit:  10,
+			newest: false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": false,
+									"discussion": null
+								}
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository", "discussion"],
+									"message": "Could not resolve to a Discussion with the number of 1."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Discussion",
+		},
+		{
+			name:   "repo not found",
+			limit:  10,
+			newest: false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": null
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository"],
+									"message": "Could not resolve to a Repository with the name 'OWNER/REPO'."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Repository with the name 'OWNER/REPO'.",
+		},
+		{
+			name:   "empty comments",
+			limit:  10,
+			newest: false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {
+											"totalCount": 0,
+											"pageInfo": {"endCursor": null, "hasNextPage": false, "startCursor": null, "hasPreviousPage": false},
+											"nodes": []
+										}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				comments := d.Comments
+				assert.Len(t, comments.Comments, 0)
+				assert.Equal(t, 0, comments.TotalCount)
+				assert.Equal(t, DiscussionCommentListDirectionForward, comments.Direction)
+			},
+		},
+		{
+			name:   "first page newest reverses comments",
+			limit:  5,
+			newest: true,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {
+											"totalCount": 8,
+											"pageInfo": {"endCursor": "", "hasNextPage": false, "startCursor": "CUR_START", "hasPreviousPage": true},
+											"nodes": [
+												{
+													"id": "C4",
+													"url": "",
+													"author": {"__typename": "User", "login": "alice"},
+													"body": "Fourth",
+													"createdAt": "2025-01-04T00:00:00Z",
+													"isAnswer": false,
+													"upvoteCount": 0,
+													"reactionGroups": [],
+													"replies": {"totalCount": 0, "nodes": []}
+												},
+												{
+													"id": "C5",
+													"url": "",
+													"author": {"__typename": "User", "login": "bob"},
+													"body": "Fifth",
+													"createdAt": "2025-01-05T00:00:00Z",
+													"isAnswer": false,
+													"upvoteCount": 0,
+													"reactionGroups": [],
+													"replies": {"totalCount": 0, "nodes": []}
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				comments := d.Comments
+				assert.Len(t, comments.Comments, 2)
+				assert.Equal(t, 8, comments.TotalCount)
+				assert.Equal(t, "", comments.Cursor)
+				assert.Equal(t, "CUR_START", comments.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionBackward, comments.Direction)
+				assert.Equal(t, "C5", comments.Comments[0].ID, "newest mode should reverse comments")
+				assert.Equal(t, "C4", comments.Comments[1].ID)
+			},
+		},
+		{
+			name:   "multiple replies on comment",
+			limit:  10,
+			newest: false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionWithComments\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {
+											"totalCount": 1,
+											"pageInfo": {"endCursor": "", "hasNextPage": false, "startCursor": "", "hasPreviousPage": false},
+											"nodes": [
+												{
+													"id": "C1",
+													"url": "",
+													"author": {"__typename": "User", "login": "alice"},
+													"body": "Parent",
+													"createdAt": "2025-01-01T00:00:00Z",
+													"isAnswer": false,
+													"upvoteCount": 0,
+													"reactionGroups": [],
+													"replies": {
+														"totalCount": 3,
+														"nodes": [
+															{
+																"id": "R1",
+																"url": "",
+																"author": {"__typename": "User", "login": "bob"},
+																"body": "First reply",
+																"createdAt": "2025-01-02T00:00:00Z",
+																"isAnswer": false,
+																"upvoteCount": 0,
+																"reactionGroups": []
+															},
+															{
+																"id": "R2",
+																"url": "",
+																"author": {"__typename": "User", "login": "carol"},
+																"body": "Second reply",
+																"createdAt": "2025-01-03T00:00:00Z",
+																"isAnswer": false,
+																"upvoteCount": 0,
+																"reactionGroups": []
+															},
+															{
+																"id": "R3",
+																"url": "",
+																"author": {"__typename": "User", "login": "dave"},
+																"body": "Third reply",
+																"createdAt": "2025-01-04T00:00:00Z",
+																"isAnswer": false,
+																"upvoteCount": 0,
+																"reactionGroups": []
+															}
+														]
+													}
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				comments := d.Comments
+				assert.Len(t, comments.Comments, 1)
+				assert.Equal(t, 1, comments.TotalCount)
+				assert.Equal(t, DiscussionCommentListDirectionForward, comments.Direction)
+				c := comments.Comments[0]
+				require.Len(t, c.Replies.Comments, 3)
+				assert.Equal(t, 3, c.Replies.TotalCount)
+				assert.Equal(t, "R1", c.Replies.Comments[0].ID)
+				assert.Equal(t, "R2", c.Replies.Comments[1].ID)
+				assert.Equal(t, "R3", c.Replies.Comments[2].ID)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+
+			if tt.httpStubs != nil {
+				tt.httpStubs(t, reg)
+			}
+
+			c := newTestDiscussionClient(reg)
+			d, err := c.GetWithComments(repo, 1, tt.limit, tt.after, tt.newest)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, d)
+			require.NotNil(t, tt.assertDisc, "assertDisc must be set for non-error cases")
+			tt.assertDisc(t, d)
+		})
+	}
+}
+
+func TestGetCommentReplies(t *testing.T) {
+	repo := ghrepo.New("OWNER", "REPO")
+
+	tests := []struct {
+		name       string
+		commentID  string
+		limit      int
+		after      string
+		newest     bool
+		httpStubs  func(*testing.T, *httpmock.Registry)
+		wantErr    string
+		assertDisc func(*testing.T, *Discussion)
+	}{
+		{
+			name:      "maps all fields",
+			commentID: "DC_abc",
+			limit:     10,
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 42,
+										"title": "Test Discussion",
+										"body": "Discussion body",
+										"url": "https://github.com/OWNER/REPO/discussions/42",
+										"closed": true,
+										"stateReason": "RESOLVED",
+										"isAnswered": true,
+										"answerChosenAt": "2025-06-01T12:00:00Z",
+										"author": {"__typename": "User", "login": "alice", "id": "U_alice", "name": "Alice"},
+										"category": {"id": "CAT1", "name": "Q&A", "slug": "q-a", "emoji": ":question:", "isAnswerable": true},
+										"answerChosenBy": {"__typename": "User", "login": "bob", "id": "U_bob", "name": "Bob"},
+										"labels": {"nodes": [{"id": "L1", "name": "bug", "color": "d73a4a"}]},
+										"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 3}}],
+										"createdAt": "2025-01-01T00:00:00Z",
+										"updatedAt": "2025-01-02T00:00:00Z",
+										"closedAt": "2025-06-01T00:00:00Z",
+										"locked": true
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "https://github.com/OWNER/REPO/discussions/42#discussioncomment-1",
+									"author": {"__typename": "User", "login": "octocat", "id": "U_octocat", "name": "Octocat"},
+									"body": "Top-level comment",
+									"createdAt": "2025-03-01T00:00:00Z",
+									"isAnswer": true,
+									"upvoteCount": 5,
+									"reactionGroups": [{"content": "HEART", "users": {"totalCount": 2}}],
+									"replies": {
+										"totalCount": 1,
+										"pageInfo": {"endCursor": "REP_CUR", "hasNextPage": true, "startCursor": "REP_START", "hasPreviousPage": false},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "https://github.com/OWNER/REPO/discussions/42#discussioncomment-2",
+												"author": {"__typename": "User", "login": "hubot", "id": "U_hubot", "name": "Hubot"},
+												"body": "A reply",
+												"createdAt": "2025-04-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 1,
+												"reactionGroups": [{"content": "THUMBS_UP", "users": {"totalCount": 1}}]
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				assert.Equal(t, Discussion{
+					ID:          "D_1",
+					Number:      42,
+					Title:       "Test Discussion",
+					Body:        "Discussion body",
+					URL:         "https://github.com/OWNER/REPO/discussions/42",
+					Closed:      true,
+					StateReason: "RESOLVED",
+					Author:      DiscussionActor{ID: "U_alice", Login: "alice", Name: "Alice"},
+					Category: DiscussionCategory{
+						ID:           "CAT1",
+						Name:         "Q&A",
+						Slug:         "q-a",
+						Emoji:        ":question:",
+						IsAnswerable: true,
+					},
+					Labels:         []DiscussionLabel{{ID: "L1", Name: "bug", Color: "d73a4a"}},
+					Answered:       true,
+					AnswerChosenAt: time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC),
+					AnswerChosenBy: &DiscussionActor{ID: "U_bob", Login: "bob", Name: "Bob"},
+					ReactionGroups: []ReactionGroup{{Content: "THUMBS_UP", TotalCount: 3}},
+					CreatedAt:      time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					UpdatedAt:      time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC),
+					ClosedAt:       time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Locked:         true,
+					Comments: DiscussionCommentList{
+						TotalCount: 1,
+						Comments: []DiscussionComment{
+							{
+								ID:             "DC_abc",
+								URL:            "https://github.com/OWNER/REPO/discussions/42#discussioncomment-1",
+								Author:         DiscussionActor{ID: "U_octocat", Login: "octocat", Name: "Octocat"},
+								Body:           "Top-level comment",
+								CreatedAt:      time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC),
+								IsAnswer:       true,
+								UpvoteCount:    5,
+								ReactionGroups: []ReactionGroup{{Content: "HEART", TotalCount: 2}},
+								Replies: DiscussionCommentList{
+									TotalCount: 1,
+									NextCursor: "REP_CUR",
+									Direction:  DiscussionCommentListDirectionForward,
+									Comments: []DiscussionComment{
+										{
+											ID:             "R1",
+											URL:            "https://github.com/OWNER/REPO/discussions/42#discussioncomment-2",
+											Author:         DiscussionActor{ID: "U_hubot", Login: "hubot", Name: "Hubot"},
+											Body:           "A reply",
+											CreatedAt:      time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
+											UpvoteCount:    1,
+											ReactionGroups: []ReactionGroup{{Content: "THUMBS_UP", TotalCount: 1}},
+										},
+									},
+								},
+							},
+						},
+					},
+				}, *d)
+			},
+		},
+		{
+			name:      "pagination forward oldest",
+			commentID: "DC_abc",
+			limit:     5,
+			after:     "CUR_A",
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 3,
+										"pageInfo": {"endCursor": "CUR_B", "hasNextPage": true, "startCursor": "CUR_A", "hasPreviousPage": false},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Reply 1",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											},
+											{
+												"id": "R2",
+												"url": "",
+												"author": {"__typename": "User", "login": "carol"},
+												"body": "Reply 2",
+												"createdAt": "2025-03-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 2)
+				assert.Equal(t, 3, replies.TotalCount)
+				assert.Equal(t, "CUR_A", replies.Cursor)
+				assert.Equal(t, "CUR_B", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionForward, replies.Direction)
+				assert.Equal(t, "R1", replies.Comments[0].ID, "forward mode should preserve chronological order")
+				assert.Equal(t, "R2", replies.Comments[1].ID)
+			},
+		},
+		{
+			name:      "pagination backward newest reverses replies",
+			commentID: "DC_abc",
+			limit:     5,
+			after:     "CUR_X",
+			newest:    true,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 5,
+										"pageInfo": {"endCursor": "CUR_END", "hasNextPage": false, "startCursor": "CUR_Y", "hasPreviousPage": true},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Older",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											},
+											{
+												"id": "R2",
+												"url": "",
+												"author": {"__typename": "User", "login": "carol"},
+												"body": "Newer",
+												"createdAt": "2025-03-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 2)
+				assert.Equal(t, 5, replies.TotalCount)
+				assert.Equal(t, "CUR_X", replies.Cursor)
+				assert.Equal(t, "CUR_Y", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionBackward, replies.Direction)
+				assert.Equal(t, "R2", replies.Comments[0].ID, "newest mode should reverse replies")
+				assert.Equal(t, "R1", replies.Comments[1].ID)
+			},
+		},
+		{
+			name:      "first page newest reverses replies",
+			commentID: "DC_abc",
+			limit:     5,
+			newest:    true,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 3,
+										"pageInfo": {"endCursor": "", "hasNextPage": false, "startCursor": "CUR_START", "hasPreviousPage": true},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Older",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											},
+											{
+												"id": "R2",
+												"url": "",
+												"author": {"__typename": "User", "login": "carol"},
+												"body": "Newer",
+												"createdAt": "2025-03-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 2)
+				assert.Equal(t, 3, replies.TotalCount)
+				assert.Equal(t, "", replies.Cursor)
+				assert.Equal(t, "CUR_START", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionBackward, replies.Direction)
+				assert.Equal(t, "R2", replies.Comments[0].ID, "newest mode should reverse replies")
+				assert.Equal(t, "R1", replies.Comments[1].ID)
+			},
+		},
+		{
+			name:      "no more pages",
+			commentID: "DC_abc",
+			limit:     10,
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 1,
+										"pageInfo": {"endCursor": "CUR_ONLY", "hasNextPage": false, "startCursor": "CUR_ONLY", "hasPreviousPage": false},
+										"nodes": [
+											{
+												"id": "R1",
+												"url": "",
+												"author": {"__typename": "User", "login": "bob"},
+												"body": "Only reply",
+												"createdAt": "2025-02-01T00:00:00Z",
+												"isAnswer": false,
+												"upvoteCount": 0,
+												"reactionGroups": []
+											}
+										]
+									}
+								}
+							}
+						}
+					`)),
+				)
+			},
+			assertDisc: func(t *testing.T, d *Discussion) {
+				replies := d.Comments.Comments[0].Replies
+				assert.Len(t, replies.Comments, 1)
+				assert.Equal(t, 1, replies.TotalCount)
+				assert.Equal(t, "", replies.NextCursor)
+				assert.Equal(t, DiscussionCommentListDirectionForward, replies.Direction)
+			},
+		},
+		{
+			name:      "discussions disabled",
+			commentID: "DC_abc",
+			limit:     10,
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": false,
+									"discussion": null
+								},
+								"node": {
+									"id": "DC_abc",
+									"url": "",
+									"author": {"__typename": "User", "login": "alice"},
+									"body": "Comment",
+									"createdAt": "2025-01-01T00:00:00Z",
+									"isAnswer": false,
+									"upvoteCount": 0,
+									"reactionGroups": [],
+									"replies": {
+										"totalCount": 0,
+										"pageInfo": {"endCursor": null, "hasNextPage": false, "startCursor": null, "hasPreviousPage": false},
+										"nodes": []
+									}
+								}
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository", "discussion"],
+									"message": "Could not resolve to a Discussion with the number of 1."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Discussion",
+		},
+		{
+			name:      "repo not found",
+			commentID: "DC_abc",
+			limit:     10,
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": null,
+								"node": null
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["repository"],
+									"message": "Could not resolve to a Repository with the name 'OWNER/REPO'."
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a Repository",
+		},
+		{
+			name:      "reply node not found",
+			commentID: "DC_invalid",
+			limit:     10,
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": null
+							},
+							"errors": [
+								{
+									"type": "NOT_FOUND",
+									"path": ["node"],
+									"message": "Could not resolve to a node with the global id of 'DC_invalid'"
+								}
+							]
+						}
+					`)),
+				)
+			},
+			wantErr: "Could not resolve to a node",
+		},
+		{
+			name:      "node is not a discussion comment",
+			commentID: "I_notacomment",
+			limit:     10,
+			newest:    false,
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query DiscussionCommentReplies\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"hasDiscussionsEnabled": true,
+									"discussion": {
+										"id": "D_1",
+										"number": 1,
+										"title": "Test",
+										"body": "",
+										"url": "",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice"},
+										"category": {"id": "C1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2024-01-01T00:00:00Z",
+										"updatedAt": "2024-01-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false
+									}
+								},
+								"node": {}
+							}
+						}
+					`)),
+				)
+			},
+			wantErr: "node I_notacomment is not a discussion comment",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+
+			if tt.httpStubs != nil {
+				tt.httpStubs(t, reg)
+			}
+
+			c := newTestDiscussionClient(reg)
+			d, err := c.GetCommentReplies(repo, 1, tt.commentID, tt.limit, tt.after, tt.newest)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, d)
+			require.Len(t, d.Comments.Comments, 1, "GetCommentReplies should return exactly one comment")
+			require.NotNil(t, tt.assertDisc, "assertDisc must be set for non-error cases")
+			tt.assertDisc(t, d)
 		})
 	}
 }
