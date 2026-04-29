@@ -7,6 +7,7 @@ import (
 	"github.com/cli/cli/v2/internal/codespaces/api"
 	"github.com/cli/cli/v2/internal/codespaces/connection"
 	"github.com/microsoft/dev-tunnels/go/tunnels"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestNewPortForwarder(t *testing.T) {
@@ -195,6 +196,60 @@ func TestForwardPortDefaultsToHTTPProtocol(t *testing.T) {
 
 	if ports[0].Protocol != string(tunnels.TunnelProtocolHttp) {
 		t.Fatalf("expected port protocol to be http, got %s", ports[0].Protocol)
+	}
+}
+
+func TestConcurrentForwardPortDoesNotRace(t *testing.T) {
+	codespace := &api.Codespace{
+		Name:  "codespace-name",
+		State: api.CodespaceStateAvailable,
+		Connection: api.CodespaceConnection{
+			TunnelProperties: api.TunnelProperties{
+				ConnectAccessToken:     "tunnel access-token",
+				ManagePortsAccessToken: "manage-ports-token",
+				ServiceUri:             "http://global.rel.tunnels.api.visualstudio.com/",
+				TunnelId:               "tunnel-id",
+				ClusterId:              "usw2",
+				Domain:                 "domain.com",
+			},
+		},
+		RuntimeConstraints: api.RuntimeConstraints{
+			AllowedPortPrivacySettings: []string{"public", "private"},
+		},
+	}
+
+	tunnelPorts := map[int]tunnels.TunnelPort{}
+
+	httpClient, err := connection.NewMockHttpClient(
+		connection.WithSpecificPorts(tunnelPorts),
+	)
+	if err != nil {
+		t.Fatalf("NewMockHttpClient returned an error: %v", err)
+	}
+
+	conn, err := connection.NewCodespaceConnection(t.Context(), codespace, httpClient)
+	if err != nil {
+		t.Fatalf("NewCodespaceConnection returned an error: %v", err)
+	}
+
+	// Forward multiple ports concurrently from the same connection,
+	// mirroring what ForwardPorts does in ports.go.
+	group, ctx := errgroup.WithContext(t.Context())
+	for port := 3000; port < 3010; port++ {
+		fwd, err := NewPortForwarder(ctx, conn)
+		if err != nil {
+			t.Fatalf("NewPortForwarder returned an error: %v", err)
+		}
+
+		group.Go(func() error {
+			return fwd.ForwardPort(ctx, ForwardPortOpts{
+				Port: port,
+			})
+		})
+	}
+
+	if err := group.Wait(); err != nil {
+		t.Fatalf("ForwardPort returned an error: %v", err)
 	}
 }
 

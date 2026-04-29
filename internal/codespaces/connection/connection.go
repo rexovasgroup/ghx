@@ -30,6 +30,12 @@ type CodespaceConnection struct {
 	Options                    *tunnels.TunnelRequestOptions
 	Tunnel                     *tunnels.Tunnel
 	AllowedPortPrivacySettings []string
+
+	// ManagerMu serializes access to TunnelManager operations which mutate
+	// shared state on the Tunnel object and are not goroutine-safe.
+	// This is a pointer so that shallow copies of CodespaceConnection
+	// (e.g. in NewPortForwarder) share the same mutex.
+	ManagerMu *sync.Mutex
 }
 
 // NewCodespaceConnection initializes a connection to a codespace.
@@ -78,6 +84,7 @@ func NewCodespaceConnection(ctx context.Context, codespace *api.Codespace, httpC
 		Options:                    options,
 		Tunnel:                     tunnel,
 		AllowedPortPrivacySettings: allowedPortPrivacySettings,
+		ManagerMu:                  &sync.Mutex{},
 	}, nil
 }
 

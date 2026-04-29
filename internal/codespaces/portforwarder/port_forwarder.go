@@ -108,6 +108,10 @@ func (fwd *CodespacesPortForwarder) ForwardPort(ctx context.Context, opts Forwar
 		return fmt.Errorf("error converting port: %w", err)
 	}
 
+	// Serialize TunnelManager operations which mutate shared state on the
+	// Tunnel object and are not goroutine-safe.
+	fwd.connection.ManagerMu.Lock()
+
 	// In v0.0.25 of dev-tunnels, the dev-tunnel manager `CreateTunnelPort` would "accept" requests that
 	// change the port protocol but they would not result in any actual change. This has changed, resulting in
 	// an error `Invalid arguments. The tunnel port protocol cannot be changed.`. It's not clear why the previous
@@ -120,6 +124,7 @@ func (fwd *CodespacesPortForwarder) ForwardPort(ctx context.Context, opts Forwar
 
 	existingPort, err := fwd.connection.TunnelManager.GetTunnelPort(ctx, fwd.connection.Tunnel, opts.Port, fwd.connection.Options)
 	if err != nil && !strings.Contains(err.Error(), "404") {
+		fwd.connection.ManagerMu.Unlock()
 		return fmt.Errorf("error checking whether tunnel port already exists: %v", err)
 	}
 
@@ -142,6 +147,7 @@ func (fwd *CodespacesPortForwarder) ForwardPort(ctx context.Context, opts Forwar
 
 		// If the requested visibility is not allowed, return an error
 		if !allowed {
+			fwd.connection.ManagerMu.Unlock()
 			return fmt.Errorf("visibility %s is not allowed", opts.Visibility)
 		}
 
@@ -162,6 +168,7 @@ func (fwd *CodespacesPortForwarder) ForwardPort(ctx context.Context, opts Forwar
 
 	// Create the tunnel port
 	_, err = fwd.connection.TunnelManager.CreateTunnelPort(ctx, fwd.connection.Tunnel, tunnelPort, fwd.connection.Options)
+	fwd.connection.ManagerMu.Unlock()
 	if err != nil && !strings.Contains(err.Error(), "409") {
 		return fmt.Errorf("create tunnel port failed: %v", err)
 	}
@@ -243,7 +250,9 @@ func (fwd *CodespacesPortForwarder) ConnectToForwardedPort(ctx context.Context, 
 
 // ListPorts fetches the list of ports that are currently forwarded.
 func (fwd *CodespacesPortForwarder) ListPorts(ctx context.Context) (ports []*tunnels.TunnelPort, err error) {
+	fwd.connection.ManagerMu.Lock()
 	ports, err = fwd.connection.TunnelManager.ListTunnelPorts(ctx, fwd.connection.Tunnel, fwd.connection.Options)
+	fwd.connection.ManagerMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("error listing ports: %w", err)
 	}
@@ -253,7 +262,9 @@ func (fwd *CodespacesPortForwarder) ListPorts(ctx context.Context) (ports []*tun
 
 // UpdatePortVisibility changes the visibility (private, org, public) of the specified port.
 func (fwd *CodespacesPortForwarder) UpdatePortVisibility(ctx context.Context, remotePort int, visibility string) error {
+	fwd.connection.ManagerMu.Lock()
 	tunnelPort, err := fwd.connection.TunnelManager.GetTunnelPort(ctx, fwd.connection.Tunnel, remotePort, fwd.connection.Options)
+	fwd.connection.ManagerMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("error getting tunnel port: %w", err)
 	}
@@ -268,7 +279,9 @@ func (fwd *CodespacesPortForwarder) UpdatePortVisibility(ctx context.Context, re
 	if err != nil {
 		return fmt.Errorf("error converting port: %w", err)
 	}
+	fwd.connection.ManagerMu.Lock()
 	err = fwd.connection.TunnelManager.DeleteTunnelPort(ctx, fwd.connection.Tunnel, port, fwd.connection.Options)
+	fwd.connection.ManagerMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("error deleting tunnel port: %w", err)
 	}
