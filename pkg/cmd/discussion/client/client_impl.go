@@ -775,8 +775,92 @@ func (c *discussionClient) ListCategories(repo ghrepo.Interface) ([]DiscussionCa
 	return categories, nil
 }
 
-func (c *discussionClient) Create(_ ghrepo.Interface, _ CreateDiscussionInput) (*Discussion, error) {
-	return nil, fmt.Errorf("not implemented")
+// repositoryMeta holds the node ID and feature flags fetched for a repository.
+type repositoryMeta struct {
+	ID                    string
+	HasDiscussionsEnabled bool
+}
+
+// getRepositoryMeta fetches the node ID and discussion-enabled flag for a repository.
+func (c *discussionClient) getRepositoryMeta(repo ghrepo.Interface) (*repositoryMeta, error) {
+	var query struct {
+		Repository struct {
+			ID                    string
+			HasDiscussionsEnabled bool
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+
+	variables := map[string]interface{}{
+		"owner": githubv4.String(repo.RepoOwner()),
+		"name":  githubv4.String(repo.RepoName()),
+	}
+
+	if err := c.gql.Query(repo.RepoHost(), "RepositoryMeta", &query, variables); err != nil {
+		return nil, err
+	}
+
+	return &repositoryMeta{
+		ID:                    query.Repository.ID,
+		HasDiscussionsEnabled: query.Repository.HasDiscussionsEnabled,
+	}, nil
+}
+
+// createDiscussionGQLInput is the typed input for the createDiscussion GraphQL mutation.
+type createDiscussionGQLInput struct {
+	RepositoryID githubv4.ID     `json:"repositoryId"`
+	CategoryID   githubv4.ID     `json:"categoryId"`
+	Title        githubv4.String `json:"title"`
+	Body         githubv4.String `json:"body"`
+}
+
+func (c *discussionClient) Create(repo ghrepo.Interface, input CreateDiscussionInput) (*Discussion, error) {
+	repoID := input.RepositoryID
+	if repoID == "" {
+		meta, err := c.getRepositoryMeta(repo)
+		if err != nil {
+			return nil, err
+		}
+		if !meta.HasDiscussionsEnabled {
+			return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
+		}
+		repoID = meta.ID
+	}
+
+	var mutation struct {
+		CreateDiscussion struct {
+			Discussion struct {
+				discussionListNode
+				Comments struct {
+					TotalCount int
+				}
+			}
+		} `graphql:"createDiscussion(input: $input)"`
+	}
+
+	variables := map[string]interface{}{
+		"input": createDiscussionGQLInput{
+			RepositoryID: githubv4.ID(repoID),
+			CategoryID:   githubv4.ID(input.CategoryID),
+			Title:        githubv4.String(input.Title),
+			Body:         githubv4.String(input.Body),
+		},
+	}
+
+	if err := c.gql.Mutate(repo.RepoHost(), "CreateDiscussion", &mutation, variables); err != nil {
+		return nil, err
+	}
+
+	d := mapDiscussionFromListNode(mutation.CreateDiscussion.Discussion.discussionListNode)
+	d.Comments = DiscussionCommentList{TotalCount: mutation.CreateDiscussion.Discussion.Comments.TotalCount}
+
+	for _, rg := range mutation.CreateDiscussion.Discussion.ReactionGroups {
+		d.ReactionGroups = append(d.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	return &d, nil
 }
 
 func (c *discussionClient) Update(_ ghrepo.Interface, _ UpdateDiscussionInput) (*Discussion, error) {
