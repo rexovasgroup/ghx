@@ -2510,7 +2510,13 @@ func TestCreate(t *testing.T) {
 					httpmock.StringResponse(repoMetaResp("R_1", true)),
 				)
 				reg.Register(
-					httpmock.GraphQL(`mutation CreateDiscussion\b`),
+					httpmock.GraphQLMutationMatcher(`mutation CreateDiscussion\b`, func(input map[string]interface{}) bool {
+						assert.Equal(t, "R_1", input["repositoryId"])
+						assert.Equal(t, "CAT_1", input["categoryId"])
+						assert.Equal(t, "New Discussion", input["title"])
+						assert.Equal(t, "Discussion body", input["body"])
+						return true
+					}),
 					httpmock.StringResponse(heredoc.Doc(`
 						{
 							"data": {
@@ -2562,66 +2568,6 @@ func TestCreate(t *testing.T) {
 			},
 		},
 		{
-			name: "skips repo lookup when RepositoryID provided",
-			input: CreateDiscussionInput{
-				RepositoryID: "R_existing",
-				CategoryID:   "CAT_1",
-				Title:        "Pre-resolved",
-				Body:         "Body",
-			},
-			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				// No RepositoryMeta query should be made.
-				reg.Register(
-					httpmock.GraphQL(`mutation CreateDiscussion\b`),
-					httpmock.StringResponse(heredoc.Doc(`
-						{
-							"data": {
-								"createDiscussion": {
-									"discussion": {
-										"id": "D_pre",
-										"number": 1,
-										"title": "Pre-resolved",
-										"body": "Body",
-										"url": "https://github.com/OWNER/REPO/discussions/1",
-										"closed": false,
-										"stateReason": "",
-										"isAnswered": false,
-										"answerChosenAt": "0001-01-01T00:00:00Z",
-										"author": {"__typename": "User", "login": "alice"},
-										"category": {"id": "CAT_1", "name": "General", "slug": "general", "emoji": "", "isAnswerable": false},
-										"answerChosenBy": null,
-										"labels": {"nodes": []},
-										"reactionGroups": [],
-										"createdAt": "2025-01-01T00:00:00Z",
-										"updatedAt": "2025-01-01T00:00:00Z",
-										"closedAt": "0001-01-01T00:00:00Z",
-										"locked": false,
-										"comments": {"totalCount": 0}
-									}
-								}
-							}
-						}
-					`)),
-				)
-			},
-			assertDisc: &Discussion{
-				ID:     "D_pre",
-				Number: 1,
-				Title:  "Pre-resolved",
-				Body:   "Body",
-				URL:    "https://github.com/OWNER/REPO/discussions/1",
-				Author: DiscussionActor{Login: "alice"},
-				Category: DiscussionCategory{
-					ID:   "CAT_1",
-					Name: "General",
-					Slug: "general",
-				},
-				Labels:    []DiscussionLabel{},
-				CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-				UpdatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-			},
-		},
-		{
 			name: "discussions disabled",
 			input: CreateDiscussionInput{
 				CategoryID: "CAT_1",
@@ -2667,12 +2613,15 @@ func TestCreate(t *testing.T) {
 		{
 			name: "mutation error",
 			input: CreateDiscussionInput{
-				RepositoryID: "R_1",
-				CategoryID:   "BAD_CAT",
-				Title:        "Test",
-				Body:         "Body",
+				CategoryID: "BAD_CAT",
+				Title:      "Test",
+				Body:       "Body",
 			},
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query RepositoryMeta\b`),
+					httpmock.StringResponse(repoMetaResp("R_1", true)),
+				)
 				reg.Register(
 					httpmock.GraphQL(`mutation CreateDiscussion\b`),
 					httpmock.StringResponse(heredoc.Doc(`
