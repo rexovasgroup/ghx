@@ -805,25 +805,13 @@ func (c *discussionClient) getRepositoryMeta(repo ghrepo.Interface) (*repository
 	}, nil
 }
 
-// createDiscussionGQLInput is the typed input for the createDiscussion GraphQL mutation.
-type createDiscussionGQLInput struct {
-	RepositoryID githubv4.ID     `json:"repositoryId"`
-	CategoryID   githubv4.ID     `json:"categoryId"`
-	Title        githubv4.String `json:"title"`
-	Body         githubv4.String `json:"body"`
-}
-
 func (c *discussionClient) Create(repo ghrepo.Interface, input CreateDiscussionInput) (*Discussion, error) {
-	repoID := input.RepositoryID
-	if repoID == "" {
-		meta, err := c.getRepositoryMeta(repo)
-		if err != nil {
-			return nil, err
-		}
-		if !meta.HasDiscussionsEnabled {
-			return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
-		}
-		repoID = meta.ID
+	meta, err := c.getRepositoryMeta(repo)
+	if err != nil {
+		return nil, err
+	}
+	if !meta.HasDiscussionsEnabled {
+		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 	}
 
 	var mutation struct {
@@ -838,8 +826,8 @@ func (c *discussionClient) Create(repo ghrepo.Interface, input CreateDiscussionI
 	}
 
 	variables := map[string]interface{}{
-		"input": createDiscussionGQLInput{
-			RepositoryID: githubv4.ID(repoID),
+		"input": githubv4.CreateDiscussionInput{
+			RepositoryID: githubv4.ID(meta.ID),
 			CategoryID:   githubv4.ID(input.CategoryID),
 			Title:        githubv4.String(input.Title),
 			Body:         githubv4.String(input.Body),
