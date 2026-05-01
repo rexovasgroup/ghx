@@ -330,6 +330,7 @@ type CreateDiscussionInput struct {
 	CategoryID string
 	Title      string
 	Body       string
+	Labels     []string
 }
 
 // UpdateDiscussionInput holds optional parameters for updating a discussion.
