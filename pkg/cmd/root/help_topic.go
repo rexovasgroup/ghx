@@ -65,6 +65,11 @@ var HelpTopics = []helpTopic{
 			%[1]sGH_DEBUG%[1]s: set to a truthy value to enable verbose output on standard error. Set to %[1]sapi%[1]s
 			to additionally log details of HTTP traffic.
 
+			%[1]sGH_AGGRESSIVE_CACHING_TTL%[1]s: when set to a duration like %[1]s30s%[1]s, %[1]s1m%[1]s, or %[1]s5m%[1]s, %[1]sgh%[1]s
+			caches API responses for that long. Useful for automation and agents that issue
+			repeated identical requests; responses may be up to that long out of date. Run
+			%[1]sgh config clear-cache%[1]s to evict cached entries.
+
 			%[1]sDEBUG%[1]s (deprecated): set to %[1]s1%[1]s, %[1]strue%[1]s, or %[1]syes%[1]s to enable verbose output on standard
 			error.
 

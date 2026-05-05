@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -12,6 +13,18 @@ import (
 	ghAPI "github.com/cli/go-gh/v2/pkg/api"
 	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 )
+
+// AggressiveCachingTTLEnv is the environment variable that opts the standard
+// HTTP client into process-wide TTL caching for cacheable REST + GraphQL
+// requests. The value is a Go duration string (e.g. "30s", "1m", "5m", "1h").
+// Anything that does not parse to a positive duration silently disables the
+// feature; users diagnose by inspecting the X-GH-Cache-Status response header
+// (visible via gh api -i or GH_DEBUG=api).
+//
+// This is intended for automation/agent harnesses that issue repeated identical
+// requests, not for general interactive use. Reads may be up to TTL stale,
+// including reads following a write from the same or another process.
+const AggressiveCachingTTLEnv = "GH_AGGRESSIVE_CACHING_TTL"
 
 type tokenGetter interface {
 	ActiveToken(string) (string, string)
@@ -65,6 +78,23 @@ func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	if opts.EnableCache {
 		clientOpts.EnableCache = opts.EnableCache
 		clientOpts.CacheTTL = opts.CacheTTL
+	} else if !opts.SkipDefaultHeaders {
+		// Opt into process-wide aggressive caching when GH_AGGRESSIVE_CACHING_TTL
+		// is set to a positive Go duration. Two gates apply:
+		//
+		//   1. opts.EnableCache must not already be set: explicit caller
+		//      configuration (e.g. gh api --cache 5m) wins over the env var.
+		//   2. opts.SkipDefaultHeaders must be false: this distinguishes the
+		//      standard authenticated client from PlainHttpClient, which is
+		//      built specifically to bypass defaults and must not start caching
+		//      just because an env var is set.
+		//
+		// Per-request opt-out via X-GH-CACHE-TTL: 0 still works on top of this
+		// (handled in the underlying go-gh cache transport).
+		if ttl, ok := parseAggressiveCachingTTL(os.Getenv(AggressiveCachingTTLEnv)); ok {
+			clientOpts.EnableCache = true
+			clientOpts.CacheTTL = ttl
+		}
 	}
 
 	client, err := ghAPI.NewHTTPClient(clientOpts)
@@ -84,6 +114,30 @@ func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	}
 
 	return client, nil
+}
+
+// parseAggressiveCachingTTL parses the GH_AGGRESSIVE_CACHING_TTL value. It
+// returns (ttl, true) only when the value is a Go duration string that parses
+// to a strictly positive value. Anything else (empty, "0", "0s", unparseable)
+// returns (0, false), which keeps the cache off.
+//
+// Failures are silent by design: this matches the convention for other GH_*
+// env vars (we do not have a stable warning channel inside NewHTTPClient and
+// stderr noise from a transport layer would surprise scripts). Users who
+// believe the variable should be active can confirm it via the
+// X-GH-Cache-Status response header on subsequent requests.
+func parseAggressiveCachingTTL(raw string) (time.Duration, bool) {
+	if raw == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, false
+	}
+	if d <= 0 {
+		return 0, false
+	}
+	return d, true
 }
 
 func NewCachedHTTPClient(httpClient *http.Client, ttl time.Duration) *http.Client {
