@@ -327,10 +327,10 @@ type SearchFilters struct {
 
 // CreateDiscussionInput holds the parameters for creating a discussion.
 type CreateDiscussionInput struct {
-	RepositoryID string
-	CategoryID   string
-	Title        string
-	Body         string
+	CategoryID string
+	Title      string
+	Body       string
+	Labels     []string
 }
 
 // UpdateDiscussionInput holds optional parameters for updating a discussion.

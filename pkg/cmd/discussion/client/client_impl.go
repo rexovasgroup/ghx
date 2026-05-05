@@ -775,8 +775,188 @@ func (c *discussionClient) ListCategories(repo ghrepo.Interface) ([]DiscussionCa
 	return categories, nil
 }
 
-func (c *discussionClient) Create(_ ghrepo.Interface, _ CreateDiscussionInput) (*Discussion, error) {
-	return nil, fmt.Errorf("not implemented")
+// repositoryMeta holds the node ID and feature flags fetched for a repository.
+type repositoryMeta struct {
+	ID                    string
+	HasDiscussionsEnabled bool
+}
+
+// getRepositoryMeta fetches the node ID and discussion-enabled flag for a repository.
+func (c *discussionClient) getRepositoryMeta(repo ghrepo.Interface) (*repositoryMeta, error) {
+	var query struct {
+		Repository struct {
+			ID                    string
+			HasDiscussionsEnabled bool
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+
+	variables := map[string]interface{}{
+		"owner": githubv4.String(repo.RepoOwner()),
+		"name":  githubv4.String(repo.RepoName()),
+	}
+
+	if err := c.gql.Query(repo.RepoHost(), "RepositoryMeta", &query, variables); err != nil {
+		return nil, err
+	}
+
+	return &repositoryMeta{
+		ID:                    query.Repository.ID,
+		HasDiscussionsEnabled: query.Repository.HasDiscussionsEnabled,
+	}, nil
+}
+
+// resolveLabels fetches all labels for a repository and matches the requested names
+// case-insensitively. Returns an error if any requested label name is not found.
+func (c *discussionClient) resolveLabels(repo ghrepo.Interface, labelNames []string) ([]DiscussionLabel, error) {
+	if len(labelNames) == 0 {
+		return nil, nil
+	}
+
+	var query struct {
+		Repository struct {
+			Labels struct {
+				Nodes []struct {
+					ID    string
+					Name  string
+					Color string
+				}
+				PageInfo struct {
+					HasNextPage bool
+					EndCursor   string
+				}
+			} `graphql:"labels(first: 100, after: $endCursor)"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+
+	variables := map[string]interface{}{
+		"owner":     githubv4.String(repo.RepoOwner()),
+		"name":      githubv4.String(repo.RepoName()),
+		"endCursor": (*githubv4.String)(nil),
+	}
+
+	wanted := make(map[string]bool, len(labelNames))
+	for _, n := range labelNames {
+		wanted[strings.ToLower(n)] = true
+	}
+
+	found := make(map[string]DiscussionLabel, len(labelNames))
+	for {
+		if err := c.gql.Query(repo.RepoHost(), "RepositoryLabels", &query, variables); err != nil {
+			return nil, err
+		}
+		for _, n := range query.Repository.Labels.Nodes {
+			if wanted[strings.ToLower(n.Name)] {
+				found[strings.ToLower(n.Name)] = DiscussionLabel{ID: n.ID, Name: n.Name, Color: n.Color}
+			}
+		}
+		if len(found) == len(wanted) {
+			break
+		}
+		if !query.Repository.Labels.PageInfo.HasNextPage {
+			break
+		}
+		variables["endCursor"] = githubv4.String(query.Repository.Labels.PageInfo.EndCursor)
+	}
+
+	if len(found) != len(wanted) {
+		var missing []string
+		for _, name := range labelNames {
+			if _, ok := found[strings.ToLower(name)]; !ok {
+				missing = append(missing, name)
+			}
+		}
+		return nil, fmt.Errorf("labels not found: %s", strings.Join(missing, ", "))
+	}
+
+	result := make([]DiscussionLabel, 0, len(labelNames))
+	for _, name := range labelNames {
+		result = append(result, found[strings.ToLower(name)])
+	}
+	return result, nil
+}
+
+// addLabelsToDiscussion applies labels to a discussion via the addLabelsToLabelable mutation.
+func (c *discussionClient) addLabelsToDiscussion(repo ghrepo.Interface, discussionID string, labelIDs []string) error {
+	ids := make([]githubv4.ID, len(labelIDs))
+	for i, id := range labelIDs {
+		ids[i] = githubv4.ID(id)
+	}
+
+	var mutation struct {
+		AddLabelsToLabelable struct {
+			Typename string `graphql:"__typename"`
+		} `graphql:"addLabelsToLabelable(input: $input)"`
+	}
+
+	variables := map[string]interface{}{
+		"input": githubv4.AddLabelsToLabelableInput{
+			LabelableID: githubv4.ID(discussionID),
+			LabelIDs:    ids,
+		},
+	}
+
+	return c.gql.Mutate(repo.RepoHost(), "AddLabelsToDiscussion", &mutation, variables)
+}
+
+func (c *discussionClient) Create(repo ghrepo.Interface, input CreateDiscussionInput) (*Discussion, error) {
+	meta, err := c.getRepositoryMeta(repo)
+	if err != nil {
+		return nil, err
+	}
+	if !meta.HasDiscussionsEnabled {
+		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
+	}
+
+	var mutation struct {
+		CreateDiscussion struct {
+			Discussion struct {
+				discussionListNode
+				Comments struct {
+					TotalCount int
+				}
+			}
+		} `graphql:"createDiscussion(input: $input)"`
+	}
+
+	variables := map[string]interface{}{
+		"input": githubv4.CreateDiscussionInput{
+			RepositoryID: githubv4.ID(meta.ID),
+			CategoryID:   githubv4.ID(input.CategoryID),
+			Title:        githubv4.String(input.Title),
+			Body:         githubv4.String(input.Body),
+		},
+	}
+
+	if err := c.gql.Mutate(repo.RepoHost(), "CreateDiscussion", &mutation, variables); err != nil {
+		return nil, err
+	}
+
+	d := mapDiscussionFromListNode(mutation.CreateDiscussion.Discussion.discussionListNode)
+	d.Comments = DiscussionCommentList{TotalCount: mutation.CreateDiscussion.Discussion.Comments.TotalCount}
+
+	for _, rg := range mutation.CreateDiscussion.Discussion.ReactionGroups {
+		d.ReactionGroups = append(d.ReactionGroups, ReactionGroup{
+			Content:    rg.Content,
+			TotalCount: rg.Users.TotalCount,
+		})
+	}
+
+	if len(input.Labels) > 0 {
+		resolvedLabels, err := c.resolveLabels(repo, input.Labels)
+		if err != nil {
+			return nil, err
+		}
+		labelIDs := make([]string, len(resolvedLabels))
+		for i, l := range resolvedLabels {
+			labelIDs[i] = l.ID
+		}
+		if err := c.addLabelsToDiscussion(repo, d.ID, labelIDs); err != nil {
+			return nil, err
+		}
+		d.Labels = resolvedLabels
+	}
+
+	return &d, nil
 }
 
 func (c *discussionClient) Update(_ ghrepo.Interface, _ UpdateDiscussionInput) (*Discussion, error) {
