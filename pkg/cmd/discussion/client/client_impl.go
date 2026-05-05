@@ -849,19 +849,28 @@ func (c *discussionClient) resolveLabels(repo ghrepo.Interface, labelNames []str
 				found[strings.ToLower(n.Name)] = DiscussionLabel{ID: n.ID, Name: n.Name, Color: n.Color}
 			}
 		}
+		if len(found) == len(wanted) {
+			break
+		}
 		if !query.Repository.Labels.PageInfo.HasNextPage {
 			break
 		}
 		variables["endCursor"] = githubv4.String(query.Repository.Labels.PageInfo.EndCursor)
 	}
 
+	if len(found) != len(wanted) {
+		var missing []string
+		for _, name := range labelNames {
+			if _, ok := found[strings.ToLower(name)]; !ok {
+				missing = append(missing, name)
+			}
+		}
+		return nil, fmt.Errorf("labels not found: %s", strings.Join(missing, ", "))
+	}
+
 	result := make([]DiscussionLabel, 0, len(labelNames))
 	for _, name := range labelNames {
-		label, ok := found[strings.ToLower(name)]
-		if !ok {
-			return nil, fmt.Errorf("label not found: %q", name)
-		}
-		result = append(result, label)
+		result = append(result, found[strings.ToLower(name)])
 	}
 	return result, nil
 }
