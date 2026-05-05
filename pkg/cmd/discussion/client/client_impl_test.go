@@ -2642,12 +2642,208 @@ func TestCreate(t *testing.T) {
 			wantErr: "Could not resolve to a node with the global id of 'BAD_CAT'.",
 		},
 		{
+			name: "paginates labels across multiple pages",
+			input: CreateDiscussionInput{
+				CategoryID: "CAT_1",
+				Title:      "New Discussion",
+				Body:       "Discussion body",
+				Labels:     []string{"bug", "enhancement"},
+			},
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query RepositoryMeta\b`),
+					httpmock.StringResponse(repoMetaResp("R_1", true)),
+				)
+				reg.Register(
+					httpmock.GraphQL(`mutation CreateDiscussion\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"createDiscussion": {
+									"discussion": {
+										"id": "D_new",
+										"number": 99,
+										"title": "New Discussion",
+										"body": "Discussion body",
+										"url": "https://github.com/OWNER/REPO/discussions/99",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice", "id": "U1", "name": "Alice"},
+										"category": {"id": "CAT_1", "name": "General", "slug": "general", "emoji": ":speech_balloon:", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2025-06-01T00:00:00Z",
+										"updatedAt": "2025-06-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {"totalCount": 0}
+									}
+								}
+							}
+						}
+					`)),
+				)
+				reg.Register(
+					httpmock.GraphQL(`query RepositoryLabels\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"labels": {
+										"nodes": [
+											{"id": "L_bug", "name": "bug", "color": "d73a4a"}
+										],
+										"pageInfo": {"hasNextPage": true, "endCursor": "LABEL_CUR_1"}
+									}
+								}
+							}
+						}
+					`)),
+				)
+				reg.Register(
+					httpmock.GraphQL(`query RepositoryLabels\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"labels": {
+										"nodes": [
+											{"id": "L_enh", "name": "enhancement", "color": "a2eeef"}
+										],
+										"pageInfo": {"hasNextPage": false, "endCursor": ""}
+									}
+								}
+							}
+						}
+					`)),
+				)
+				reg.Register(
+					httpmock.GraphQL(`mutation AddLabelsToDiscussion\b`),
+					httpmock.StringResponse(`{"data":{"addLabelsToLabelable":{"__typename":"Discussion"}}}`),
+				)
+			},
+			assertDisc: &Discussion{
+				ID:     "D_new",
+				Number: 99,
+				Title:  "New Discussion",
+				Body:   "Discussion body",
+				URL:    "https://github.com/OWNER/REPO/discussions/99",
+				Author: DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
+				Category: DiscussionCategory{
+					ID:    "CAT_1",
+					Name:  "General",
+					Slug:  "general",
+					Emoji: ":speech_balloon:",
+				},
+				Labels: []DiscussionLabel{
+					{ID: "L_bug", Name: "bug", Color: "d73a4a"},
+					{ID: "L_enh", Name: "enhancement", Color: "a2eeef"},
+				},
+				CreatedAt: time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			name: "stops paginating labels when all found",
+			input: CreateDiscussionInput{
+				CategoryID: "CAT_1",
+				Title:      "New Discussion",
+				Body:       "Discussion body",
+				Labels:     []string{"bug", "enhancement"},
+			},
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL(`query RepositoryMeta\b`),
+					httpmock.StringResponse(repoMetaResp("R_1", true)),
+				)
+				reg.Register(
+					httpmock.GraphQL(`mutation CreateDiscussion\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"createDiscussion": {
+									"discussion": {
+										"id": "D_new",
+										"number": 99,
+										"title": "New Discussion",
+										"body": "Discussion body",
+										"url": "https://github.com/OWNER/REPO/discussions/99",
+										"closed": false,
+										"stateReason": "",
+										"isAnswered": false,
+										"answerChosenAt": "0001-01-01T00:00:00Z",
+										"author": {"__typename": "User", "login": "alice", "id": "U1", "name": "Alice"},
+										"category": {"id": "CAT_1", "name": "General", "slug": "general", "emoji": ":speech_balloon:", "isAnswerable": false},
+										"answerChosenBy": null,
+										"labels": {"nodes": []},
+										"reactionGroups": [],
+										"createdAt": "2025-06-01T00:00:00Z",
+										"updatedAt": "2025-06-01T00:00:00Z",
+										"closedAt": "0001-01-01T00:00:00Z",
+										"locked": false,
+										"comments": {"totalCount": 0}
+									}
+								}
+							}
+						}
+					`)),
+				)
+				// Register a single page that returns both labels but claims more pages exist.
+				// The code should stop paginating once all wanted labels are found.
+				reg.Register(
+					httpmock.GraphQL(`query RepositoryLabels\b`),
+					httpmock.StringResponse(heredoc.Doc(`
+						{
+							"data": {
+								"repository": {
+									"labels": {
+										"nodes": [
+											{"id": "L_bug", "name": "bug", "color": "d73a4a"},
+											{"id": "L_enh", "name": "enhancement", "color": "a2eeef"}
+										],
+										"pageInfo": {"hasNextPage": true, "endCursor": "LABEL_CUR_999"}
+									}
+								}
+							}
+						}
+					`)),
+				)
+				reg.Register(
+					httpmock.GraphQL(`mutation AddLabelsToDiscussion\b`),
+					httpmock.StringResponse(`{"data":{"addLabelsToLabelable":{"__typename":"Discussion"}}}`),
+				)
+			},
+			assertDisc: &Discussion{
+				ID:     "D_new",
+				Number: 99,
+				Title:  "New Discussion",
+				Body:   "Discussion body",
+				URL:    "https://github.com/OWNER/REPO/discussions/99",
+				Author: DiscussionActor{ID: "U1", Login: "alice", Name: "Alice"},
+				Category: DiscussionCategory{
+					ID:    "CAT_1",
+					Name:  "General",
+					Slug:  "general",
+					Emoji: ":speech_balloon:",
+				},
+				Labels: []DiscussionLabel{
+					{ID: "L_bug", Name: "bug", Color: "d73a4a"},
+					{ID: "L_enh", Name: "enhancement", Color: "a2eeef"},
+				},
+				CreatedAt: time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		{
 			name: "creates discussion with labels",
 			input: CreateDiscussionInput{
 				CategoryID: "CAT_1",
 				Title:      "New Discussion",
 				Body:       "Discussion body",
-				Labels:     []string{"bug"},
+				Labels:     []string{"bug", "enhancement"},
 			},
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
 				reg.Register(
@@ -2694,7 +2890,8 @@ func TestCreate(t *testing.T) {
 								"repository": {
 									"labels": {
 										"nodes": [
-											{"id": "L_bug", "name": "bug", "color": "d73a4a"}
+											{"id": "L_bug", "name": "bug", "color": "d73a4a"},
+											{"id": "L_enh", "name": "enhancement", "color": "a2eeef"}
 										],
 										"pageInfo": {"hasNextPage": false, "endCursor": ""}
 									}
@@ -2704,7 +2901,13 @@ func TestCreate(t *testing.T) {
 					`)),
 				)
 				reg.Register(
-					httpmock.GraphQL(`mutation AddLabelsToDiscussion\b`),
+					httpmock.GraphQLMutationMatcher(`mutation AddLabelsToDiscussion\b`, func(input map[string]interface{}) bool {
+						assert.Equal(t, "D_new", input["labelableId"])
+						labelIDs, ok := input["labelIds"].([]interface{})
+						assert.True(t, ok)
+						assert.Equal(t, []interface{}{"L_bug", "L_enh"}, labelIDs)
+						return true
+					}),
 					httpmock.StringResponse(`{"data":{"addLabelsToLabelable":{"__typename":"Discussion"}}}`),
 				)
 			},
@@ -2721,7 +2924,10 @@ func TestCreate(t *testing.T) {
 					Slug:  "general",
 					Emoji: ":speech_balloon:",
 				},
-				Labels:         []DiscussionLabel{{ID: "L_bug", Name: "bug", Color: "d73a4a"}},
+				Labels: []DiscussionLabel{
+					{ID: "L_bug", Name: "bug", Color: "d73a4a"},
+					{ID: "L_enh", Name: "enhancement", Color: "a2eeef"},
+				},
 				ReactionGroups: []ReactionGroup{{Content: "THUMBS_UP", TotalCount: 0}},
 				CreatedAt:      time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
 				UpdatedAt:      time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
@@ -2733,7 +2939,7 @@ func TestCreate(t *testing.T) {
 				CategoryID: "CAT_1",
 				Title:      "Test",
 				Body:       "Body",
-				Labels:     []string{"nonexistent"},
+				Labels:     []string{"nonexistent", "also-missing"},
 			},
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
 				reg.Register(
@@ -2788,7 +2994,7 @@ func TestCreate(t *testing.T) {
 					`)),
 				)
 			},
-			wantErr: `label not found: "nonexistent"`,
+			wantErr: `labels not found: nonexistent, also-missing`,
 		},
 		{
 			name: "add labels mutation failure returns error",
