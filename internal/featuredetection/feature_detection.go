@@ -49,7 +49,7 @@ type IssueFeatures struct {
 	//   - The requestReviewsByLogin mutation
 	ApiActorsSupported bool
 
-	// TODO IssueRelationshipsCleanup — remove when GHES 3.18 support ends (~October 2026)
+	// TODO IssueRelationshipsCleanup - remove when GHES 3.18 support ends (~October 2026)
 	// IssueRelationshipsSupported indicates the host supports issue
 	// relationships (blocked-by/blocking). Available on github.com and
 	// GHES 3.19+. Issue types and sub-issues are GA on all supported GHES
@@ -168,7 +168,7 @@ func (d *detector) IssueFeatures() (IssueFeatures, error) {
 	}
 
 	features := IssueFeatures{
-		ApiActorsSupported: false, // TODO ApiActorsSupported — actor-based mutations unavailable on GHES
+		ApiActorsSupported: false, // TODO ApiActorsSupported - actor-based mutations unavailable on GHES
 	}
 
 	// Detect issue relationship support (GHES 3.19+) via schema introspection.

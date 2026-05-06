@@ -467,7 +467,7 @@ func applyEditParent(client *api.Client, baseRepo ghrepo.Interface, issue *api.I
 	hostname := baseRepo.RepoHost()
 
 	if parentRef == "" {
-		// Remove parent — use the parent's ID from the fetched issue data
+		// Remove parent - use the parent's ID from the fetched issue data
 		if issue.Parent == nil {
 			return nil // no parent to remove
 		}

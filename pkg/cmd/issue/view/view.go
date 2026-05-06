@@ -226,7 +226,7 @@ func printHumanIssuePreview(opts *ViewOptions, baseRepo ghrepo.Interface, issue 
 	// Header (Title and State)
 	fmt.Fprintf(out, "%s %s#%d\n", cs.Bold(issue.Title), ghrepo.FullName(baseRepo), issue.Number)
 
-	// State line — include issue type prefix when present
+	// State line - include issue type prefix when present
 	stateLine := issueStateTitleWithColor(cs, issue)
 	if issue.IssueType != nil {
 		stateLine = cs.Muted(issue.IssueType.Name) + " · " + stateLine
