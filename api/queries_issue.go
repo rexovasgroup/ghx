@@ -642,8 +642,5 @@ func IssueNodeID(client *Client, repo ghrepo.Interface, number int) (string, err
 	if err != nil {
 		return "", err
 	}
-	if result.Repository.Issue.ID == "" {
-		return "", fmt.Errorf("issue #%d not found in %s", number, ghrepo.FullName(repo))
-	}
 	return result.Repository.Issue.ID, nil
 }
