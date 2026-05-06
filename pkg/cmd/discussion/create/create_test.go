@@ -151,12 +151,8 @@ func TestCreateRun_nonInteractive(t *testing.T) {
 				Body:     "Details",
 				Category: "General",
 			},
-			setupMock: func(m *client.DiscussionClientMock) {
-				m.ListCategoriesFunc = func(repo ghrepo.Interface) ([]client.DiscussionCategory, error) {
-					return sampleCategories(), nil
-				}
-			},
-			wantErr: "--title required when not running interactively",
+			setupMock: func(m *client.DiscussionClientMock) {},
+			wantErr:   "--title required when not running interactively",
 		},
 		{
 			name: "missing category returns error",
@@ -164,12 +160,8 @@ func TestCreateRun_nonInteractive(t *testing.T) {
 				Title: "My question",
 				Body:  "Details",
 			},
-			setupMock: func(m *client.DiscussionClientMock) {
-				m.ListCategoriesFunc = func(repo ghrepo.Interface) ([]client.DiscussionCategory, error) {
-					return sampleCategories(), nil
-				}
-			},
-			wantErr: "--category required when not running interactively",
+			setupMock: func(m *client.DiscussionClientMock) {},
+			wantErr:   "--category required when not running interactively",
 		},
 		{
 			name: "missing body returns error",
@@ -177,12 +169,8 @@ func TestCreateRun_nonInteractive(t *testing.T) {
 				Title:    "My question",
 				Category: "General",
 			},
-			setupMock: func(m *client.DiscussionClientMock) {
-				m.ListCategoriesFunc = func(repo ghrepo.Interface) ([]client.DiscussionCategory, error) {
-					return sampleCategories(), nil
-				}
-			},
-			wantErr: "--body required when not running interactively",
+			setupMock: func(m *client.DiscussionClientMock) {},
+			wantErr:   "--body required when not running interactively",
 		},
 		{
 			name: "unknown category returns error",
@@ -282,6 +270,7 @@ func TestCreateRun_tty(t *testing.T) {
 			return 0, nil
 		},
 		MarkdownEditorFunc: func(prompt, defaultValue string, blankAllowed bool) (string, error) {
+			assert.False(t, blankAllowed, "body editor should not allow blank input")
 			return "Some body text", nil
 		},
 	}
@@ -335,4 +324,33 @@ func TestCreateRun_tty_partialFlags(t *testing.T) {
 	err := createRun(opts)
 	require.NoError(t, err)
 	assert.Contains(t, stdout.String(), "Created discussion #5")
+}
+
+func TestCreateRun_tty_blankTitle(t *testing.T) {
+	ios, _, _, _ := iostreams.Test()
+	ios.SetStdoutTTY(true)
+	ios.SetStdinTTY(true)
+
+	mockClient := &client.DiscussionClientMock{
+		ListCategoriesFunc: func(repo ghrepo.Interface) ([]client.DiscussionCategory, error) {
+			return sampleCategories(), nil
+		},
+	}
+
+	pm := &prompter.PrompterMock{
+		InputFunc: func(prompt, defaultValue string) (string, error) {
+			return "   ", nil // whitespace only
+		},
+	}
+
+	opts := &CreateOptions{
+		IO:       ios,
+		BaseRepo: func() (ghrepo.Interface, error) { return ghrepo.New("OWNER", "REPO"), nil },
+		Client:   func() (client.DiscussionClient, error) { return mockClient, nil },
+		Prompter: pm,
+	}
+
+	err := createRun(opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "title cannot be blank")
 }

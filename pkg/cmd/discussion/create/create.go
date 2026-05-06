@@ -44,11 +44,8 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 		Long: heredoc.Doc(`
 			Create a new GitHub Discussion in a repository.
 
-			With '--title' and '--category', a discussion is created non-interactively.
-			Omitting either flag triggers interactive prompts when connected to a terminal.
-
-			The '--body' flag provides the discussion body. Without it you will be
-			prompted to enter one in your default editor.
+			With '--title', '--body', and '--category', a discussion is created non-interactively.
+			Omitting any of these flags triggers interactive prompts when connected to a terminal.
 		`),
 		Example: heredoc.Doc(`
 			# Create interactively
@@ -86,12 +83,24 @@ func createRun(opts *CreateOptions) error {
 		return err
 	}
 
+	interactive := opts.IO.CanPrompt()
+
+	if !interactive {
+		if opts.Title == "" {
+			return cmdutil.FlagErrorf("--title required when not running interactively")
+		}
+		if opts.Category == "" {
+			return cmdutil.FlagErrorf("--category required when not running interactively")
+		}
+		if opts.Body == "" {
+			return cmdutil.FlagErrorf("--body required when not running interactively")
+		}
+	}
+
 	categories, err := c.ListCategories(repo)
 	if err != nil {
 		return fmt.Errorf("fetching categories: %w", err)
 	}
-
-	interactive := opts.IO.CanPrompt()
 
 	if opts.Title == "" {
 		if !interactive {
@@ -131,7 +140,7 @@ func createRun(opts *CreateOptions) error {
 		if !interactive {
 			return cmdutil.FlagErrorf("--body required when not running interactively")
 		}
-		opts.Body, err = opts.Prompter.MarkdownEditor("Discussion body", "", true)
+		opts.Body, err = opts.Prompter.MarkdownEditor("Discussion body", "", false)
 		if err != nil {
 			return err
 		}

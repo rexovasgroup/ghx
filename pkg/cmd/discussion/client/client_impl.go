@@ -907,6 +907,16 @@ func (c *discussionClient) Create(repo ghrepo.Interface, input CreateDiscussionI
 		return nil, fmt.Errorf("the '%s/%s' repository has discussions disabled", repo.RepoOwner(), repo.RepoName())
 	}
 
+	// Resolve labels before creating the discussion so that an unknown label
+	// name aborts without leaving a half-created discussion behind.
+	var resolvedLabels []DiscussionLabel
+	if len(input.Labels) > 0 {
+		resolvedLabels, err = c.resolveLabels(repo, input.Labels)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var mutation struct {
 		CreateDiscussion struct {
 			Discussion struct {
@@ -941,11 +951,7 @@ func (c *discussionClient) Create(repo ghrepo.Interface, input CreateDiscussionI
 		})
 	}
 
-	if len(input.Labels) > 0 {
-		resolvedLabels, err := c.resolveLabels(repo, input.Labels)
-		if err != nil {
-			return nil, err
-		}
+	if len(resolvedLabels) > 0 {
 		labelIDs := make([]string, len(resolvedLabels))
 		for i, l := range resolvedLabels {
 			labelIDs[i] = l.ID

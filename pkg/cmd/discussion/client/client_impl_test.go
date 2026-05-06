@@ -2934,7 +2934,7 @@ func TestCreate(t *testing.T) {
 			},
 		},
 		{
-			name: "label not found returns error",
+			name: "label not found returns error without creating discussion",
 			input: CreateDiscussionInput{
 				CategoryID: "CAT_1",
 				Title:      "Test",
@@ -2946,38 +2946,8 @@ func TestCreate(t *testing.T) {
 					httpmock.GraphQL(`query RepositoryMeta\b`),
 					httpmock.StringResponse(repoMetaResp("R_1", true)),
 				)
-				reg.Register(
-					httpmock.GraphQL(`mutation CreateDiscussion\b`),
-					httpmock.StringResponse(heredoc.Doc(`
-						{
-							"data": {
-								"createDiscussion": {
-									"discussion": {
-										"id": "D_new",
-										"number": 99,
-										"title": "Test",
-										"body": "Body",
-										"url": "https://github.com/OWNER/REPO/discussions/99",
-										"closed": false,
-										"stateReason": "",
-										"isAnswered": false,
-										"answerChosenAt": "0001-01-01T00:00:00Z",
-										"author": {"__typename": "User", "login": "alice", "id": "U1", "name": "Alice"},
-										"category": {"id": "CAT_1", "name": "General", "slug": "general", "emoji": ":speech_balloon:", "isAnswerable": false},
-										"answerChosenBy": null,
-										"labels": {"nodes": []},
-										"reactionGroups": [],
-										"createdAt": "2025-06-01T00:00:00Z",
-										"updatedAt": "2025-06-01T00:00:00Z",
-										"closedAt": "0001-01-01T00:00:00Z",
-										"locked": false,
-										"comments": {"totalCount": 0}
-									}
-								}
-							}
-						}
-					`)),
-				)
+				// No CreateDiscussion stub — reg.Verify(t) proves it is never called,
+				// confirming that label validation is atomic with discussion creation.
 				reg.Register(
 					httpmock.GraphQL(`query RepositoryLabels\b`),
 					httpmock.StringResponse(heredoc.Doc(`
