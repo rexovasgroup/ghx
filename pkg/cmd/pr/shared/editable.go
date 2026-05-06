@@ -22,6 +22,7 @@ type Editable struct {
 	Projects           EditableProjects
 	Milestone          EditableString
 	IssueType          EditableString
+	IssueTypeNameToID  map[string]string
 	Parent             EditableString
 	Metadata           api.RepoMetadataResult
 
@@ -296,6 +297,7 @@ func (e *Editable) Clone() Editable {
 		Projects:           e.Projects.clone(),
 		Milestone:          e.Milestone.clone(),
 		IssueType:          e.IssueType.clone(),
+		IssueTypeNameToID:  e.IssueTypeNameToID,
 		Parent:             e.Parent.clone(),
 		ApiActorsSupported: e.ApiActorsSupported,
 		// Shallow copy since no mutation.
@@ -634,10 +636,13 @@ func FetchOptions(client *api.Client, repo ghrepo.Interface, editable *Editable,
 		issueTypes, err := api.RepoIssueTypes(client, repo)
 		if err == nil {
 			typeNames := make([]string, len(issueTypes))
+			ids := make(map[string]string, len(issueTypes))
 			for i, t := range issueTypes {
 				typeNames[i] = t.Name
+				ids[t.Name] = t.ID
 			}
 			editable.IssueType.Options = typeNames
+			editable.IssueTypeNameToID = ids
 		}
 	}
 

@@ -52,8 +52,8 @@ type CreateOptions struct {
 	IssueType   string
 	issueTypeID string // resolved during interactive flow to avoid double API call
 	Parent      string
-	BlockedBy []string
-	Blocking  []string
+	BlockedBy   []string
+	Blocking    []string
 }
 
 func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Command {

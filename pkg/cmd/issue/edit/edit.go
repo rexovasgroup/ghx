@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -328,15 +329,6 @@ func editRun(opts *EditOptions) error {
 		opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Updating %d issues", len(issues)))
 	}
 
-	// Resolve issue type ID once for all issues to avoid redundant API calls.
-	var issueTypeID string
-	if editable.IssueType.Edited && editable.IssueType.Value != "" {
-		issueTypeID, err = issueShared.ResolveIssueTypeName(apiClient, baseRepo, editable.IssueType.Value)
-		if err != nil {
-			return err
-		}
-	}
-
 	for _, issue := range issues {
 		// Copy variables to capture in the go routine below.
 		editable := editable.Clone()
@@ -379,6 +371,18 @@ func editRun(opts *EditOptions) error {
 			if err != nil {
 				return err
 			}
+		}
+
+		// Look up the issue type ID using the map populated by FetchOptions
+		var issueTypeID string
+		if editable.IssueType.Edited && editable.IssueType.Value != "" {
+			id, ok := editable.IssueTypeNameToID[editable.IssueType.Value]
+			if !ok {
+				return fmt.Errorf("type %q not found; available types: %s",
+					editable.IssueType.Value,
+					strings.Join(editable.IssueType.Options, ", "))
+			}
+			issueTypeID = id
 		}
 
 		g.Add(1)
