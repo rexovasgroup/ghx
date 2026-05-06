@@ -198,6 +198,61 @@ func TestNewCmdCreate(t *testing.T) {
 			cli:      "--editor",
 			wantsErr: true,
 		},
+		{
+			name:     "type",
+			tty:      false,
+			cli:      `-t mytitle -b mybody --type Bug`,
+			wantsErr: false,
+			wantsOpts: CreateOptions{
+				Title:     "mytitle",
+				Body:      "mybody",
+				IssueType: "Bug",
+			},
+		},
+		{
+			name:     "parent by number",
+			tty:      false,
+			cli:      `-t mytitle -b mybody --parent 100`,
+			wantsErr: false,
+			wantsOpts: CreateOptions{
+				Title:  "mytitle",
+				Body:   "mybody",
+				Parent: "100",
+			},
+		},
+		{
+			name:     "parent by URL",
+			tty:      false,
+			cli:      `-t mytitle -b mybody --parent https://github.com/cli/go-gh/issues/42`,
+			wantsErr: false,
+			wantsOpts: CreateOptions{
+				Title:  "mytitle",
+				Body:   "mybody",
+				Parent: "https://github.com/cli/go-gh/issues/42",
+			},
+		},
+		{
+			name:     "blocked by multiple issues",
+			tty:      false,
+			cli:      `-t mytitle -b mybody --blocked-by 200,201`,
+			wantsErr: false,
+			wantsOpts: CreateOptions{
+				Title:     "mytitle",
+				Body:      "mybody",
+				BlockedBy: []string{"200", "201"},
+			},
+		},
+		{
+			name:     "blocking another issue",
+			tty:      false,
+			cli:      `-t mytitle -b mybody --blocking 300`,
+			wantsErr: false,
+			wantsOpts: CreateOptions{
+				Title:    "mytitle",
+				Body:     "mybody",
+				Blocking: []string{"300"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -247,6 +302,10 @@ func TestNewCmdCreate(t *testing.T) {
 			assert.Equal(t, tt.wantsOpts.WebMode, opts.WebMode)
 			assert.Equal(t, tt.wantsOpts.Interactive, opts.Interactive)
 			assert.Equal(t, tt.wantsOpts.Template, opts.Template)
+			assert.Equal(t, tt.wantsOpts.IssueType, opts.IssueType)
+			assert.Equal(t, tt.wantsOpts.Parent, opts.Parent)
+			assert.Equal(t, tt.wantsOpts.BlockedBy, opts.BlockedBy)
+			assert.Equal(t, tt.wantsOpts.Blocking, opts.Blocking)
 		})
 	}
 }
@@ -1258,79 +1317,6 @@ func TestIssueCreate_projectsV2(t *testing.T) {
 	}
 
 	assert.Equal(t, "https://github.com/OWNER/REPO/issues/12\n", output.String())
-}
-
-func TestNewCmdCreate_issuesV2Flags(t *testing.T) {
-	tests := []struct {
-		name          string
-		cli           string
-		wantsErr      bool
-		wantsType     string
-		wantsParent   string
-		wantsBlocking []string
-		wantsBlockBy  []string
-	}{
-		{
-			name:      "type flag",
-			cli:       `-t mytitle -b mybody --type Bug`,
-			wantsType: "Bug",
-		},
-		{
-			name:        "parent flag with number",
-			cli:         `-t mytitle -b mybody --parent 100`,
-			wantsParent: "100",
-		},
-		{
-			name:        "parent flag with URL",
-			cli:         `-t mytitle -b mybody --parent https://github.com/cli/go-gh/issues/42`,
-			wantsParent: "https://github.com/cli/go-gh/issues/42",
-		},
-		{
-			name:         "blocked-by flag",
-			cli:          `-t mytitle -b mybody --blocked-by 200,201`,
-			wantsBlockBy: []string{"200", "201"},
-		},
-		{
-			name:          "blocking flag",
-			cli:           `-t mytitle -b mybody --blocking 300`,
-			wantsBlocking: []string{"300"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ios, _, _, _ := iostreams.Test()
-
-			f := &cmdutil.Factory{
-				IOStreams: ios,
-				Config: func() (gh.Config, error) {
-					return config.NewBlankConfig(), nil
-				},
-			}
-
-			var opts *CreateOptions
-			cmd := NewCmdCreate(f, func(o *CreateOptions) error {
-				opts = o
-				return nil
-			})
-
-			args, err := shlex.Split(tt.cli)
-			require.NoError(t, err)
-			cmd.SetArgs(args)
-			cmd.SetOut(io.Discard)
-			cmd.SetErr(io.Discard)
-			_, err = cmd.ExecuteC()
-			if tt.wantsErr {
-				assert.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-
-			assert.Equal(t, tt.wantsType, opts.IssueType)
-			assert.Equal(t, tt.wantsParent, opts.Parent)
-			assert.Equal(t, tt.wantsBlocking, opts.Blocking)
-			assert.Equal(t, tt.wantsBlockBy, opts.BlockedBy)
-		})
-	}
 }
 
 func Test_createRun_issuesV2(t *testing.T) {
