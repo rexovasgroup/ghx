@@ -447,13 +447,13 @@ func IssueGraphQL(fields []string) string {
 		case "parent":
 			q = append(q, `parent{id,number,title,url,state,repository{nameWithOwner}}`)
 		case "subIssues":
-			q = append(q, `subIssues(first:50){nodes{number,title,url,state,repository{nameWithOwner}},totalCount}`)
+			q = append(q, `subIssues(first:50){nodes{id,number,title,url,state,repository{nameWithOwner}},totalCount}`)
 		case "subIssuesSummary":
 			q = append(q, `subIssuesSummary{total,completed,percentCompleted}`)
 		case "blockedBy":
-			q = append(q, `blockedBy(first:50){nodes{number,title,url,state,repository{nameWithOwner}}}`)
+			q = append(q, `blockedBy(first:50){nodes{id,number,title,url,state,repository{nameWithOwner}}}`)
 		case "blocking":
-			q = append(q, `blocking(first:50){nodes{number,title,url,state,repository{nameWithOwner}}}`)
+			q = append(q, `blocking(first:50){nodes{id,number,title,url,state,repository{nameWithOwner}}}`)
 		default:
 			q = append(q, field)
 		}

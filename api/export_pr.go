@@ -51,6 +51,7 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 		case "parent":
 			if issue.Parent != nil {
 				data[f] = map[string]interface{}{
+					"id":     issue.Parent.ID,
 					"number": issue.Parent.Number,
 					"title":  issue.Parent.Title,
 					"url":    issue.Parent.URL,
@@ -63,6 +64,7 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 			items := make([]map[string]interface{}, 0, len(issue.SubIssues.Nodes))
 			for _, n := range issue.SubIssues.Nodes {
 				items = append(items, map[string]interface{}{
+					"id":     n.ID,
 					"number": n.Number,
 					"title":  n.Title,
 					"url":    n.URL,
@@ -80,6 +82,7 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 			items := make([]map[string]interface{}, 0, len(issue.BlockedBy.Nodes))
 			for _, n := range issue.BlockedBy.Nodes {
 				items = append(items, map[string]interface{}{
+					"id":     n.ID,
 					"number": n.Number,
 					"title":  n.Title,
 					"url":    n.URL,
@@ -91,6 +94,7 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 			items := make([]map[string]interface{}, 0, len(issue.Blocking.Nodes))
 			for _, n := range issue.Blocking.Nodes {
 				items = append(items, map[string]interface{}{
+					"id":     n.ID,
 					"number": n.Number,
 					"title":  n.Title,
 					"url":    n.URL,
