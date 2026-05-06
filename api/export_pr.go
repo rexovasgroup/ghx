@@ -71,7 +71,10 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 					"state":  n.State,
 				})
 			}
-			data[f] = items
+			data[f] = map[string]interface{}{
+				"nodes":      items,
+				"totalCount": issue.SubIssues.TotalCount,
+			}
 		case "subIssuesSummary":
 			data[f] = map[string]interface{}{
 				"total":            issue.SubIssuesSummary.Total,
@@ -89,7 +92,10 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 					"state":  n.State,
 				})
 			}
-			data[f] = items
+			data[f] = map[string]interface{}{
+				"nodes":      items,
+				"totalCount": issue.BlockedBy.TotalCount,
+			}
 		case "blocking":
 			items := make([]map[string]interface{}, 0, len(issue.Blocking.Nodes))
 			for _, n := range issue.Blocking.Nodes {
@@ -101,7 +107,10 @@ func (issue *Issue) ExportData(fields []string) map[string]interface{} {
 					"state":  n.State,
 				})
 			}
-			data[f] = items
+			data[f] = map[string]interface{}{
+				"nodes":      items,
+				"totalCount": issue.Blocking.TotalCount,
+			}
 		default:
 			sf := fieldByName(v, f)
 			data[f] = sf.Interface()

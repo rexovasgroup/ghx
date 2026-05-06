@@ -91,7 +91,8 @@ type SubIssuesSummary struct {
 
 // LinkedIssueConnection is a connection of related issues (blocked-by or blocking).
 type LinkedIssueConnection struct {
-	Nodes []LinkedIssue `json:"nodes"`
+	Nodes      []LinkedIssue `json:"nodes"`
+	TotalCount int           `json:"totalCount"`
 }
 
 type ClosedByPullRequestsReferences struct {

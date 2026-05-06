@@ -674,10 +674,12 @@ func issueResponseAllIssues2Fields() string {
 		},
 		"subIssuesSummary": {"total":2,"completed":1,"percentCompleted":50.0},
 		"blockedBy": {
-			"nodes": [{"number":200,"title":"API rate limiting","url":"https://github.com/OWNER/REPO/issues/200","state":"OPEN","repository":{"nameWithOwner":"OWNER/REPO"}}]
+			"nodes": [{"number":200,"title":"API rate limiting","url":"https://github.com/OWNER/REPO/issues/200","state":"OPEN","repository":{"nameWithOwner":"OWNER/REPO"}}],
+			"totalCount": 1
 		},
 		"blocking": {
-			"nodes": [{"number":300,"title":"Release v2.0","url":"https://github.com/OWNER/REPO/issues/300","state":"OPEN","repository":{"nameWithOwner":"OWNER/REPO"}}]
+			"nodes": [{"number":300,"title":"Release v2.0","url":"https://github.com/OWNER/REPO/issues/300","state":"OPEN","repository":{"nameWithOwner":"OWNER/REPO"}}],
+			"totalCount": 1
 		}
 	} } } }`
 }
@@ -878,8 +880,12 @@ func TestIssueView_json_ParentSubIssues(t *testing.T) {
 	assert.Equal(t, "OPEN", parent["state"])
 
 	// Sub-issues
-	subIssues, ok := data["subIssues"].([]interface{})
-	require.True(t, ok, "subIssues should be an array")
+	subIssuesObj, ok := data["subIssues"].(map[string]interface{})
+	require.True(t, ok, "subIssues should be an object")
+	assert.Equal(t, float64(2), subIssuesObj["totalCount"])
+
+	subIssues, ok := subIssuesObj["nodes"].([]interface{})
+	require.True(t, ok, "subIssues.nodes should be an array")
 	require.Len(t, subIssues, 2)
 
 	sub0 := subIssues[0].(map[string]interface{})
@@ -916,8 +922,12 @@ func TestIssueView_json_BlockedByBlocking(t *testing.T) {
 	require.NoError(t, json.Unmarshal(output.OutBuf.Bytes(), &data))
 
 	// Blocked by
-	blockedBy, ok := data["blockedBy"].([]interface{})
-	require.True(t, ok, "blockedBy should be an array")
+	blockedByObj, ok := data["blockedBy"].(map[string]interface{})
+	require.True(t, ok, "blockedBy should be an object")
+	assert.Equal(t, float64(1), blockedByObj["totalCount"])
+
+	blockedBy, ok := blockedByObj["nodes"].([]interface{})
+	require.True(t, ok, "blockedBy.nodes should be an array")
 	require.Len(t, blockedBy, 1)
 
 	blocked0 := blockedBy[0].(map[string]interface{})
@@ -927,8 +937,12 @@ func TestIssueView_json_BlockedByBlocking(t *testing.T) {
 	assert.Equal(t, "OPEN", blocked0["state"])
 
 	// Blocking
-	blocking, ok := data["blocking"].([]interface{})
-	require.True(t, ok, "blocking should be an array")
+	blockingObj, ok := data["blocking"].(map[string]interface{})
+	require.True(t, ok, "blocking should be an object")
+	assert.Equal(t, float64(1), blockingObj["totalCount"])
+
+	blocking, ok := blockingObj["nodes"].([]interface{})
+	require.True(t, ok, "blocking.nodes should be an array")
 	require.Len(t, blocking, 1)
 
 	blocking0 := blocking[0].(map[string]interface{})
