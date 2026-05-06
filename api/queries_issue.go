@@ -78,8 +78,8 @@ type LinkedIssue struct {
 
 // SubIssues is a connection of sub-issues with a total count.
 type SubIssues struct {
-	Nodes      []LinkedIssue
-	TotalCount int
+	Nodes      []LinkedIssue `json:"nodes"`
+	TotalCount int           `json:"totalCount"`
 }
 
 // SubIssuesSummary contains completion stats for sub-issues.
@@ -91,7 +91,7 @@ type SubIssuesSummary struct {
 
 // LinkedIssueConnection is a connection of related issues (blocked-by or blocking).
 type LinkedIssueConnection struct {
-	Nodes []LinkedIssue
+	Nodes []LinkedIssue `json:"nodes"`
 }
 
 type ClosedByPullRequestsReferences struct {
