@@ -809,8 +809,8 @@ func Test_createRun(t *testing.T) {
 				Detector:  &fd.EnabledDetectorMock{},
 				Title:     "blocked issue",
 				Body:      "blocked body",
-				BlockedBy: []string{"200"},
-				Blocking:  []string{"300"},
+				BlockedBy: []string{"200", "201"},
+				Blocking:  []string{"300", "301"},
 			},
 			httpStubs: func(t *testing.T, r *httpmock.Registry) {
 				r.Register(
@@ -827,12 +827,11 @@ func Test_createRun(t *testing.T) {
 							"id": "ISSUE_ID_123",
 							"URL": "https://github.com/OWNER/REPO/issues/123"
 						} } } }`))
-				// IssueNodeID for --blocked-by 200
+				// IssueNodeID + AddBlockedBy for --blocked-by 200
 				r.Register(
 					httpmock.GraphQL(`query IssueNodeID\b`),
 					httpmock.StringResponse(`
 						{ "data": { "repository": { "issue": { "id": "BLOCKER_ID_200" } } } }`))
-				// AddBlockedBy for --blocked-by: new issue is blocked by #200
 				r.Register(
 					httpmock.GraphQL(`mutation AddBlockedBy\b`),
 					httpmock.GraphQLMutation(`
@@ -841,18 +840,43 @@ func Test_createRun(t *testing.T) {
 							assert.Equal(t, "ISSUE_ID_123", inputs["issueId"])
 							assert.Equal(t, "BLOCKER_ID_200", inputs["blockingIssueId"])
 						}))
-				// IssueNodeID for --blocking 300
+				// IssueNodeID + AddBlockedBy for --blocked-by 201
+				r.Register(
+					httpmock.GraphQL(`query IssueNodeID\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": { "issue": { "id": "BLOCKER_ID_201" } } } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation AddBlockedBy\b`),
+					httpmock.GraphQLMutation(`
+						{ "data": { "addBlockedBy": { "issue": { "id": "ISSUE_ID_123" } } } }`,
+						func(inputs map[string]interface{}) {
+							assert.Equal(t, "ISSUE_ID_123", inputs["issueId"])
+							assert.Equal(t, "BLOCKER_ID_201", inputs["blockingIssueId"])
+						}))
+				// IssueNodeID + AddBlockedBy for --blocking 300 (swapped args)
 				r.Register(
 					httpmock.GraphQL(`query IssueNodeID\b`),
 					httpmock.StringResponse(`
 						{ "data": { "repository": { "issue": { "id": "BLOCKED_ID_300" } } } }`))
-				// AddBlockedBy for --blocking: #300 is blocked by new issue (swapped args)
 				r.Register(
 					httpmock.GraphQL(`mutation AddBlockedBy\b`),
 					httpmock.GraphQLMutation(`
 						{ "data": { "addBlockedBy": { "issue": { "id": "BLOCKED_ID_300" } } } }`,
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "BLOCKED_ID_300", inputs["issueId"])
+							assert.Equal(t, "ISSUE_ID_123", inputs["blockingIssueId"])
+						}))
+				// IssueNodeID + AddBlockedBy for --blocking 301 (swapped args)
+				r.Register(
+					httpmock.GraphQL(`query IssueNodeID\b`),
+					httpmock.StringResponse(`
+						{ "data": { "repository": { "issue": { "id": "BLOCKED_ID_301" } } } }`))
+				r.Register(
+					httpmock.GraphQL(`mutation AddBlockedBy\b`),
+					httpmock.GraphQLMutation(`
+						{ "data": { "addBlockedBy": { "issue": { "id": "BLOCKED_ID_301" } } } }`,
+						func(inputs map[string]interface{}) {
+							assert.Equal(t, "BLOCKED_ID_301", inputs["issueId"])
 							assert.Equal(t, "ISSUE_ID_123", inputs["blockingIssueId"])
 						}))
 			},
