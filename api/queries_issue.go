@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cli/cli/v2/internal/ghrepo"
+	"github.com/shurcooL/githubv4"
 )
 
 type IssuesPayload struct {
@@ -480,113 +481,129 @@ func (i Issue) CurrentUserComments() []Comment {
 
 // UpdateIssueIssueType sets the issue type on an issue.
 func UpdateIssueIssueType(client *Client, hostname string, issueID string, issueTypeID string) error {
-	query := `
-	mutation UpdateIssueIssueType($input: UpdateIssueIssueTypeInput!) {
-		updateIssueIssueType(input: $input) {
-			issue { id }
-		}
-	}`
+	type UpdateIssueIssueTypeInput struct {
+		IssueID     githubv4.ID `json:"issueId"`
+		IssueTypeID githubv4.ID `json:"issueTypeId"`
+	}
+
+	var mutation struct {
+		UpdateIssueIssueType struct {
+			Issue struct {
+				ID string
+			}
+		} `graphql:"updateIssueIssueType(input: $input)"`
+	}
+
 	variables := map[string]interface{}{
-		"input": map[string]interface{}{
-			"issueId":     issueID,
-			"issueTypeId": issueTypeID,
+		"input": UpdateIssueIssueTypeInput{
+			IssueID:     githubv4.ID(issueID),
+			IssueTypeID: githubv4.ID(issueTypeID),
 		},
 	}
-	var result struct {
-		UpdateIssueIssueType struct {
-			Issue struct{ ID string }
-		}
-	}
-	return client.GraphQL(hostname, query, variables, &result)
+
+	return client.Mutate(hostname, "UpdateIssueIssueType", &mutation, variables)
 }
 
 // AddSubIssue adds a sub-issue to a parent issue.
 func AddSubIssue(client *Client, hostname string, parentID string, subIssueID string, replaceParent bool) error {
-	query := `
-	mutation AddSubIssue($input: AddSubIssueInput!) {
-		addSubIssue(input: $input) {
-			issue { id }
-		}
-	}`
+	type AddSubIssueInput struct {
+		IssueID       githubv4.ID      `json:"issueId"`
+		SubIssueID    githubv4.ID      `json:"subIssueId"`
+		ReplaceParent githubv4.Boolean `json:"replaceParent"`
+	}
+
+	var mutation struct {
+		AddSubIssue struct {
+			Issue struct {
+				ID string
+			}
+		} `graphql:"addSubIssue(input: $input)"`
+	}
+
 	variables := map[string]interface{}{
-		"input": map[string]interface{}{
-			"issueId":       parentID,
-			"subIssueId":    subIssueID,
-			"replaceParent": replaceParent,
+		"input": AddSubIssueInput{
+			IssueID:       githubv4.ID(parentID),
+			SubIssueID:    githubv4.ID(subIssueID),
+			ReplaceParent: githubv4.Boolean(replaceParent),
 		},
 	}
-	var result struct {
-		AddSubIssue struct {
-			Issue struct{ ID string }
-		}
-	}
-	return client.GraphQL(hostname, query, variables, &result)
+
+	return client.Mutate(hostname, "AddSubIssue", &mutation, variables)
 }
 
 // RemoveSubIssue removes a sub-issue from a parent issue.
 func RemoveSubIssue(client *Client, hostname string, parentID string, subIssueID string) error {
-	query := `
-	mutation RemoveSubIssue($input: RemoveSubIssueInput!) {
-		removeSubIssue(input: $input) {
-			issue { id }
-		}
-	}`
+	type RemoveSubIssueInput struct {
+		IssueID    githubv4.ID `json:"issueId"`
+		SubIssueID githubv4.ID `json:"subIssueId"`
+	}
+
+	var mutation struct {
+		RemoveSubIssue struct {
+			Issue struct {
+				ID string
+			}
+		} `graphql:"removeSubIssue(input: $input)"`
+	}
+
 	variables := map[string]interface{}{
-		"input": map[string]interface{}{
-			"issueId":    parentID,
-			"subIssueId": subIssueID,
+		"input": RemoveSubIssueInput{
+			IssueID:    githubv4.ID(parentID),
+			SubIssueID: githubv4.ID(subIssueID),
 		},
 	}
-	var result struct {
-		RemoveSubIssue struct {
-			Issue struct{ ID string }
-		}
-	}
-	return client.GraphQL(hostname, query, variables, &result)
+
+	return client.Mutate(hostname, "RemoveSubIssue", &mutation, variables)
 }
 
 // AddBlockedBy marks an issue as blocked by another issue.
 func AddBlockedBy(client *Client, hostname string, issueID string, blockingIssueID string) error {
-	query := `
-	mutation AddBlockedBy($input: AddBlockedByInput!) {
-		addBlockedBy(input: $input) {
-			issue { id }
-		}
-	}`
+	type AddBlockedByInput struct {
+		IssueID         githubv4.ID `json:"issueId"`
+		BlockingIssueID githubv4.ID `json:"blockingIssueId"`
+	}
+
+	var mutation struct {
+		AddBlockedBy struct {
+			Issue struct {
+				ID string
+			}
+		} `graphql:"addBlockedBy(input: $input)"`
+	}
+
 	variables := map[string]interface{}{
-		"input": map[string]interface{}{
-			"issueId":         issueID,
-			"blockingIssueId": blockingIssueID,
+		"input": AddBlockedByInput{
+			IssueID:         githubv4.ID(issueID),
+			BlockingIssueID: githubv4.ID(blockingIssueID),
 		},
 	}
-	var result struct {
-		AddBlockedBy struct {
-			Issue struct{ ID string }
-		}
-	}
-	return client.GraphQL(hostname, query, variables, &result)
+
+	return client.Mutate(hostname, "AddBlockedBy", &mutation, variables)
 }
 
 // RemoveBlockedBy removes a "blocked by" relationship between two issues.
 func RemoveBlockedBy(client *Client, hostname string, issueID string, blockingIssueID string) error {
-	query := `
-	mutation RemoveBlockedBy($input: RemoveBlockedByInput!) {
-		removeBlockedBy(input: $input) {
-			issue { id }
-		}
-	}`
+	type RemoveBlockedByInput struct {
+		IssueID         githubv4.ID `json:"issueId"`
+		BlockingIssueID githubv4.ID `json:"blockingIssueId"`
+	}
+
+	var mutation struct {
+		RemoveBlockedBy struct {
+			Issue struct {
+				ID string
+			}
+		} `graphql:"removeBlockedBy(input: $input)"`
+	}
+
 	variables := map[string]interface{}{
-		"input": map[string]interface{}{
-			"issueId":         issueID,
-			"blockingIssueId": blockingIssueID,
+		"input": RemoveBlockedByInput{
+			IssueID:         githubv4.ID(issueID),
+			BlockingIssueID: githubv4.ID(blockingIssueID),
 		},
 	}
-	var result struct {
-		RemoveBlockedBy struct {
-			Issue struct{ ID string }
-		}
-	}
-	return client.GraphQL(hostname, query, variables, &result)
+
+	return client.Mutate(hostname, "RemoveBlockedBy", &mutation, variables)
 }
 
 // RepoIssueTypes fetches the available issue types for a repository.
