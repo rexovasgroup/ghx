@@ -33,11 +33,12 @@ func sampleDiscussion() *client.Discussion {
 
 func TestNewCmdCreate(t *testing.T) {
 	tests := []struct {
-		name     string
-		args     string
-		isTTY    bool
-		wantOpts CreateOptions
-		wantErr  string
+		name         string
+		args         string
+		isTTY        bool
+		wantOpts     CreateOptions
+		wantBaseRepo ghrepo.Interface
+		wantErr      string
 	}{
 		{
 			name:     "no flags",
@@ -86,6 +87,17 @@ func TestNewCmdCreate(t *testing.T) {
 			isTTY:   true,
 			wantErr: "body cannot be blank",
 		},
+		{
+			name:         "repo override",
+			args:         "--title 'Test' --body 'Body' --category 'Q&A' -R OWNER/REPO",
+			isTTY:        true,
+			wantBaseRepo: ghrepo.New("OWNER", "REPO"),
+			wantOpts: CreateOptions{
+				Title:    "Test",
+				Body:     "Body",
+				Category: "Q&A",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -94,9 +106,9 @@ func TestNewCmdCreate(t *testing.T) {
 			ios.SetStdinTTY(tt.isTTY)
 			ios.SetStdoutTTY(tt.isTTY)
 			f := &cmdutil.Factory{IOStreams: ios}
-			var capturedOpts *CreateOptions
+			var gotOpts *CreateOptions
 			cmd := NewCmdCreate(f, func(opts *CreateOptions) error {
-				capturedOpts = opts
+				gotOpts = opts
 				return nil
 			})
 			cmd.SetIn(&bytes.Buffer{})
@@ -114,10 +126,16 @@ func TestNewCmdCreate(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantOpts.Title, capturedOpts.Title)
-			assert.Equal(t, tt.wantOpts.Body, capturedOpts.Body)
-			assert.Equal(t, tt.wantOpts.Category, capturedOpts.Category)
-			assert.Equal(t, tt.wantOpts.Labels, capturedOpts.Labels)
+			assert.Equal(t, tt.wantOpts.Title, gotOpts.Title)
+			assert.Equal(t, tt.wantOpts.Body, gotOpts.Body)
+			assert.Equal(t, tt.wantOpts.Category, gotOpts.Category)
+			assert.Equal(t, tt.wantOpts.Labels, gotOpts.Labels)
+
+			if tt.wantBaseRepo != nil {
+				baseRepo, err := gotOpts.BaseRepo()
+				require.NoError(t, err)
+				assert.True(t, ghrepo.IsSame(tt.wantBaseRepo, baseRepo))
+			}
 		})
 	}
 }

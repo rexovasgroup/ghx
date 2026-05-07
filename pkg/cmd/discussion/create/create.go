@@ -80,6 +80,8 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 		},
 	}
 
+	cmdutil.EnableRepoOverride(cmd, f)
+
 	cmd.Flags().StringVarP(&opts.Title, "title", "t", "", "Title for the discussion")
 	cmd.Flags().StringVarP(&opts.Body, "body", "b", "", "Body for the discussion")
 	cmd.Flags().StringVarP(&opts.Category, "category", "c", "", "Category name or slug for the discussion")
