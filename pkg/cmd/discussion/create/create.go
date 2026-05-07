@@ -101,7 +101,9 @@ func createRun(opts *CreateOptions) error {
 		return err
 	}
 
+	opts.IO.StartProgressIndicator()
 	categories, err := c.ListCategories(repo)
+	opts.IO.StopProgressIndicator()
 	if err != nil {
 		return fmt.Errorf("fetching categories: %w", err)
 	}
@@ -151,7 +153,9 @@ func createRun(opts *CreateOptions) error {
 		Labels:     opts.Labels,
 	}
 
+	opts.IO.StartProgressIndicator()
 	discussion, err := c.Create(repo, input)
+	opts.IO.StopProgressIndicator()
 	if err != nil {
 		return fmt.Errorf("failed to create discussion: %w", err)
 	}
