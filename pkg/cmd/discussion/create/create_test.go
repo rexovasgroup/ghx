@@ -35,41 +35,65 @@ func TestNewCmdCreate(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     string
+		isTTY    bool
 		wantOpts CreateOptions
 		wantErr  string
 	}{
 		{
 			name:     "no flags",
 			args:     "",
+			isTTY:    true,
 			wantOpts: CreateOptions{},
 		},
 		{
-			name: "title flag",
-			args: "--title 'My question'",
-			wantOpts: CreateOptions{
-				Title: "My question",
-			},
-		},
-		{
-			name: "all flags",
-			args: "--title 'My question' --body 'Details' --category 'Q&A' --label bug",
+			name:  "all flags",
+			args:  "--title 'My question' --body 'Details' --category 'Q&A' --label bug,enhancement",
+			isTTY: true,
 			wantOpts: CreateOptions{
 				Title:    "My question",
 				Body:     "Details",
 				Category: "Q&A",
-				Labels:   []string{"bug"},
+				Labels:   []string{"bug", "enhancement"},
 			},
 		},
 		{
 			name:    "extra args",
 			args:    "extra",
+			isTTY:   true,
 			wantErr: "unknown argument",
+		},
+		{
+			name:    "missing required flags non-interactively",
+			args:    "--title 'My question'",
+			isTTY:   false,
+			wantErr: "--title, --body, and --category are required when not running interactively",
+		},
+		{
+			name:    "blank title",
+			args:    "--title '   '",
+			isTTY:   true,
+			wantErr: "title cannot be blank",
+		},
+		{
+			name:    "blank category",
+			args:    "--category '   '",
+			isTTY:   true,
+			wantErr: "category cannot be blank",
+		},
+		{
+			name:    "blank body",
+			args:    "--body '   '",
+			isTTY:   true,
+			wantErr: "body cannot be blank",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := &cmdutil.Factory{}
+			ios, _, _, _ := iostreams.Test()
+			ios.SetStdinTTY(tt.isTTY)
+			ios.SetStdoutTTY(tt.isTTY)
+			f := &cmdutil.Factory{IOStreams: ios}
 			var capturedOpts *CreateOptions
 			cmd := NewCmdCreate(f, func(opts *CreateOptions) error {
 				capturedOpts = opts
@@ -146,33 +170,6 @@ func TestCreateRun_nonInteractive(t *testing.T) {
 			wantOut: "https://github.com/OWNER/REPO/discussions/5\n",
 		},
 		{
-			name: "missing title returns error",
-			opts: CreateOptions{
-				Body:     "Details",
-				Category: "General",
-			},
-			setupMock: func(m *client.DiscussionClientMock) {},
-			wantErr:   "--title required when not running interactively",
-		},
-		{
-			name: "missing category returns error",
-			opts: CreateOptions{
-				Title: "My question",
-				Body:  "Details",
-			},
-			setupMock: func(m *client.DiscussionClientMock) {},
-			wantErr:   "--category required when not running interactively",
-		},
-		{
-			name: "missing body returns error",
-			opts: CreateOptions{
-				Title:    "My question",
-				Category: "General",
-			},
-			setupMock: func(m *client.DiscussionClientMock) {},
-			wantErr:   "--body required when not running interactively",
-		},
-		{
 			name: "unknown category returns error",
 			opts: CreateOptions{
 				Title:    "My question",
@@ -245,7 +242,7 @@ func TestCreateRun_nonInteractive(t *testing.T) {
 }
 
 func TestCreateRun_tty(t *testing.T) {
-	ios, _, stdout, _ := iostreams.Test()
+	ios, _, stdout, stderr := iostreams.Test()
 	ios.SetStdoutTTY(true)
 	ios.SetStdinTTY(true)
 
@@ -284,13 +281,13 @@ func TestCreateRun_tty(t *testing.T) {
 
 	err := createRun(opts)
 	require.NoError(t, err)
-	assert.Contains(t, stdout.String(), "Created discussion #5")
-	assert.Contains(t, stdout.String(), "https://github.com/OWNER/REPO/discussions/5")
+	assert.Contains(t, stderr.String(), "Created discussion #5")
+	assert.Equal(t, "https://github.com/OWNER/REPO/discussions/5\n", stdout.String())
 }
 
 func TestCreateRun_tty_partialFlags(t *testing.T) {
 	// Title and body provided, category via prompt
-	ios, _, stdout, _ := iostreams.Test()
+	ios, _, stdout, stderr := iostreams.Test()
 	ios.SetStdoutTTY(true)
 	ios.SetStdinTTY(true)
 
@@ -323,7 +320,8 @@ func TestCreateRun_tty_partialFlags(t *testing.T) {
 
 	err := createRun(opts)
 	require.NoError(t, err)
-	assert.Contains(t, stdout.String(), "Created discussion #5")
+	assert.Contains(t, stderr.String(), "Created discussion #5")
+	assert.Equal(t, "https://github.com/OWNER/REPO/discussions/5\n", stdout.String())
 }
 
 func TestCreateRun_tty_blankTitle(t *testing.T) {

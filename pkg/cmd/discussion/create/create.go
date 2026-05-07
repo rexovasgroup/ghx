@@ -57,6 +57,22 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 		Args: cmdutil.NoArgsQuoteReminder,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.BaseRepo = f.BaseRepo
+
+			if opts.Title != "" && strings.TrimSpace(opts.Title) == "" {
+				return cmdutil.FlagErrorf("title cannot be blank")
+			}
+			if opts.Body != "" && strings.TrimSpace(opts.Body) == "" {
+				return cmdutil.FlagErrorf("body cannot be blank")
+			}
+			if opts.Category != "" && strings.TrimSpace(opts.Category) == "" {
+				return cmdutil.FlagErrorf("category cannot be blank")
+			}
+
+			needsInput := opts.Title == "" || opts.Category == "" || opts.Body == ""
+			if needsInput && !opts.IO.CanPrompt() {
+				return cmdutil.FlagErrorf("--title, --body, and --category are required when not running interactively")
+			}
+
 			if runF != nil {
 				return runF(opts)
 			}
@@ -83,36 +99,19 @@ func createRun(opts *CreateOptions) error {
 		return err
 	}
 
-	interactive := opts.IO.CanPrompt()
-
-	if !interactive {
-		if opts.Title == "" {
-			return cmdutil.FlagErrorf("--title required when not running interactively")
-		}
-		if opts.Category == "" {
-			return cmdutil.FlagErrorf("--category required when not running interactively")
-		}
-		if opts.Body == "" {
-			return cmdutil.FlagErrorf("--body required when not running interactively")
-		}
-	}
-
 	categories, err := c.ListCategories(repo)
 	if err != nil {
 		return fmt.Errorf("fetching categories: %w", err)
 	}
 
 	if opts.Title == "" {
-		if !interactive {
-			return cmdutil.FlagErrorf("--title required when not running interactively")
-		}
 		opts.Title, err = opts.Prompter.Input("Discussion title", "")
 		if err != nil {
 			return err
 		}
-	}
-	if strings.TrimSpace(opts.Title) == "" {
-		return cmdutil.FlagErrorf("title cannot be blank")
+		if strings.TrimSpace(opts.Title) == "" {
+			return fmt.Errorf("title cannot be blank")
+		}
 	}
 
 	var category *client.DiscussionCategory
@@ -122,9 +121,6 @@ func createRun(opts *CreateOptions) error {
 			return err
 		}
 	} else {
-		if !interactive {
-			return cmdutil.FlagErrorf("--category required when not running interactively")
-		}
 		names := make([]string, len(categories))
 		for i, cat := range categories {
 			names[i] = cat.Name
@@ -137,12 +133,12 @@ func createRun(opts *CreateOptions) error {
 	}
 
 	if opts.Body == "" {
-		if !interactive {
-			return cmdutil.FlagErrorf("--body required when not running interactively")
-		}
 		opts.Body, err = opts.Prompter.MarkdownEditor("Discussion body", "", false)
 		if err != nil {
 			return err
+		}
+		if strings.TrimSpace(opts.Body) == "" {
+			return fmt.Errorf("body cannot be blank")
 		}
 	}
 
@@ -160,11 +156,10 @@ func createRun(opts *CreateOptions) error {
 
 	if opts.IO.IsStdoutTTY() {
 		cs := opts.IO.ColorScheme()
-		fmt.Fprintf(opts.IO.Out, "%s Created discussion #%d: %s\n",
-			cs.SuccessIcon(), discussion.Number, discussion.URL)
-	} else {
-		fmt.Fprintln(opts.IO.Out, discussion.URL)
+		fmt.Fprintf(opts.IO.ErrOut, "%s Created discussion #%d\n",
+			cs.SuccessIcon(), discussion.Number)
 	}
+	fmt.Fprintln(opts.IO.Out, discussion.URL)
 
 	return nil
 }
