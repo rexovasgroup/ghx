@@ -40,7 +40,7 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a new discussion",
+		Short: "Create a new discussion (preview)",
 		Long: heredoc.Doc(`
 			Create a new GitHub Discussion in a repository.
 
