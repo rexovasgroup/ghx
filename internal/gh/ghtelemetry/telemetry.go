@@ -21,7 +21,7 @@ type RecordOption func(*RecordOptions)
 // IncludeCommonDimensions returns a RecordOption that causes common dimensions
 // (device_id, invocation_id, os, architecture, etc.) to be merged into the
 // event at flush time. Without this option, events only carry their own
-// dimensions plus a timestamp.
+// event-specific dimensions plus a timestamp and sample_rate.
 func IncludeCommonDimensions() RecordOption {
 	return func(o *RecordOptions) {
 		o.IncludeCommonDimensions = true
