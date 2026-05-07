@@ -1496,6 +1496,90 @@ func mockProjectV2ItemUpdate(t *testing.T, reg *httpmock.Registry) {
 	)
 }
 
+// Test_editRun_crossHostRelationshipRefs verifies that every relationship
+// flag rejects a cross-host issue URL with the same clear error. Lives as
+// its own table rather than additional cases in Test_editRun because each
+// case shares identical setup and asserts the same error, varying only in
+// which input field carries the cross-host URL.
+func Test_editRun_crossHostRelationshipRefs(t *testing.T) {
+	const crossHostURL = "https://example.com/OWNER/REPO/issues/9"
+
+	// Each case exercises one relationship-bearing flag with a cross-host
+	// URL. ResolveIssueRef should short-circuit before any GraphQL request,
+	// and the per-issue failure must surface to stderr.
+	tests := []struct {
+		name  string
+		input *EditOptions
+	}{
+		{
+			name: "set parent",
+			input: &EditOptions{
+				Editable: prShared.Editable{
+					Parent: prShared.EditableString{
+						Value:  crossHostURL,
+						Edited: true,
+					},
+				},
+			},
+		},
+		{
+			name:  "add sub-issue",
+			input: &EditOptions{AddSubIssues: []string{crossHostURL}},
+		},
+		{
+			name:  "remove sub-issue",
+			input: &EditOptions{RemoveSubIssues: []string{crossHostURL}},
+		},
+		{
+			name:  "add blocked-by",
+			input: &EditOptions{AddBlockedBy: []string{crossHostURL}},
+		},
+		{
+			name:  "remove blocked-by",
+			input: &EditOptions{RemoveBlockedBy: []string{crossHostURL}},
+		},
+		{
+			name:  "add blocking",
+			input: &EditOptions{AddBlocking: []string{crossHostURL}},
+		},
+		{
+			name:  "remove blocking",
+			input: &EditOptions{RemoveBlocking: []string{crossHostURL}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ios, _, _, stderr := iostreams.Test()
+			ios.SetStdoutTTY(true)
+
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+			mockIssueGet(t, reg)
+			// No IssueNodeID stub on purpose: the cross-host guard must
+			// short-circuit before any resolution request goes out.
+
+			tt.input.Detector = &fd.EnabledDetectorMock{}
+			tt.input.IssueNumbers = []int{123}
+			tt.input.Interactive = false
+			tt.input.FetchOptions = func(_ *api.Client, _ ghrepo.Interface, _ *prShared.Editable, _ gh.ProjectsV1Support) error {
+				return nil
+			}
+			tt.input.IO = ios
+			tt.input.HttpClient = func() (*http.Client, error) {
+				return &http.Client{Transport: reg}, nil
+			}
+			tt.input.BaseRepo = func() (ghrepo.Interface, error) {
+				return ghrepo.New("OWNER", "REPO"), nil
+			}
+
+			err := editRun(tt.input)
+			require.Error(t, err)
+			assert.Regexp(t, `belongs to a different host \(example\.com\) than the current repository \(github\.com\)`, stderr.String())
+		})
+	}
+}
+
 func TestApiActorsSupported(t *testing.T) {
 	t.Run("when actors are assignable, query includes assignedActors", func(t *testing.T) {
 		ios, _, _, _ := iostreams.Test()

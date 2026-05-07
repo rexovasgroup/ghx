@@ -17,6 +17,9 @@ func ResolveIssueRef(client *api.Client, baseRepo ghrepo.Interface, ref string) 
 
 	targetRepo := baseRepo
 	if r, ok := repo.Value(); ok {
+		if r.RepoHost() != baseRepo.RepoHost() {
+			return "", fmt.Errorf("issue reference %q belongs to a different host (%s) than the current repository (%s)", ref, r.RepoHost(), baseRepo.RepoHost())
+		}
 		targetRepo = r
 	}
 
