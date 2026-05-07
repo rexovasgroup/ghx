@@ -153,14 +153,9 @@ func createRun(opts *CreateOptions) error {
 
 	discussion, err := c.Create(repo, input)
 	if err != nil {
-		return fmt.Errorf("creating discussion: %w", err)
+		return fmt.Errorf("failed to create discussion: %w", err)
 	}
 
-	if opts.IO.IsStdoutTTY() {
-		cs := opts.IO.ColorScheme()
-		fmt.Fprintf(opts.IO.ErrOut, "%s Created discussion #%d\n",
-			cs.SuccessIcon(), discussion.Number)
-	}
 	fmt.Fprintln(opts.IO.Out, discussion.URL)
 
 	return nil
