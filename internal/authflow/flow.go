@@ -27,7 +27,7 @@ var (
 // AuthFlow initiates an OAuth device or web application flow to acquire a
 // token. The provided HTTP client should be a plain client that does not set
 // auth or other headers.
-func AuthFlow(httpClient *http.Client, oauthHost string, IO *iostreams.IOStreams, notice string, additionalScopes []string, isInteractive bool, b browser.Browser, isCopyToClipboard bool) (string, string, error) {
+func AuthFlow(httpClient *http.Client, oauthHost string, IO *iostreams.IOStreams, notice string, additionalScopes []string, isInteractive bool, b browser.Browser, isCopyToClipboard bool, bearerAuth bool) (string, string, error) {
 	w := IO.ErrOut
 	cs := IO.ColorScheme()
 
@@ -97,7 +97,7 @@ func AuthFlow(httpClient *http.Client, oauthHost string, IO *iostreams.IOStreams
 		return "", "", err
 	}
 
-	userLogin, err := getViewer(httpClient, oauthHost, token.Token)
+	userLogin, err := getViewer(httpClient, oauthHost, token.Token, bearerAuth)
 	if err != nil {
 		return "", "", err
 	}
@@ -116,16 +116,21 @@ func getCallbackURI(oauthHost string) string {
 }
 
 type cfg struct {
-	token string
+	token      string
+	bearerAuth bool
 }
 
 func (c cfg) ActiveToken(hostname string) (string, string) {
 	return c.token, "oauth_token"
 }
 
-func getViewer(httpClient *http.Client, hostname, token string) (string, error) {
+func (c cfg) BearerAuth(hostname string) bool {
+	return c.bearerAuth
+}
+
+func getViewer(httpClient *http.Client, hostname, token string, bearerAuth bool) (string, error) {
 	authedClient := *httpClient
-	authedClient.Transport = api.AddAuthTokenHeader(httpClient.Transport, cfg{token: token})
+	authedClient.Transport = api.AddAuthTokenHeader(httpClient.Transport, cfg{token: token, bearerAuth: bearerAuth})
 	return api.CurrentLoginName(api.NewClientFromHTTP(&authedClient), hostname)
 }
 

@@ -63,6 +63,36 @@ func TestNewHTTPClient(t *testing.T) {
 			wantStderr: "",
 		},
 		{
+			name: "github.com with bearer auth",
+			args: args{
+				config:     tinyConfig{"github.com:oauth_token": "MYTOKEN", "github.com:bearer_auth": "enabled"},
+				appVersion: "v1.2.3",
+			},
+			host: "github.com",
+			wantHeader: map[string][]string{
+				"authorization":        {"Bearer MYTOKEN"},
+				"user-agent":           {"GitHub CLI v1.2.3"},
+				"x-github-api-version": {"2022-11-28"},
+				"accept":               {"application/vnd.github.merge-info-preview+json, application/vnd.github.nebula-preview"},
+			},
+			wantStderr: "",
+		},
+		{
+			name: "GHES with bearer auth",
+			args: args{
+				config:     tinyConfig{"example.com:oauth_token": "GHETOKEN", "example.com:bearer_auth": "enabled"},
+				appVersion: "v1.2.3",
+			},
+			host: "example.com",
+			wantHeader: map[string][]string{
+				"authorization":        {"Bearer GHETOKEN"},
+				"user-agent":           {"GitHub CLI v1.2.3"},
+				"x-github-api-version": {"2022-11-28"},
+				"accept":               {"application/vnd.github.merge-info-preview+json, application/vnd.github.nebula-preview"},
+			},
+			wantStderr: "",
+		},
+		{
 			name: "github.com no authentication token",
 			args: args{
 				config:         tinyConfig{"example.com:oauth_token": "MYTOKEN"},
@@ -393,6 +423,10 @@ type tinyConfig map[string]string
 
 func (c tinyConfig) ActiveToken(host string) (string, string) {
 	return c[fmt.Sprintf("%s:%s", host, "oauth_token")], "oauth_token"
+}
+
+func (c tinyConfig) BearerAuth(host string) bool {
+	return c[fmt.Sprintf("%s:%s", host, "bearer_auth")] == "enabled"
 }
 
 var requestAtRE = regexp.MustCompile(`(?m)^\* Request at .+`)

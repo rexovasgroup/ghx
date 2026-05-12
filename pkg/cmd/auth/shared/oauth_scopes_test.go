@@ -8,6 +8,7 @@ import (
 
 	"github.com/cli/cli/v2/pkg/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_HasMinimumScopes(t *testing.T) {
@@ -46,7 +47,7 @@ func Test_HasMinimumScopes(t *testing.T) {
 			})
 
 			client := http.Client{Transport: fakehttp}
-			err := HasMinimumScopes(&client, "github.com", "ATOKEN")
+			err := HasMinimumScopes(&client, "github.com", "ATOKEN", false)
 			if tt.wantErr != "" {
 				assert.EqualError(t, err, tt.wantErr)
 			} else {
@@ -55,6 +56,29 @@ func Test_HasMinimumScopes(t *testing.T) {
 			assert.Equal(t, gotAuthorization, "token ATOKEN")
 		})
 	}
+}
+
+func Test_HasMinimumScopes_bearerAuth(t *testing.T) {
+	fakehttp := &httpmock.Registry{}
+	defer fakehttp.Verify(t)
+
+	var gotAuthorization string
+	fakehttp.Register(httpmock.REST("GET", ""), func(req *http.Request) (*http.Response, error) {
+		gotAuthorization = req.Header.Get("authorization")
+		return &http.Response{
+			Request:    req,
+			StatusCode: 200,
+			Body:       io.NopCloser(&bytes.Buffer{}),
+			Header: map[string][]string{
+				"X-Oauth-Scopes": {"repo, read:org"},
+			},
+		}, nil
+	})
+
+	client := http.Client{Transport: fakehttp}
+	err := HasMinimumScopes(&client, "github.com", "ATOKEN", true)
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer ATOKEN", gotAuthorization)
 }
 
 func Test_HeaderHasMinimumScopes(t *testing.T) {

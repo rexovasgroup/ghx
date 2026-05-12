@@ -28,11 +28,33 @@ func Test_getViewer_leavesUserAgent(t *testing.T) {
 		}},
 	}
 
-	login, err := getViewer(plainClient, "github.com", "test-token")
+	login, err := getViewer(plainClient, "github.com", "test-token", false)
 	require.NoError(t, err)
 	assert.Equal(t, "monalisa", login)
 	assert.Empty(t, receivedUA, "User-Agent header should be left unset so that downstream transports can set it")
 	assert.Equal(t, "token test-token", receivedAuth)
+}
+
+func Test_getViewer_bearerAuth(t *testing.T) {
+	var receivedAuth string
+
+	plainClient := &http.Client{
+		Transport: &roundTripper{roundTrip: func(req *http.Request) (*http.Response, error) {
+			receivedAuth = req.Header.Get("Authorization")
+
+			return &http.Response{
+				StatusCode: 200,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(bytes.NewBufferString(`{"data":{"viewer":{"login":"monalisa"}}}`)),
+				Request:    req,
+			}, nil
+		}},
+	}
+
+	login, err := getViewer(plainClient, "github.com", "test-token", true)
+	require.NoError(t, err)
+	assert.Equal(t, "monalisa", login)
+	assert.Equal(t, "Bearer test-token", receivedAuth)
 }
 
 type roundTripper struct {

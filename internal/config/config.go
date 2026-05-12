@@ -20,6 +20,7 @@ const (
 	accessibleColorsKey   = "accessible_colors" // used by cli/go-gh to enable the use of customizable, accessible 4-bit colors.
 	accessiblePrompterKey = "accessible_prompter"
 	aliasesKey            = "aliases"
+	bearerAuthKey         = "bearer_auth"
 	browserKey            = "browser" // used by cli/go-gh to open URLs in web browsers
 	colorLabelsKey        = "color_labels"
 	editorKey             = "editor" // used by cli/go-gh to open interactive text editor
@@ -118,6 +119,11 @@ func (c *cfg) Authentication() gh.AuthConfig {
 func (c *cfg) AccessibleColors(hostname string) gh.ConfigEntry {
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, accessibleColorsKey).Unwrap()
+}
+
+func (c *cfg) BearerAuth(hostname string) gh.ConfigEntry {
+	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
+	return c.GetOrDefault(hostname, bearerAuthKey).Unwrap()
 }
 
 func (c *cfg) AccessiblePrompter(hostname string) gh.ConfigEntry {
@@ -263,6 +269,25 @@ func (c *AuthConfig) ActiveToken(hostname string) (string, string) {
 func (c *AuthConfig) HasActiveToken(hostname string) bool {
 	token, _ := c.ActiveToken(hostname)
 	return token != ""
+}
+
+// BearerAuth returns true when Bearer token authentication should be used
+// for the given hostname. This checks the GH_BEARER_AUTH environment variable
+// first, then falls back to the bearer_auth config setting.
+func (c *AuthConfig) BearerAuth(hostname string) bool {
+	if v := os.Getenv("GH_BEARER_AUTH"); v != "" {
+		return true
+	}
+
+	if val, err := c.cfg.Get([]string{hostsKey, hostname, bearerAuthKey}); err == nil {
+		return val == "enabled"
+	}
+
+	if val, err := c.cfg.Get([]string{bearerAuthKey}); err == nil {
+		return val == "enabled"
+	}
+
+	return false
 }
 
 // HasEnvToken returns true when a token has been specified in an
@@ -580,6 +605,10 @@ color_labels: disabled
 accessible_colors: disabled
 # Whether an accessible prompter should be used. Supported values: enabled, disabled
 accessible_prompter: disabled
+# Whether to use Bearer token authentication instead of the default token authentication.
+# This may be required for enterprise proxy setups. Can also be enabled via GH_BEARER_AUTH env var.
+# Supported values: enabled, disabled
+bearer_auth: disabled
 # Whether to use an animated spinner as a progress indicator. If disabled, a textual progress indicator is used instead. Supported values: enabled, disabled
 spinner: enabled
 `
@@ -677,6 +706,15 @@ var Options = []ConfigOption{
 		AllowedValues: []string{"enabled", "disabled"},
 		CurrentValue: func(c gh.Config, hostname string) string {
 			return c.AccessiblePrompter(hostname).Value
+		},
+	},
+	{
+		Key:           bearerAuthKey,
+		Description:   "whether to use Bearer token authentication instead of token authentication",
+		DefaultValue:  "disabled",
+		AllowedValues: []string{"enabled", "disabled"},
+		CurrentValue: func(c gh.Config, hostname string) string {
+			return c.BearerAuth(hostname).Value
 		},
 	},
 	{

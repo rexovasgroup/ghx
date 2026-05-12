@@ -244,6 +244,7 @@ func statusRun(opts *StatusOptions) error {
 		}
 		entry := buildEntry(httpClient, buildEntryOptions{
 			active:      true,
+			bearerAuth:  authCfg.BearerAuth(hostname),
 			gitProtocol: gitProtocol,
 			hostname:    hostname,
 			token:       activeUserToken,
@@ -268,6 +269,7 @@ func statusRun(opts *StatusOptions) error {
 			token, tokenSource, _ := authCfg.TokenForUser(hostname, username)
 			entry := buildEntry(httpClient, buildEntryOptions{
 				active:      false,
+				bearerAuth:  authCfg.BearerAuth(hostname),
 				gitProtocol: gitProtocol,
 				hostname:    hostname,
 				token:       token,
@@ -354,6 +356,7 @@ func expectScopes(token string) bool {
 
 type buildEntryOptions struct {
 	active      bool
+	bearerAuth  bool
 	gitProtocol string
 	hostname    string
 	token       string
@@ -393,7 +396,7 @@ func buildEntry(httpClient *http.Client, opts buildEntryOptions) authEntry {
 	}
 
 	// Get scopes for token.
-	scopesHeader, err := shared.GetScopes(httpClient, opts.hostname, opts.token)
+	scopesHeader, err := shared.GetScopes(httpClient, opts.hostname, opts.token, opts.bearerAuth)
 	if err != nil {
 		var networkError net.Error
 		if errors.As(err, &networkError) && networkError.Timeout() {

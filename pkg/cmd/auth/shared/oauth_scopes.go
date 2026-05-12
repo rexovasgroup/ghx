@@ -32,7 +32,7 @@ type httpClient interface {
 }
 
 // GetScopes performs a GitHub API request and returns the value of the X-Oauth-Scopes header.
-func GetScopes(httpClient httpClient, hostname, authToken string) (string, error) {
+func GetScopes(httpClient httpClient, hostname, authToken string, bearerAuth bool) (string, error) {
 	apiEndpoint := ghinstance.RESTPrefix(hostname)
 
 	req, err := http.NewRequest("GET", apiEndpoint, nil)
@@ -40,7 +40,7 @@ func GetScopes(httpClient httpClient, hostname, authToken string) (string, error
 		return "", err
 	}
 
-	req.Header.Set("Authorization", "token "+authToken)
+	req.Header.Set("Authorization", authTokenHeader(authToken, bearerAuth))
 
 	res, err := httpClient.Do(req)
 	if err != nil {
@@ -63,8 +63,8 @@ func GetScopes(httpClient httpClient, hostname, authToken string) (string, error
 
 // HasMinimumScopes performs a GitHub API request and returns an error if the token used in the request
 // lacks the minimum required scopes for performing API operations with gh.
-func HasMinimumScopes(httpClient httpClient, hostname, authToken string) error {
-	scopesHeader, err := GetScopes(httpClient, hostname, authToken)
+func HasMinimumScopes(httpClient httpClient, hostname, authToken string, bearerAuth bool) error {
+	scopesHeader, err := GetScopes(httpClient, hostname, authToken, bearerAuth)
 	if err != nil {
 		return err
 	}
