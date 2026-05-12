@@ -147,7 +147,7 @@ func deleteRun(opts *DeleteOptions) error {
 			}
 		}
 		for _, cache := range caches.ActionsCaches {
-			toDelete = append(toDelete, strconv.Itoa(cache.Id))
+			toDelete = append(toDelete, strconv.FormatInt(cache.Id, 10))
 		}
 	} else {
 		toDelete = append(toDelete, opts.Identifier)
