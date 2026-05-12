@@ -7,6 +7,8 @@ import (
 	"github.com/cli/cli/v2/internal/codespaces/api"
 	"github.com/cli/cli/v2/internal/codespaces/connection"
 	"github.com/microsoft/dev-tunnels/go/tunnels"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,26 +34,16 @@ func TestNewPortForwarder(t *testing.T) {
 
 	// Create the mock HTTP client
 	httpClient, err := connection.NewMockHttpClient()
-	if err != nil {
-		t.Fatalf("NewHttpClient returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Call the function being tested
 	conn, err := connection.NewCodespaceConnection(ctx, codespace, httpClient)
-	if err != nil {
-		t.Fatalf("NewCodespaceConnection returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Create the new port forwarder
 	portForwarder, err := NewPortForwarder(ctx, conn)
-	if err != nil {
-		t.Fatalf("NewPortForwarder returned an error: %v", err)
-	}
-
-	// Check that the port forwarder was created successfully
-	if portForwarder == nil {
-		t.Fatal("NewPortForwarder returned nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, portForwarder)
 }
 
 func TestAccessControlEntriesToVisibility(t *testing.T) {
@@ -97,9 +89,7 @@ func TestAccessControlEntriesToVisibility(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			visibility := AccessControlEntriesToVisibility(test.accessControlEntries)
-			if visibility != test.expected {
-				t.Errorf("expected %q, got %q", test.expected, visibility)
-			}
+			assert.Equal(t, test.expected, visibility)
 		})
 	}
 }
@@ -132,9 +122,7 @@ func TestIsInternalPort(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			isInternal := IsInternalPort(test.port)
-			if isInternal != test.expected {
-				t.Errorf("expected %v, got %v", test.expected, isInternal)
-			}
+			assert.Equal(t, test.expected, isInternal)
 		})
 	}
 }
@@ -164,39 +152,24 @@ func TestForwardPortDefaultsToHTTPProtocol(t *testing.T) {
 	httpClient, err := connection.NewMockHttpClient(
 		connection.WithSpecificPorts(tunnelPorts),
 	)
-	if err != nil {
-		t.Fatalf("NewMockHttpClient returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	connection, err := connection.NewCodespaceConnection(t.Context(), codespace, httpClient)
-	if err != nil {
-		t.Fatalf("NewCodespaceConnection returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	fwd, err := NewPortForwarder(t.Context(), connection)
-	if err != nil {
-		t.Fatalf("NewPortForwarder returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// When we forward a port without an existing one to use for a protocol, it should default to HTTP.
-	if err := fwd.ForwardPort(t.Context(), ForwardPortOpts{
+	err = fwd.ForwardPort(t.Context(), ForwardPortOpts{
 		Port: 1337,
-	}); err != nil {
-		t.Fatalf("ForwardPort returned an error: %v", err)
-	}
+	})
+	require.NoError(t, err)
 
 	ports, err := fwd.ListPorts(t.Context())
-	if err != nil {
-		t.Fatalf("ListPorts returned an error: %v", err)
-	}
-
-	if len(ports) != 1 {
-		t.Fatalf("expected 1 port, got %d", len(ports))
-	}
-
-	if ports[0].Protocol != string(tunnels.TunnelProtocolHttp) {
-		t.Fatalf("expected port protocol to be http, got %s", ports[0].Protocol)
-	}
+	require.NoError(t, err)
+	require.Len(t, ports, 1)
+	assert.Equal(t, string(tunnels.TunnelProtocolHttp), ports[0].Protocol)
 }
 
 func TestConcurrentForwardPortDoesNotRace(t *testing.T) {
@@ -223,23 +196,17 @@ func TestConcurrentForwardPortDoesNotRace(t *testing.T) {
 	httpClient, err := connection.NewMockHttpClient(
 		connection.WithSpecificPorts(tunnelPorts),
 	)
-	if err != nil {
-		t.Fatalf("NewMockHttpClient returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	conn, err := connection.NewCodespaceConnection(t.Context(), codespace, httpClient)
-	if err != nil {
-		t.Fatalf("NewCodespaceConnection returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Forward multiple ports concurrently from the same connection,
 	// mirroring what ForwardPorts does in ports.go.
 	group, ctx := errgroup.WithContext(t.Context())
 	for port := 3000; port < 3010; port++ {
 		fwd, err := NewPortForwarder(ctx, conn)
-		if err != nil {
-			t.Fatalf("NewPortForwarder returned an error: %v", err)
-		}
+		require.NoError(t, err)
 
 		group.Go(func() error {
 			return fwd.ForwardPort(ctx, ForwardPortOpts{
@@ -248,9 +215,7 @@ func TestConcurrentForwardPortDoesNotRace(t *testing.T) {
 		})
 	}
 
-	if err := group.Wait(); err != nil {
-		t.Fatalf("ForwardPort returned an error: %v", err)
-	}
+	require.NoError(t, group.Wait())
 }
 
 func TestForwardPortRespectsProtocolOfExistingTunneledPorts(t *testing.T) {
@@ -285,38 +250,23 @@ func TestForwardPortRespectsProtocolOfExistingTunneledPorts(t *testing.T) {
 	httpClient, err := connection.NewMockHttpClient(
 		connection.WithSpecificPorts(tunnelPorts),
 	)
-	if err != nil {
-		t.Fatalf("NewMockHttpClient returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	connection, err := connection.NewCodespaceConnection(t.Context(), codespace, httpClient)
-	if err != nil {
-		t.Fatalf("NewCodespaceConnection returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	fwd, err := NewPortForwarder(t.Context(), connection)
-	if err != nil {
-		t.Fatalf("NewPortForwarder returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// When we forward a port, it would typically default to HTTP, to which the mock server would respond with a 400,
 	// but it should respect the existing port's protocol and forward it as HTTPS.
-	if err := fwd.ForwardPort(t.Context(), ForwardPortOpts{
+	err = fwd.ForwardPort(t.Context(), ForwardPortOpts{
 		Port: 1337,
-	}); err != nil {
-		t.Fatalf("ForwardPort returned an error: %v", err)
-	}
+	})
+	require.NoError(t, err)
 
 	ports, err := fwd.ListPorts(t.Context())
-	if err != nil {
-		t.Fatalf("ListPorts returned an error: %v", err)
-	}
-
-	if len(ports) != 1 {
-		t.Fatalf("expected 1 port, got %d", len(ports))
-	}
-
-	if ports[0].Protocol != string(tunnels.TunnelProtocolHttps) {
-		t.Fatalf("expected port protocol to be https, got %s", ports[0].Protocol)
-	}
+	require.NoError(t, err)
+	require.Len(t, ports, 1)
+	assert.Equal(t, string(tunnels.TunnelProtocolHttps), ports[0].Protocol)
 }
