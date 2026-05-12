@@ -423,14 +423,8 @@ func createRun(opts *CreateOptions) (err error) {
 			return
 		}
 
-		// TODO IssueRelationshipsCleanup
-		if issueFeatures.IssueRelationshipsSupported {
-			err = applyRelationships(apiClient, baseRepo, newIssue, opts)
-			if err != nil {
-				return
-			}
-		} else if len(opts.BlockedBy) > 0 || len(opts.Blocking) > 0 {
-			err = fmt.Errorf("issue relationships are not supported on this GitHub Enterprise Server version")
+		err = applyRelationships(apiClient, baseRepo, newIssue, opts)
+		if err != nil {
 			return
 		}
 

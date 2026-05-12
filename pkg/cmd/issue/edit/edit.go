@@ -424,7 +424,7 @@ func editRun(opts *EditOptions) error {
 			}
 
 			// Relationship mutations
-			if err := applyEditRelationships(apiClient, baseRepo, issue, opts, issueFeatures); err != nil {
+			if err := applyEditRelationships(apiClient, baseRepo, issue, opts); err != nil {
 				failedIssueChan <- fmt.Sprintf("failed to update relationships for %s: %s", issue.URL, err)
 				return
 			}
@@ -529,16 +529,11 @@ func applyEditSubIssues(client *api.Client, baseRepo ghrepo.Interface, issue *ap
 	return nil
 }
 
-func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *EditOptions, features fd.IssueFeatures) error {
+func applyEditRelationships(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, opts *EditOptions) error {
 	hasRelationshipFlags := len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 ||
 		len(opts.AddBlocking) > 0 || len(opts.RemoveBlocking) > 0
 	if !hasRelationshipFlags {
 		return nil
-	}
-
-	// TODO IssueRelationshipsCleanup
-	if !features.IssueRelationshipsSupported {
-		return fmt.Errorf("issue relationships are not supported on this GitHub Enterprise Server version")
 	}
 
 	hostname := baseRepo.RepoHost()

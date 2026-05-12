@@ -941,58 +941,6 @@ func Test_createRun(t *testing.T) {
 			wantsStdout: "https://github.com/OWNER/REPO/issues/123\n",
 			wantsStderr: "\nCreating issue in OWNER/REPO\n\n",
 		},
-		{
-			name: "blocked-by unsupported on GHES",
-			opts: CreateOptions{
-				Detector:  &fd.DisabledDetectorMock{},
-				Title:     "blocked issue",
-				Body:      "blocked body",
-				BlockedBy: []string{"200"},
-			},
-			httpStubs: func(_ *testing.T, r *httpmock.Registry) {
-				r.Register(
-					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
-					httpmock.StringResponse(`
-						{ "data": { "repository": {
-							"id": "REPOID",
-							"hasIssuesEnabled": true
-						} } }`))
-				r.Register(
-					httpmock.GraphQL(`mutation IssueCreate\b`),
-					httpmock.StringResponse(`
-						{ "data": { "createIssue": { "issue": {
-							"id": "ISSUE_ID_123",
-							"URL": "https://github.com/OWNER/REPO/issues/123"
-						} } } }`))
-			},
-			wantsErr: "issue relationships are not supported on this GitHub Enterprise Server version",
-		},
-		{
-			name: "blocking unsupported on GHES",
-			opts: CreateOptions{
-				Detector: &fd.DisabledDetectorMock{},
-				Title:    "blocking issue",
-				Body:     "blocking body",
-				Blocking: []string{"300"},
-			},
-			httpStubs: func(_ *testing.T, r *httpmock.Registry) {
-				r.Register(
-					httpmock.GraphQL(`query IssueRepositoryInfo\b`),
-					httpmock.StringResponse(`
-						{ "data": { "repository": {
-							"id": "REPOID",
-							"hasIssuesEnabled": true
-						} } }`))
-				r.Register(
-					httpmock.GraphQL(`mutation IssueCreate\b`),
-					httpmock.StringResponse(`
-						{ "data": { "createIssue": { "issue": {
-							"id": "ISSUE_ID_123",
-							"URL": "https://github.com/OWNER/REPO/issues/123"
-						} } } }`))
-			},
-			wantsErr: "issue relationships are not supported on this GitHub Enterprise Server version",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
