@@ -200,6 +200,10 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 				return cmdutil.FlagErrorf("multiple issues cannot be edited interactively")
 			}
 
+			if len(opts.IssueNumbers) > 1 && len(opts.AddSubIssues) > 0 {
+				return cmdutil.FlagErrorf("`--add-sub-issue` cannot be used when editing multiple issues")
+			}
+
 			if runF != nil {
 				return runF(opts)
 			}

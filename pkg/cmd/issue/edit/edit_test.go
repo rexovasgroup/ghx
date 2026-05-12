@@ -337,6 +337,11 @@ func TestNewCmdEdit(t *testing.T) {
 			},
 		},
 		{
+			name:     "add-sub-issue rejected with multiple issues",
+			input:    "23 24 --add-sub-issue 123",
+			wantsErr: true,
+		},
+		{
 			name:  "remove-sub-issue flag",
 			input: "23 --remove-sub-issue 50",
 			output: EditOptions{
