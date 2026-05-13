@@ -36,7 +36,7 @@ type EditOptions struct {
 	IssueNumbers []int
 	Interactive  bool
 
-	SetParent       string
+	Parent          string
 	RemoveParent    bool
 	AddSubIssues    []string
 	RemoveSubIssues []string
@@ -87,7 +87,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 			$ gh issue edit 23 --body-file body.txt
 			$ gh issue edit 23 34 --add-label "help wanted"
 			$ gh issue edit 23 --type Bug
-			$ gh issue edit 23 --set-parent 100
+			$ gh issue edit 23 --parent 100
 			$ gh issue edit 23 --remove-parent
 			$ gh issue edit 100 --add-sub-issue 123,124
 			$ gh issue edit 123 --add-blocked-by 200 --add-blocking 300,301
@@ -143,8 +143,8 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 			}
 
 			if err := cmdutil.MutuallyExclusive(
-				"specify only one of --set-parent or --remove-parent",
-				flags.Changed("set-parent"),
+				"specify only one of --parent or --remove-parent",
+				flags.Changed("parent"),
 				opts.RemoveParent,
 			); err != nil {
 				return err
@@ -174,7 +174,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 				opts.Editable.IssueType.Edited = true
 			}
 
-			hasRelationshipFlags := flags.Changed("set-parent") || opts.RemoveParent ||
+			hasRelationshipFlags := flags.Changed("parent") || opts.RemoveParent ||
 				len(opts.AddSubIssues) > 0 || len(opts.RemoveSubIssues) > 0 ||
 				len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 ||
 				len(opts.AddBlocking) > 0 || len(opts.RemoveBlocking) > 0
@@ -216,7 +216,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 	cmd.Flags().StringVarP(&opts.Editable.Milestone.Value, "milestone", "m", "", "Edit the milestone the issue belongs to by `name`")
 	cmd.Flags().BoolVar(&removeMilestone, "remove-milestone", false, "Remove the milestone association from the issue")
 	cmd.Flags().StringVar(&opts.Editable.IssueType.Value, "type", "", "Set the issue type by `name`")
-	cmd.Flags().StringVar(&opts.SetParent, "set-parent", "", "Set the parent issue by `number` or URL")
+	cmd.Flags().StringVar(&opts.Parent, "parent", "", "Set the parent issue by `number` or URL")
 	cmd.Flags().BoolVar(&opts.RemoveParent, "remove-parent", false, "Remove the parent issue")
 	cmd.Flags().StringSliceVar(&opts.AddSubIssues, "add-sub-issue", nil, "Add sub-issues by `number` or URL")
 	cmd.Flags().StringSliceVar(&opts.RemoveSubIssues, "remove-sub-issue", nil, "Remove sub-issues by `number` or URL")
@@ -288,7 +288,7 @@ func editRun(opts *EditOptions) error {
 	if editable.IssueType.Edited {
 		lookupFields = append(lookupFields, "issueType")
 	}
-	if opts.SetParent != "" || opts.RemoveParent {
+	if opts.Parent != "" || opts.RemoveParent {
 		lookupFields = append(lookupFields, "parent")
 	}
 
@@ -465,10 +465,10 @@ func deferredUpdateIssueOptions(client *api.Client, baseRepo ghrepo.Interface, i
 		if issue.Parent != nil {
 			updateOpts.RemoveParentID = issue.Parent.ID
 		}
-	} else if editOpts.SetParent != "" {
-		parentID, err := issueShared.ResolveIssueRef(client, baseRepo, editOpts.SetParent)
+	} else if editOpts.Parent != "" {
+		parentID, err := issueShared.ResolveIssueRef(client, baseRepo, editOpts.Parent)
 		if err != nil {
-			return updateOpts, fmt.Errorf("resolving --set-parent reference %q: %w", editOpts.SetParent, err)
+			return updateOpts, fmt.Errorf("resolving --parent reference %q: %w", editOpts.Parent, err)
 		}
 		updateOpts.ParentID = parentID
 	}

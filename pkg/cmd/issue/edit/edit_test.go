@@ -298,11 +298,11 @@ func TestNewCmdEdit(t *testing.T) {
 			},
 		},
 		{
-			name:  "set-parent flag",
-			input: "23 --set-parent 100",
+			name:  "parent flag",
+			input: "23 --parent 100",
 			output: EditOptions{
 				IssueNumbers: []int{23},
-				SetParent:    "100",
+				Parent:       "100",
 			},
 		},
 		{
@@ -314,8 +314,8 @@ func TestNewCmdEdit(t *testing.T) {
 			},
 		},
 		{
-			name:     "both set-parent and remove-parent flags",
-			input:    "23 --set-parent 100 --remove-parent",
+			name:     "both parent and remove-parent flags",
+			input:    "23 --parent 100 --remove-parent",
 			wantsErr: true,
 		},
 		{
@@ -412,7 +412,7 @@ func TestNewCmdEdit(t *testing.T) {
 			assert.Equal(t, tt.output.IssueNumbers, gotOpts.IssueNumbers)
 			assert.Equal(t, tt.output.Interactive, gotOpts.Interactive)
 			assert.Equal(t, tt.output.Editable, gotOpts.Editable)
-			assert.Equal(t, tt.output.SetParent, gotOpts.SetParent)
+			assert.Equal(t, tt.output.Parent, gotOpts.Parent)
 			assert.Equal(t, tt.output.RemoveParent, gotOpts.RemoveParent)
 			assert.Equal(t, tt.output.AddSubIssues, gotOpts.AddSubIssues)
 			assert.Equal(t, tt.output.RemoveSubIssues, gotOpts.RemoveSubIssues)
@@ -907,7 +907,7 @@ func Test_editRun(t *testing.T) {
 				Detector:     &fd.EnabledDetectorMock{},
 				IssueNumbers: []int{123},
 				Interactive:  false,
-				SetParent:    "100",
+				Parent:       "100",
 				FetchOptions: func(_ *api.Client, _ ghrepo.Interface, _ *prShared.Editable, _ gh.ProjectsV1Support) error {
 					return nil
 				},
@@ -1436,7 +1436,7 @@ func Test_editRun_crossHostRelationshipRefs(t *testing.T) {
 	}{
 		{
 			name:  "set parent",
-			input: &EditOptions{SetParent: crossHostURL},
+			input: &EditOptions{Parent: crossHostURL},
 		},
 		{
 			name:  "add sub-issue",
