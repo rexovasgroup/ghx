@@ -15,7 +15,6 @@ import (
 
 type tokenGetter interface {
 	ActiveToken(string) (string, string)
-	BearerAuth(string) bool
 }
 
 type HTTPClientOptions struct {
@@ -23,6 +22,7 @@ type HTTPClientOptions struct {
 	InvokingAgent      string
 	CacheTTL           time.Duration
 	Config             tokenGetter
+	BearerAuth         func(string) bool
 	EnableCache        bool
 	Log                io.Writer
 	LogColorize        bool
@@ -74,7 +74,11 @@ func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	}
 
 	if opts.Config != nil {
-		client.Transport = AddAuthTokenHeader(client.Transport, opts.Config)
+		bearerAuth := opts.BearerAuth
+		if bearerAuth == nil {
+			bearerAuth = func(string) bool { return false }
+		}
+		client.Transport = AddAuthTokenHeader(client.Transport, opts.Config, bearerAuth)
 	}
 
 	if opts.TelemetryDisabler != nil {
@@ -106,7 +110,7 @@ func AddCacheTTLHeader(rt http.RoundTripper, ttl time.Duration) http.RoundTrippe
 }
 
 // AddAuthTokenHeader adds an authentication token header for the host specified by the request.
-func AddAuthTokenHeader(rt http.RoundTripper, cfg tokenGetter) http.RoundTripper {
+func AddAuthTokenHeader(rt http.RoundTripper, cfg tokenGetter, bearerAuth func(string) bool) http.RoundTripper {
 	return &funcTripper{roundTrip: func(req *http.Request) (*http.Response, error) {
 		// If the header is already set in the request, don't overwrite it.
 		if req.Header.Get(authorization) == "" {
@@ -120,7 +124,7 @@ func AddAuthTokenHeader(rt http.RoundTripper, cfg tokenGetter) http.RoundTripper
 				hostname := ghauth.NormalizeHostname(getHost(req))
 				if token, _ := cfg.ActiveToken(hostname); token != "" {
 					scheme := "token"
-					if cfg.BearerAuth(hostname) {
+					if bearerAuth(hostname) {
 						scheme = "Bearer"
 					}
 					req.Header.Set(authorization, fmt.Sprintf("%s %s", scheme, token))

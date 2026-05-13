@@ -176,7 +176,7 @@ func refreshRun(opts *RefreshOptions) error {
 
 	if !opts.ResetScopes {
 		if oldToken, _ := authCfg.ActiveToken(hostname); oldToken != "" {
-			if oldScopes, err := shared.GetScopes(plainHTTPClient, hostname, oldToken, authCfg.BearerAuth(hostname)); err == nil {
+			if oldScopes, err := shared.GetScopes(plainHTTPClient, hostname, oldToken, cfg.BearerAuth(hostname).Value == "enabled"); err == nil {
 				for _, s := range strings.Split(oldScopes, ",") {
 					s = strings.TrimSpace(s)
 					if s != "" {
@@ -209,7 +209,7 @@ func refreshRun(opts *RefreshOptions) error {
 
 	additionalScopes.RemoveValues(opts.RemoveScopes)
 
-	authedToken, authedUser, err := opts.AuthFlow(plainHTTPClient, opts.IO, hostname, additionalScopes.ToSlice(), opts.Interactive, opts.Clipboard, authCfg.BearerAuth(hostname))
+	authedToken, authedUser, err := opts.AuthFlow(plainHTTPClient, opts.IO, hostname, additionalScopes.ToSlice(), opts.Interactive, opts.Clipboard, cfg.BearerAuth(hostname).Value == "enabled")
 	if err != nil {
 		return err
 	}

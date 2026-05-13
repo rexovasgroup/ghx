@@ -203,10 +203,10 @@ func loginRun(opts *LoginOptions) error {
 	}
 
 	if opts.Token != "" {
-		if err := shared.HasMinimumScopes(httpClient, hostname, opts.Token, authCfg.BearerAuth(hostname)); err != nil {
+		if err := shared.HasMinimumScopes(httpClient, hostname, opts.Token, cfg.BearerAuth(hostname).Value == "enabled"); err != nil {
 			return fmt.Errorf("error validating token: %w", err)
 		}
-		username, err := shared.GetCurrentLogin(httpClient, hostname, opts.Token, authCfg.BearerAuth(hostname))
+		username, err := shared.GetCurrentLogin(httpClient, hostname, opts.Token, cfg.BearerAuth(hostname).Value == "enabled")
 		if err != nil {
 			return fmt.Errorf("error retrieving current user: %w", err)
 		}
@@ -241,7 +241,7 @@ func loginRun(opts *LoginOptions) error {
 		SecureStorage:    !opts.InsecureStorage,
 		SkipSSHKeyPrompt: opts.SkipSSHKeyPrompt,
 		CopyToClipboard:  opts.Clipboard,
-		BearerAuth:       authCfg.BearerAuth(hostname),
+		BearerAuth:       cfg.BearerAuth(hostname).Value == "enabled",
 	})
 }
 

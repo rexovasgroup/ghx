@@ -244,7 +244,7 @@ func statusRun(opts *StatusOptions) error {
 		}
 		entry := buildEntry(httpClient, buildEntryOptions{
 			active:      true,
-			bearerAuth:  authCfg.BearerAuth(hostname),
+			bearerAuth:  cfg.BearerAuth(hostname).Value == "enabled",
 			gitProtocol: gitProtocol,
 			hostname:    hostname,
 			token:       activeUserToken,
@@ -269,7 +269,7 @@ func statusRun(opts *StatusOptions) error {
 			token, tokenSource, _ := authCfg.TokenForUser(hostname, username)
 			entry := buildEntry(httpClient, buildEntryOptions{
 				active:      false,
-				bearerAuth:  authCfg.BearerAuth(hostname),
+				bearerAuth:  cfg.BearerAuth(hostname).Value == "enabled",
 				gitProtocol: gitProtocol,
 				hostname:    hostname,
 				token:       token,

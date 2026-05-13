@@ -122,6 +122,9 @@ func (c *cfg) AccessibleColors(hostname string) gh.ConfigEntry {
 }
 
 func (c *cfg) BearerAuth(hostname string) gh.ConfigEntry {
+	if v := os.Getenv("GH_BEARER_AUTH"); v != "" {
+		return gh.ConfigEntry{Value: "enabled", Source: gh.ConfigEnvironmentProvided}
+	}
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, bearerAuthKey).Unwrap()
 }
@@ -269,25 +272,6 @@ func (c *AuthConfig) ActiveToken(hostname string) (string, string) {
 func (c *AuthConfig) HasActiveToken(hostname string) bool {
 	token, _ := c.ActiveToken(hostname)
 	return token != ""
-}
-
-// BearerAuth returns true when Bearer token authentication should be used
-// for the given hostname. This checks the GH_BEARER_AUTH environment variable
-// first, then falls back to the bearer_auth config setting.
-func (c *AuthConfig) BearerAuth(hostname string) bool {
-	if v := os.Getenv("GH_BEARER_AUTH"); v != "" {
-		return true
-	}
-
-	if val, err := c.cfg.Get([]string{hostsKey, hostname, bearerAuthKey}); err == nil {
-		return val == "enabled"
-	}
-
-	if val, err := c.cfg.Get([]string{bearerAuthKey}); err == nil {
-		return val == "enabled"
-	}
-
-	return false
 }
 
 // HasEnvToken returns true when a token has been specified in an

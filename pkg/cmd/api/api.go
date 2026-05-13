@@ -390,6 +390,7 @@ func apiRun(opts *ApiOptions) error {
 				InvokingAgent:  opts.InvokingAgent,
 				CacheTTL:       opts.CacheTTL,
 				Config:         cfg.Authentication(),
+				BearerAuth:     func(h string) bool { return cfg.BearerAuth(h).Value == "enabled" },
 				EnableCache:    opts.CacheTTL > 0,
 				Log:            log,
 				LogColorize:    opts.IO.ColorEnabled(),

@@ -19,6 +19,7 @@ import (
 func TestNewHTTPClient(t *testing.T) {
 	type args struct {
 		config             tokenGetter
+		bearerAuth         func(string) bool
 		appVersion         string
 		invokingAgent      string
 		logVerboseHTTP     bool
@@ -65,7 +66,8 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com with bearer auth",
 			args: args{
-				config:     tinyConfig{"github.com:oauth_token": "MYTOKEN", "github.com:bearer_auth": "enabled"},
+				config:     tinyConfig{"github.com:oauth_token": "MYTOKEN"},
+				bearerAuth: func(string) bool { return true },
 				appVersion: "v1.2.3",
 			},
 			host: "github.com",
@@ -80,7 +82,8 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "GHES with bearer auth",
 			args: args{
-				config:     tinyConfig{"example.com:oauth_token": "GHETOKEN", "example.com:bearer_auth": "enabled"},
+				config:     tinyConfig{"example.com:oauth_token": "GHETOKEN"},
+				bearerAuth: func(string) bool { return true },
 				appVersion: "v1.2.3",
 			},
 			host: "example.com",
@@ -214,6 +217,7 @@ func TestNewHTTPClient(t *testing.T) {
 				AppVersion:         tt.args.appVersion,
 				InvokingAgent:      tt.args.invokingAgent,
 				Config:             tt.args.config,
+				BearerAuth:         tt.args.bearerAuth,
 				Log:                ios.ErrOut,
 				LogVerboseHTTP:     tt.args.logVerboseHTTP,
 				SkipDefaultHeaders: tt.args.skipDefaultHeaders,
@@ -423,10 +427,6 @@ type tinyConfig map[string]string
 
 func (c tinyConfig) ActiveToken(host string) (string, string) {
 	return c[fmt.Sprintf("%s:%s", host, "oauth_token")], "oauth_token"
-}
-
-func (c tinyConfig) BearerAuth(host string) bool {
-	return c[fmt.Sprintf("%s:%s", host, "bearer_auth")] == "enabled"
 }
 
 var requestAtRE = regexp.MustCompile(`(?m)^\* Request at .+`)

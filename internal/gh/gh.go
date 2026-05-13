@@ -17,8 +17,9 @@ import (
 type ConfigSource string
 
 const (
-	ConfigDefaultProvided ConfigSource = "default"
-	ConfigUserProvided    ConfigSource = "user"
+	ConfigDefaultProvided     ConfigSource = "default"
+	ConfigEnvironmentProvided ConfigSource = "environment"
+	ConfigUserProvided        ConfigSource = "user"
 )
 
 type ConfigEntry struct {
@@ -111,10 +112,6 @@ type AuthConfig interface {
 	// ActiveToken will retrieve the active auth token for the given hostname, searching environment variables,
 	// general configuration, and finally encrypted storage.
 	ActiveToken(hostname string) (token string, source string)
-
-	// BearerAuth returns true when Bearer token authentication should be used for the given hostname.
-	// This checks the GH_BEARER_AUTH environment variable first, then falls back to the config setting.
-	BearerAuth(hostname string) bool
 
 	// HasEnvToken returns true when a token has been specified in an environment variable, else returns false.
 	HasEnvToken() bool

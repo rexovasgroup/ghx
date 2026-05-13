@@ -116,21 +116,16 @@ func getCallbackURI(oauthHost string) string {
 }
 
 type cfg struct {
-	token      string
-	bearerAuth bool
+	token string
 }
 
 func (c cfg) ActiveToken(hostname string) (string, string) {
 	return c.token, "oauth_token"
 }
 
-func (c cfg) BearerAuth(hostname string) bool {
-	return c.bearerAuth
-}
-
 func getViewer(httpClient *http.Client, hostname, token string, bearerAuth bool) (string, error) {
 	authedClient := *httpClient
-	authedClient.Transport = api.AddAuthTokenHeader(httpClient.Transport, cfg{token: token, bearerAuth: bearerAuth})
+	authedClient.Transport = api.AddAuthTokenHeader(httpClient.Transport, cfg{token: token}, func(string) bool { return bearerAuth })
 	return api.CurrentLoginName(api.NewClientFromHTTP(&authedClient), hostname)
 }
 
