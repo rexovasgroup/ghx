@@ -303,12 +303,6 @@ func TestNewCmdEdit(t *testing.T) {
 			output: EditOptions{
 				IssueNumbers: []int{23},
 				SetParent:    "100",
-				Editable: prShared.Editable{
-					Parent: prShared.EditableString{
-						Value:  "100",
-						Edited: true,
-					},
-				},
 			},
 		},
 		{
@@ -317,12 +311,6 @@ func TestNewCmdEdit(t *testing.T) {
 			output: EditOptions{
 				IssueNumbers: []int{23},
 				RemoveParent: true,
-				Editable: prShared.Editable{
-					Parent: prShared.EditableString{
-						Value:  "",
-						Edited: true,
-					},
-				},
 			},
 		},
 		{
@@ -914,59 +902,12 @@ func Test_editRun(t *testing.T) {
 			stdout: "https://github.com/OWNER/REPO/issue/123\n",
 		},
 		{
-			name: "interactive edit parent prompt",
-			input: &EditOptions{
-				Detector:     &fd.EnabledDetectorMock{},
-				IssueNumbers: []int{123},
-				Interactive:  true,
-				FieldsToEditSurvey: func(_ prShared.EditPrompter, eo *prShared.Editable) error {
-					// Verify the survey is allowed to offer Parent as an option for issue edit.
-					assert.True(t, eo.Parent.Allowed)
-					eo.Parent.Edited = true
-					return nil
-				},
-				EditFieldsSurvey: func(_ prShared.EditPrompter, eo *prShared.Editable, _ string) error {
-					eo.Parent.Value = "100"
-					return nil
-				},
-				FetchOptions: func(_ *api.Client, _ ghrepo.Interface, _ *prShared.Editable, _ gh.ProjectsV1Support) error {
-					return nil
-				},
-				DetermineEditor: func() (string, error) { return "vim", nil },
-			},
-			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
-				mockIssueGet(t, reg)
-				reg.Register(
-					httpmock.GraphQL(`query IssueNodeID\b`),
-					httpmock.StringResponse(`
-					{ "data": { "repository": { "issue": { "id": "PARENT_100_ID" } } } }
-					`),
-				)
-				reg.Register(
-					httpmock.GraphQL(`mutation AddSubIssue\b`),
-					httpmock.GraphQLMutation(`
-					{ "data": { "addSubIssue": { "issue": { "id": "PARENT_100_ID" } } } }`,
-						func(inputs map[string]interface{}) {
-							assert.Equal(t, "PARENT_100_ID", inputs["issueId"])
-							assert.Equal(t, "123", inputs["subIssueId"])
-							assert.Equal(t, true, inputs["replaceParent"])
-						}),
-				)
-			},
-			stdout: "https://github.com/OWNER/REPO/issue/123\n",
-		},
-		{
 			name: "edit set parent",
 			input: &EditOptions{
 				Detector:     &fd.EnabledDetectorMock{},
 				IssueNumbers: []int{123},
 				Interactive:  false,
-				Editable: prShared.Editable{
-					Parent: prShared.EditableString{
-						Value:  "100",
-						Edited: true,
-					},
-				},
+				SetParent:    "100",
 				FetchOptions: func(_ *api.Client, _ ghrepo.Interface, _ *prShared.Editable, _ gh.ProjectsV1Support) error {
 					return nil
 				},
@@ -999,12 +940,6 @@ func Test_editRun(t *testing.T) {
 				IssueNumbers: []int{123},
 				Interactive:  false,
 				RemoveParent: true,
-				Editable: prShared.Editable{
-					Parent: prShared.EditableString{
-						Value:  "",
-						Edited: true,
-					},
-				},
 				FetchOptions: func(_ *api.Client, _ ghrepo.Interface, _ *prShared.Editable, _ gh.ProjectsV1Support) error {
 					return nil
 				},
@@ -1500,15 +1435,8 @@ func Test_editRun_crossHostRelationshipRefs(t *testing.T) {
 		input *EditOptions
 	}{
 		{
-			name: "set parent",
-			input: &EditOptions{
-				Editable: prShared.Editable{
-					Parent: prShared.EditableString{
-						Value:  crossHostURL,
-						Edited: true,
-					},
-				},
-			},
+			name:  "set parent",
+			input: &EditOptions{SetParent: crossHostURL},
 		},
 		{
 			name:  "add sub-issue",

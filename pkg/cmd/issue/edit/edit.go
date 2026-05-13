@@ -173,21 +173,13 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 			if flags.Changed("type") {
 				opts.Editable.IssueType.Edited = true
 			}
-			if flags.Changed("set-parent") || opts.RemoveParent {
-				opts.Editable.Parent.Edited = true
-				if opts.RemoveParent {
-					opts.Editable.Parent.Value = ""
-				} else {
-					opts.Editable.Parent.Value = opts.SetParent
-				}
-			}
 
-			// Sub-issue and relationship flags are outside the Editable pattern
-			// but still need to prevent interactive mode.
-			hasRelationshipFlags := len(opts.AddSubIssues) > 0 || len(opts.RemoveSubIssues) > 0 ||
+			hasRelationshipFlags := flags.Changed("set-parent") || opts.RemoveParent ||
+				len(opts.AddSubIssues) > 0 || len(opts.RemoveSubIssues) > 0 ||
 				len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 ||
 				len(opts.AddBlocking) > 0 || len(opts.RemoveBlocking) > 0
 
+			// Drop into interactive mode only if the user passed no edit flags at all.
 			if !opts.Editable.Dirty() && !hasRelationshipFlags {
 				opts.Interactive = true
 			}
@@ -250,7 +242,6 @@ func editRun(opts *EditOptions) error {
 	// Prompt the user which fields they'd like to edit.
 	editable := opts.Editable
 	editable.IssueType.Allowed = true
-	editable.Parent.Allowed = true
 	if opts.Interactive {
 		err = opts.FieldsToEditSurvey(opts.Prompter, &editable)
 		if err != nil {
@@ -297,7 +288,7 @@ func editRun(opts *EditOptions) error {
 	if editable.IssueType.Edited {
 		lookupFields = append(lookupFields, "issueType")
 	}
-	if editable.Parent.Edited || opts.RemoveParent {
+	if opts.SetParent != "" || opts.RemoveParent {
 		lookupFields = append(lookupFields, "parent")
 	}
 
@@ -371,9 +362,6 @@ func editRun(opts *EditOptions) error {
 		if issue.IssueType != nil {
 			editable.IssueType.Default = issue.IssueType.Name
 		}
-		if issue.Parent != nil {
-			editable.Parent.Default = fmt.Sprintf("#%d", issue.Parent.Number)
-		}
 
 		// Allow interactive prompts for one issue; failed earlier if multiple issues specified.
 		if opts.Interactive {
@@ -400,7 +388,7 @@ func editRun(opts *EditOptions) error {
 				return
 			}
 
-			mutations, err := deferredUpdateIssueOptions(apiClient, baseRepo, issue, opts, &editable, issueTypeID)
+			mutations, err := deferredUpdateIssueOptions(apiClient, baseRepo, issue, opts, issueTypeID)
 			if err != nil {
 				failedIssueChan <- fmt.Sprintf("failed to update %s: %s", issue.URL, err)
 				return
@@ -465,7 +453,7 @@ func lookupIssueTypeID(editable *prShared.Editable) (string, error) {
 	return id, nil
 }
 
-func deferredUpdateIssueOptions(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, editOpts *EditOptions, editable *prShared.Editable, issueTypeID string) (api.DeferredUpdateIssueOptions, error) {
+func deferredUpdateIssueOptions(client *api.Client, baseRepo ghrepo.Interface, issue *api.Issue, editOpts *EditOptions, issueTypeID string) (api.DeferredUpdateIssueOptions, error) {
 	updateOpts := api.DeferredUpdateIssueOptions{
 		IssueID:               issue.ID,
 		Hostname:              baseRepo.RepoHost(),
@@ -473,18 +461,16 @@ func deferredUpdateIssueOptions(client *api.Client, baseRepo ghrepo.Interface, i
 		ReplaceExistingParent: true,
 	}
 
-	if editable.Parent.Edited {
-		if editable.Parent.Value == "" {
-			if issue.Parent != nil {
-				updateOpts.RemoveParentID = issue.Parent.ID
-			}
-		} else {
-			parentID, err := issueShared.ResolveIssueRef(client, baseRepo, editable.Parent.Value)
-			if err != nil {
-				return updateOpts, fmt.Errorf("resolving --set-parent reference %q: %w", editable.Parent.Value, err)
-			}
-			updateOpts.ParentID = parentID
+	if editOpts.RemoveParent {
+		if issue.Parent != nil {
+			updateOpts.RemoveParentID = issue.Parent.ID
 		}
+	} else if editOpts.SetParent != "" {
+		parentID, err := issueShared.ResolveIssueRef(client, baseRepo, editOpts.SetParent)
+		if err != nil {
+			return updateOpts, fmt.Errorf("resolving --set-parent reference %q: %w", editOpts.SetParent, err)
+		}
+		updateOpts.ParentID = parentID
 	}
 
 	for _, ref := range editOpts.AddSubIssues {

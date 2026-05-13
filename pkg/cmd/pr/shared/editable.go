@@ -23,7 +23,6 @@ type Editable struct {
 	Milestone          EditableString
 	IssueType          EditableString
 	IssueTypeNameToID  map[string]string
-	Parent             EditableString
 	Metadata           api.RepoMetadataResult
 
 	// TODO ApiActorsSupported
@@ -80,8 +79,7 @@ func (e Editable) Dirty() bool {
 		e.Labels.Edited ||
 		e.Projects.Edited ||
 		e.Milestone.Edited ||
-		e.IssueType.Edited ||
-		e.Parent.Edited
+		e.IssueType.Edited
 }
 
 func (e Editable) TitleValue() *string {
@@ -298,7 +296,6 @@ func (e *Editable) Clone() Editable {
 		Milestone:          e.Milestone.clone(),
 		IssueType:          e.IssueType.clone(),
 		IssueTypeNameToID:  e.IssueTypeNameToID,
-		Parent:             e.Parent.clone(),
 		ApiActorsSupported: e.ApiActorsSupported,
 		// Shallow copy since no mutation.
 		Metadata: e.Metadata,
@@ -463,12 +460,6 @@ func EditFieldsSurvey(p EditPrompter, editable *Editable, editorCommand string) 
 			editable.IssueType.Value = editable.IssueType.Options[selected]
 		}
 	}
-	if editable.Parent.Edited {
-		editable.Parent.Value, err = p.Input("Parent (issue number or URL, leave empty to remove)", editable.Parent.Default)
-		if err != nil {
-			return err
-		}
-	}
 	confirm, err := p.Confirm("Submit?", true)
 	if err != nil {
 		return err
@@ -498,9 +489,6 @@ func FieldsToEditSurvey(p EditPrompter, editable *Editable) error {
 	if editable.IssueType.Allowed {
 		opts = append(opts, "Type")
 	}
-	if editable.Parent.Allowed {
-		opts = append(opts, "Parent")
-	}
 	opts = append(opts, "Projects", "Milestone")
 	results, err := multiSelectSurvey(p, "What would you like to edit?", []string{}, opts)
 	if err != nil {
@@ -524,9 +512,6 @@ func FieldsToEditSurvey(p EditPrompter, editable *Editable) error {
 	}
 	if contains(results, "Type") {
 		editable.IssueType.Edited = true
-	}
-	if contains(results, "Parent") {
-		editable.Parent.Edited = true
 	}
 	if contains(results, "Projects") {
 		editable.Projects.Edited = true
