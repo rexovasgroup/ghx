@@ -3,23 +3,37 @@ env GH_DEBUG=api
 exec gh api /user
 stderr '> Authorization: token'
 
-# When bearer_auth config setting is enabled, requests use Bearer authentication scheme
+# gh api: bearer_auth config enables Bearer scheme
 exec gh config set bearer_auth enabled
 exec gh api /user
 stderr '> Authorization: Bearer'
-
-# Reset config for next test
 exec gh config set bearer_auth disabled
 
-# When GH_BEARER_AUTH env var is set, requests use Bearer authentication scheme
+# gh api: GH_BEARER_AUTH env var enables Bearer scheme
 env GH_BEARER_AUTH=1
 exec gh api /user
 stderr '> Authorization: Bearer'
+env GH_BEARER_AUTH=
 
-# Non-api commands using the factory HTTP client also respect GH_BEARER_AUTH
+# gh repo list (factory HTTP client): bearer_auth config enables Bearer scheme
+exec gh config set bearer_auth enabled
 exec gh repo list --limit 1
 stderr '> Authorization: Bearer'
+exec gh config set bearer_auth disabled
 
-# Auth status (which manually sets auth headers) also respects GH_BEARER_AUTH
+# gh repo list (factory HTTP client): GH_BEARER_AUTH env var enables Bearer scheme
+env GH_BEARER_AUTH=1
+exec gh repo list --limit 1
+stderr '> Authorization: Bearer'
+env GH_BEARER_AUTH=
+
+# gh auth status (manual auth headers): bearer_auth config enables Bearer scheme
+exec gh config set bearer_auth enabled
+exec gh auth status
+stderr '> Authorization: Bearer'
+exec gh config set bearer_auth disabled
+
+# gh auth status (manual auth headers): GH_BEARER_AUTH env var enables Bearer scheme
+env GH_BEARER_AUTH=1
 exec gh auth status
 stderr '> Authorization: Bearer'
