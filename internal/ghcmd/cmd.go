@@ -224,6 +224,10 @@ func Main() exitCode {
 	}()
 
 	if executedCmd, err = rootCmd.ExecuteContextC(ctx); err != nil {
+		// Preserve the original error before the switch may replace it with a
+		// gherrs sentinel. This lets telemetry capture the real error chain.
+		originalErr := err
+
 		var pagerPipeErr *iostreams.ErrClosedPagerPipe
 		var noResultsErr cmdutil.NoResultsError
 		var extErr *root.ExternalCommandExitError
@@ -268,6 +272,8 @@ func Main() exitCode {
 			fmt.Fprint(&s, "To learn about workarounds for this error, run:  gh help mintty")
 			err = gherrs.GeneralError{WrappedErr: err, Message: s.String()}
 		default:
+			httpErrMatched := errors.As(err, &httpErr)
+
 			if errors.As(err, &flagErr) || strings.HasPrefix(err.Error(), "unknown command ") {
 				var s strings.Builder
 				if !strings.HasSuffix(err.Error(), "\n") {
@@ -275,16 +281,18 @@ func Main() exitCode {
 				}
 				fmt.Fprint(&s, executedCmd.UsageString())
 				err = gherrs.GeneralError{WrappedErr: err, Message: s.String()}
-			} else if errors.As(err, &httpErr) && httpErr.StatusCode == 401 {
+			} else if httpErrMatched && httpErr.StatusCode == 401 {
 				authCommand := "gh auth login"
 				if cfg, cfgErr := cmdFactory.Config(); cfgErr == nil {
 					authCommand = authRecoveryCommand(cfg, httpErr)
 				}
 				err = gherrs.GeneralError{WrappedErr: err, Message: fmt.Sprintf("Try authenticating with:  %s", authCommand)}
-			} else if u := factory.SSOURL(); u != "" {
-				err = gherrs.GeneralError{WrappedErr: err, Message: fmt.Sprintf("Authorize in your web browser:  %s", u)}
-			} else if msg := httpErr.ScopesSuggestion(); msg != "" {
-				err = gherrs.GeneralError{WrappedErr: err, Message: msg}
+			} else if httpErrMatched {
+				if u := factory.SSOURL(); u != "" {
+					err = gherrs.GeneralError{WrappedErr: err, Message: fmt.Sprintf("Authorize in your web browser:  %s", u)}
+				} else if msg := httpErr.ScopesSuggestion(); msg != "" {
+					err = gherrs.GeneralError{WrappedErr: err, Message: msg}
+				}
 			}
 		}
 
@@ -292,7 +300,7 @@ func Main() exitCode {
 			return exitOK
 		}
 
-		errorDims = newErrDims(err)
+		errorDims = newErrDims(err, originalErr)
 
 		var silenced gherrs.Silenced
 		if !errors.As(err, &silenced) {
@@ -332,10 +340,10 @@ func Main() exitCode {
 	return exitOK
 }
 
-func newErrDims(err error) ghtelemetry.Dimensions {
-	errTypes := grabAllUnwrappableNestedErrorTypes(err)
+func newErrDims(mappedErr, originalErr error) ghtelemetry.Dimensions {
+	errTypes := grabAllUnwrappableNestedErrorTypes(originalErr)
 
-	if errors.Is(err, gherrs.PendingError) || errors.Is(err, gherrs.UserCancellationError) {
+	if errors.Is(mappedErr, gherrs.PendingError) || errors.Is(mappedErr, gherrs.UserCancellationError) {
 		return ghtelemetry.Dimensions{"outcome": "success", "errTypes": errTypes}
 	}
 
@@ -349,10 +357,17 @@ func newErrDims(err error) ghtelemetry.Dimensions {
 // what kind of error we're dealing with. It is not at all intended to be comprehensive.
 func grabAllUnwrappableNestedErrorTypes(err error) string {
 	var types []string
-	for i := 0; err != nil && i < 100; i, err = i+1, errors.Unwrap(err) {
+	queue := []error{err}
+	for len(queue) > 0 && len(types) < 100 {
+		current := queue[0]
+		queue = queue[1:]
+		if current == nil {
+			continue
+		}
+
 		// Drop the pointer part of the type name, since it doesn't add much value and just makes the output more noisy,
 		// and may make it harder to analyse if we change it in future.
-		t := reflect.TypeOf(err)
+		t := reflect.TypeOf(current)
 		for t != nil && t.Kind() == reflect.Ptr {
 			t = t.Elem()
 		}
@@ -360,6 +375,15 @@ func grabAllUnwrappableNestedErrorTypes(err error) string {
 			continue
 		}
 		types = append(types, t.String())
+
+		// Traverse single-wrapped errors and multi-errors (e.g. errors.Join).
+		if u, ok := current.(interface{ Unwrap() error }); ok {
+			if next := u.Unwrap(); next != nil {
+				queue = append(queue, next)
+			}
+		} else if u, ok := current.(interface{ Unwrap() []error }); ok {
+			queue = append(queue, u.Unwrap()...)
+		}
 	}
 	return strings.Join(types, ",")
 }

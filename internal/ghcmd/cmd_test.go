@@ -552,6 +552,11 @@ func Test_grabAllUnwrappableNestedErrorTypes(t *testing.T) {
 			err:  fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", gherrs.SilentError)),
 			want: "fmt.wrapError,fmt.wrapError,gherrs.silentError",
 		},
+		{
+			name: "errors.Join captures all branches",
+			err:  errors.Join(errors.New("a"), fmt.Errorf("wrap: %w", gherrs.SilentError)),
+			want: "errors.joinError,errors.errorString,fmt.wrapError,gherrs.silentError",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -574,39 +579,51 @@ func Test_grabAllUnwrappableNestedErrorTypes_boundedByDepthLimit(t *testing.T) {
 
 func Test_newErrDims(t *testing.T) {
 	tests := []struct {
-		name string
-		err  error
-		want ghtelemetry.Dimensions
+		name        string
+		mappedErr   error
+		originalErr error
+		want        ghtelemetry.Dimensions
 	}{
 		{
-			name: "generic error is failure",
-			err:  errors.New("boom"),
-			want: ghtelemetry.Dimensions{"outcome": "error", "errTypes": "errors.errorString"},
+			name:        "generic error is failure",
+			mappedErr:   errors.New("boom"),
+			originalErr: errors.New("boom"),
+			want:        ghtelemetry.Dimensions{"outcome": "error", "errTypes": "errors.errorString"},
 		},
 		{
-			name: "silent error is failure",
-			err:  gherrs.SilentError,
-			want: ghtelemetry.Dimensions{"outcome": "error", "errTypes": "gherrs.silentError"},
+			name:        "silent error is failure",
+			mappedErr:   gherrs.SilentError,
+			originalErr: gherrs.SilentError,
+			want:        ghtelemetry.Dimensions{"outcome": "error", "errTypes": "gherrs.silentError"},
 		},
 		{
-			name: "user cancellation error is success",
-			err:  gherrs.UserCancellationError,
-			want: ghtelemetry.Dimensions{"outcome": "success", "errTypes": "gherrs.userCancellationError"},
+			name:        "user cancellation error is success",
+			mappedErr:   gherrs.UserCancellationError,
+			originalErr: gherrs.UserCancellationError,
+			want:        ghtelemetry.Dimensions{"outcome": "success", "errTypes": "gherrs.userCancellationError"},
 		},
 		{
-			name: "wrapped user cancellation error is success",
-			err:  fmt.Errorf("wrapped: %w", gherrs.UserCancellationError),
-			want: ghtelemetry.Dimensions{"outcome": "success", "errTypes": "fmt.wrapError,gherrs.userCancellationError"},
+			name:        "wrapped user cancellation error is success",
+			mappedErr:   gherrs.UserCancellationError,
+			originalErr: fmt.Errorf("wrapped: %w", gherrs.UserCancellationError),
+			want:        ghtelemetry.Dimensions{"outcome": "success", "errTypes": "fmt.wrapError,gherrs.userCancellationError"},
 		},
 		{
-			name: "pending error is success",
-			err:  gherrs.PendingError,
-			want: ghtelemetry.Dimensions{"outcome": "success", "errTypes": "gherrs.pendingError"},
+			name:        "pending error is success",
+			mappedErr:   gherrs.PendingError,
+			originalErr: gherrs.PendingError,
+			want:        ghtelemetry.Dimensions{"outcome": "success", "errTypes": "gherrs.pendingError"},
+		},
+		{
+			name:        "mapped sentinel preserves original error chain for errTypes",
+			mappedErr:   gherrs.SilentError,
+			originalErr: fmt.Errorf("context: %w", errors.New("root cause")),
+			want:        ghtelemetry.Dimensions{"outcome": "error", "errTypes": "fmt.wrapError,errors.errorString"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, newErrDims(tt.err))
+			assert.Equal(t, tt.want, newErrDims(tt.mappedErr, tt.originalErr))
 		})
 	}
 }
