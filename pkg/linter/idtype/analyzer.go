@@ -9,6 +9,8 @@ package idtype
 import (
 	"go/ast"
 	"go/token"
+	"reflect"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -98,22 +100,18 @@ func matchesIDTag(tag string) bool {
 
 // extractJSONTag extracts the JSON field name from a struct tag literal.
 // For example, given `json:"repository_id,omitempty"`, it returns "repository_id".
+// It handles both raw (backtick) and interpreted (double-quoted) string literals.
 func extractJSONTag(rawTag string) string {
-	// Remove surrounding backticks or quotes
-	tag := strings.Trim(rawTag, "`\"")
-
-	const prefix = `json:"`
-	idx := strings.Index(tag, prefix)
-	if idx < 0 {
+	unquoted, err := strconv.Unquote(rawTag)
+	if err != nil {
 		return ""
 	}
-	tag = tag[idx+len(prefix):]
-	if end := strings.Index(tag, `"`); end >= 0 {
-		tag = tag[:end]
+	jsonValue, ok := reflect.StructTag(unquoted).Lookup("json")
+	if !ok {
+		return ""
 	}
-	// Strip options like omitempty
-	if comma := strings.Index(tag, ","); comma >= 0 {
-		tag = tag[:comma]
+	if comma := strings.Index(jsonValue, ","); comma >= 0 {
+		jsonValue = jsonValue[:comma]
 	}
-	return tag
+	return jsonValue
 }

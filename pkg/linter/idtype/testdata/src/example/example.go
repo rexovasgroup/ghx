@@ -37,6 +37,16 @@ type RepositoryIDField struct {
 	RepositoryID int `json:"repository_id"` // want `struct field RepositoryID looks like a GitHub database ID but uses int; use int64 instead`
 }
 
+// Should be flagged - interpreted string literal tag (non-ID field name, ID-like JSON tag).
+
+type InterpretedTag struct {
+	Value int "json:\"repository_id\"" // want `struct field Value looks like a GitHub database ID but uses int; use int64 instead`
+}
+
+type InterpretedTagPlainID struct {
+	Ref int "json:\"id\"" // want `struct field Ref looks like a GitHub database ID but uses int; use int64 instead`
+}
+
 // Should NOT be flagged - correct types or non-ID fields.
 
 type CorrectRepository struct {
