@@ -73,7 +73,6 @@ func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 		return nil, err
 	}
 
-	// TODO: can this ever be nil?
 	if opts.GetToken != nil {
 		client.Transport = AddAuthTokenHeader(client.Transport, opts.GetToken, opts.GetBearerConfig)
 	}
