@@ -122,9 +122,6 @@ func (c *cfg) AccessibleColors(hostname string) gh.ConfigEntry {
 }
 
 func (c *cfg) BearerAuth(hostname string) gh.ConfigEntry {
-	if v := os.Getenv("GH_BEARER_AUTH"); v != "" {
-		return gh.ConfigEntry{Value: "enabled", Source: gh.ConfigEnvironmentProvided}
-	}
 	// Intentionally panic if there is no user provided value or default value (which would be a programmer error)
 	return c.GetOrDefault(hostname, bearerAuthKey).Unwrap()
 }

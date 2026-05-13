@@ -250,21 +250,4 @@ func TestBearerAuth(t *testing.T) {
 		require.Equal(t, "disabled", entry.Value)
 		require.Equal(t, gh.ConfigUserProvided, entry.Source)
 	})
-
-	t.Run("returns enabled when GH_BEARER_AUTH env is set", func(t *testing.T) {
-		c := newTestConfig()
-		t.Setenv("GH_BEARER_AUTH", "1")
-		entry := c.BearerAuth("github.com")
-		require.Equal(t, "enabled", entry.Value)
-		require.Equal(t, gh.ConfigEnvironmentProvided, entry.Source)
-	})
-
-	t.Run("env var overrides config disabled setting", func(t *testing.T) {
-		c := newTestConfig()
-		c.cfg.Set([]string{bearerAuthKey}, "disabled")
-		t.Setenv("GH_BEARER_AUTH", "1")
-		entry := c.BearerAuth("github.com")
-		require.Equal(t, "enabled", entry.Value)
-		require.Equal(t, gh.ConfigEnvironmentProvided, entry.Source)
-	})
 }

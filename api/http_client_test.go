@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MakeNowJust/heredoc"
+	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,8 +19,8 @@ import (
 
 func TestNewHTTPClient(t *testing.T) {
 	type args struct {
-		config             tokenGetter
-		bearerAuth         func(string) bool
+		getToken           getTokenFunc
+		getBearerConfig    gh.ConfigGetter
 		appVersion         string
 		invokingAgent      string
 		logVerboseHTTP     bool
@@ -35,7 +36,7 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com",
 			args: args{
-				config:         tinyConfig{"github.com:oauth_token": "MYTOKEN"},
+				getToken:       tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
 				appVersion:     "v1.2.3",
 				logVerboseHTTP: false,
 			},
@@ -51,7 +52,7 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "GHES",
 			args: args{
-				config:     tinyConfig{"example.com:oauth_token": "GHETOKEN"},
+				getToken:   tinyConfig{"example.com:oauth_token": "GHETOKEN"}.ActiveToken,
 				appVersion: "v1.2.3",
 			},
 			host: "example.com",
@@ -66,9 +67,9 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com with bearer auth",
 			args: args{
-				config:     tinyConfig{"github.com:oauth_token": "MYTOKEN"},
-				bearerAuth: func(string) bool { return true },
-				appVersion: "v1.2.3",
+				getToken:        tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
+				getBearerConfig: func(string) gh.ConfigEntry { return gh.ConfigEntry{Value: "enabled"} },
+				appVersion:      "v1.2.3",
 			},
 			host: "github.com",
 			wantHeader: map[string][]string{
@@ -82,9 +83,9 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "GHES with bearer auth",
 			args: args{
-				config:     tinyConfig{"example.com:oauth_token": "GHETOKEN"},
-				bearerAuth: func(string) bool { return true },
-				appVersion: "v1.2.3",
+				getToken:        tinyConfig{"example.com:oauth_token": "GHETOKEN"}.ActiveToken,
+				getBearerConfig: func(string) gh.ConfigEntry { return gh.ConfigEntry{Value: "enabled"} },
+				appVersion:      "v1.2.3",
 			},
 			host: "example.com",
 			wantHeader: map[string][]string{
@@ -98,7 +99,7 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com no authentication token",
 			args: args{
-				config:         tinyConfig{"example.com:oauth_token": "MYTOKEN"},
+				getToken:       tinyConfig{"example.com:oauth_token": "MYTOKEN"}.ActiveToken,
 				appVersion:     "v1.2.3",
 				logVerboseHTTP: false,
 			},
@@ -114,7 +115,7 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "GHES no authentication token",
 			args: args{
-				config:         tinyConfig{"github.com:oauth_token": "MYTOKEN"},
+				getToken:       tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
 				appVersion:     "v1.2.3",
 				logVerboseHTTP: false,
 			},
@@ -130,7 +131,7 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com in verbose mode",
 			args: args{
-				config:         tinyConfig{"github.com:oauth_token": "MYTOKEN"},
+				getToken:       tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
 				appVersion:     "v1.2.3",
 				logVerboseHTTP: true,
 			},
@@ -216,8 +217,8 @@ func TestNewHTTPClient(t *testing.T) {
 			client, err := NewHTTPClient(HTTPClientOptions{
 				AppVersion:         tt.args.appVersion,
 				InvokingAgent:      tt.args.invokingAgent,
-				Config:             tt.args.config,
-				BearerAuth:         tt.args.bearerAuth,
+				GetToken:           tt.args.getToken,
+				GetBearerConfig:    tt.args.getBearerConfig,
 				Log:                ios.ErrOut,
 				LogVerboseHTTP:     tt.args.logVerboseHTTP,
 				SkipDefaultHeaders: tt.args.skipDefaultHeaders,
@@ -259,10 +260,10 @@ func TestHTTPClientRedirectAuthenticationHeaderHandling(t *testing.T) {
 	defer redirectServer.Close()
 
 	client, err := NewHTTPClient(HTTPClientOptions{
-		Config: tinyConfig{
+		GetToken: tinyConfig{
 			fmt.Sprintf("%s:oauth_token", strings.TrimPrefix(redirectServer.URL, "http://")): "REDIRECT-TOKEN",
 			fmt.Sprintf("%s:oauth_token", strings.TrimPrefix(server.URL, "http://")):         "TOKEN",
-		},
+		}.ActiveToken,
 	})
 	require.NoError(t, err)
 

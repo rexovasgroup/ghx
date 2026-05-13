@@ -13,6 +13,7 @@ import (
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/authflow"
 	"github.com/cli/cli/v2/internal/browser"
+	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/pkg/cmd/ssh-key/add"
 	"github.com/cli/cli/v2/pkg/iostreams"
@@ -42,7 +43,7 @@ type LoginOptions struct {
 	SecureStorage    bool
 	SkipSSHKeyPrompt bool
 	CopyToClipboard  bool
-	BearerAuth       bool
+	BearerAuth       gh.ConfigGetter
 
 	sshContext ssh.Context
 }
@@ -52,6 +53,10 @@ func Login(opts *LoginOptions) error {
 	hostname := opts.Hostname
 	httpClient := opts.HTTPClient
 	cs := opts.IO.ColorScheme()
+
+	if opts.BearerAuth == nil {
+		opts.BearerAuth = func(string) gh.ConfigEntry { return gh.ConfigEntry{Value: "disabled"} }
+	}
 
 	gitProtocol := strings.ToLower(opts.GitProtocol)
 	if opts.Interactive && gitProtocol == "" {
@@ -151,7 +156,7 @@ func Login(opts *LoginOptions) error {
 
 	if authMode == 0 {
 		var err error
-		authToken, username, err = authflow.AuthFlow(opts.PlainHTTPClient, hostname, opts.IO, "", append(opts.Scopes, additionalScopes...), opts.Interactive, opts.Browser, opts.CopyToClipboard, opts.BearerAuth)
+		authToken, username, err = authflow.AuthFlow(opts.PlainHTTPClient, hostname, opts.IO, append(opts.Scopes, additionalScopes...), opts.Interactive, opts.Browser, opts.CopyToClipboard, opts.BearerAuth)
 		if err != nil {
 			return fmt.Errorf("failed to authenticate via web browser: %w", err)
 		}
@@ -169,14 +174,14 @@ func Login(opts *LoginOptions) error {
 			return err
 		}
 
-		if err := HasMinimumScopes(httpClient, hostname, authToken, opts.BearerAuth); err != nil {
+		if err := HasMinimumScopes(httpClient, hostname, authToken, opts.BearerAuth(hostname).Value == "enabled"); err != nil {
 			return fmt.Errorf("error validating token: %w", err)
 		}
 	}
 
 	if username == "" {
 		var err error
-		username, err = GetCurrentLogin(httpClient, hostname, authToken, opts.BearerAuth)
+		username, err = GetCurrentLogin(httpClient, hostname, authToken, opts.BearerAuth(hostname).Value == "enabled")
 		if err != nil {
 			return fmt.Errorf("error retrieving current user: %w", err)
 		}

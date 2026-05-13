@@ -14,12 +14,13 @@ import (
 	ghConfig "github.com/cli/go-gh/v2/pkg/config"
 )
 
+type ConfigGetter func(hostname string) ConfigEntry
+
 type ConfigSource string
 
 const (
-	ConfigDefaultProvided     ConfigSource = "default"
-	ConfigEnvironmentProvided ConfigSource = "environment"
-	ConfigUserProvided        ConfigSource = "user"
+	ConfigDefaultProvided ConfigSource = "default"
+	ConfigUserProvided    ConfigSource = "user"
 )
 
 type ConfigEntry struct {

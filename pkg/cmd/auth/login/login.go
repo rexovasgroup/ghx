@@ -241,7 +241,7 @@ func loginRun(opts *LoginOptions) error {
 		SecureStorage:    !opts.InsecureStorage,
 		SkipSSHKeyPrompt: opts.SkipSSHKeyPrompt,
 		CopyToClipboard:  opts.Clipboard,
-		BearerAuth:       cfg.BearerAuth(hostname).Value == "enabled",
+		BearerAuth:       cfg.BearerAuth,
 	})
 }
 
