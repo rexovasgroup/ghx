@@ -23,7 +23,7 @@ type Silenced interface {
 	silent()
 }
 
-var SilentError = silentError{}
+var SilentError error = silentError{}
 
 type silentError struct{}
 
@@ -37,7 +37,7 @@ func (e silentError) ExitCode() ExitCode {
 
 func (e silentError) silent() {}
 
-var PendingError = pendingError{}
+var PendingError error = pendingError{}
 
 type pendingError struct{}
 
@@ -51,7 +51,7 @@ func (e pendingError) ExitCode() ExitCode {
 
 func (e pendingError) silent() {}
 
-var UserCancellationError = userCancellationError{}
+var UserCancellationError error = userCancellationError{}
 
 type userCancellationError struct{}
 
@@ -65,7 +65,7 @@ func (e userCancellationError) ExitCode() ExitCode {
 
 func (e userCancellationError) silent() {}
 
-var AuthError = authError{}
+var AuthError error = authError{}
 
 type authError struct{}
 

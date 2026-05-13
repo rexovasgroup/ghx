@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -184,7 +183,7 @@ func Main() exitCode {
 	}
 
 	// translate `gh help <command>` to `gh <command> --help` for extensions.
-	if len(expandedArgs) >= 2 && expandedArgs[0] == "help" && isExtensionCommand(rootCmd, expandedArgs[1:]) {
+	if len(expandedArgs) >= 2 && expandedArgs[0] == "help" && root.IsExtensionCommand(rootCmd, expandedArgs[1:]) {
 		expandedArgs = expandedArgs[1:]
 		expandedArgs = append(expandedArgs, "--help")
 	}
@@ -201,16 +200,10 @@ func Main() exitCode {
 			return
 		}
 
-		// For telemetry-disabled commands, check whether this is a built-in
-		// alias that stored the expanded command path. If so, record
-		// telemetry using that path; otherwise skip entirely.
+		// For telemetry-disabled commands, skip telemetry entirely.
 		commandPath := executedCmd.CommandPath()
 		if cmdutil.IsTelemetryDisabled(executedCmd) {
-			expanded, ok := cmdutil.ExpandedCommandPath(executedCmd)
-			if !ok {
-				return
-			}
-			commandPath = expanded
+			return
 		}
 
 		var flags []string
@@ -366,6 +359,15 @@ func newErrDims(mappedErr, originalErr error) ghtelemetry.Dimensions {
 	}
 }
 
+// noiseErrorTypes are common stdlib wrapper types that provide no analytical
+// value in telemetry. We skip them to keep the errTypes dimension focused on
+// domain-specific error types that are actually interesting.
+var noiseErrorTypes = map[string]bool{
+	"errors.errorString": true,
+	"errors.joinError":   true,
+	"fmt.wrapError":      true,
+}
+
 // This is a pretty janky way to get some privacy-respecting visibility into
 // what kind of error we're dealing with. It is not at all intended to be comprehensive.
 func grabAllUnwrappableNestedErrorTypes(err error) string {
@@ -378,16 +380,10 @@ func grabAllUnwrappableNestedErrorTypes(err error) string {
 			continue
 		}
 
-		// Drop the pointer part of the type name, since it doesn't add much value and just makes the output more noisy,
-		// and may make it harder to analyse if we change it in future.
-		t := reflect.TypeOf(current)
-		for t != nil && t.Kind() == reflect.Ptr {
-			t = t.Elem()
+		t := strings.TrimPrefix(fmt.Sprintf("%T", current), "*")
+		if !noiseErrorTypes[t] {
+			types = append(types, t)
 		}
-		if t == nil {
-			continue
-		}
-		types = append(types, t.String())
 
 		// Traverse single-wrapped errors and multi-errors (e.g. errors.Join).
 		if u, ok := current.(interface{ Unwrap() error }); ok {
@@ -399,12 +395,6 @@ func grabAllUnwrappableNestedErrorTypes(err error) string {
 		}
 	}
 	return strings.Join(types, ",")
-}
-
-// isExtensionCommand returns true if args resolve to an extension command.
-func isExtensionCommand(rootCmd *cobra.Command, args []string) bool {
-	c, _, err := rootCmd.Find(args)
-	return err == nil && c != nil && c.GroupID == "extension"
 }
 
 func authRecoveryCommand(cfg gh.Config, httpErr api.HTTPError) string {

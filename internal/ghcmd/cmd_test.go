@@ -538,24 +538,24 @@ func Test_grabAllUnwrappableNestedErrorTypes(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "generic error",
+			name: "generic error is noise and filtered",
 			err:  errors.New("boom"),
-			want: "errors.errorString",
+			want: "",
 		},
 		{
-			name: "single fmt wrap",
+			name: "single fmt wrap filters noise",
 			err:  fmt.Errorf("context: %w", gherrs.SilentError),
-			want: "fmt.wrapError,gherrs.silentError",
+			want: "gherrs.silentError",
 		},
 		{
-			name: "double fmt wrap",
+			name: "double fmt wrap filters noise",
 			err:  fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", gherrs.SilentError)),
-			want: "fmt.wrapError,fmt.wrapError,gherrs.silentError",
+			want: "gherrs.silentError",
 		},
 		{
-			name: "errors.Join captures all branches",
+			name: "errors.Join captures interesting branches",
 			err:  errors.Join(errors.New("a"), fmt.Errorf("wrap: %w", gherrs.SilentError)),
-			want: "errors.joinError,errors.errorString,fmt.wrapError,gherrs.silentError",
+			want: "gherrs.silentError",
 		},
 	}
 	for _, tt := range tests {
@@ -567,12 +567,14 @@ func Test_grabAllUnwrappableNestedErrorTypes(t *testing.T) {
 }
 
 func Test_grabAllUnwrappableNestedErrorTypes_boundedByDepthLimit(t *testing.T) {
-	// Build a chain deeper than the 100-element bound to ensure the loop terminates.
-	err := errors.New("leaf")
+	// Build a chain deeper than the 100-element bound using a non-noise
+	// error type so that entries are not filtered out.
+	err := gherrs.GeneralError{Message: "leaf"}
+	var wrapped error = err
 	for range 101 {
-		err = fmt.Errorf("wrap: %w", err)
+		wrapped = gherrs.GeneralError{WrappedErr: wrapped, Message: "wrap"}
 	}
-	got := grabAllUnwrappableNestedErrorTypes(err)
+	got := grabAllUnwrappableNestedErrorTypes(wrapped)
 	parts := strings.Split(got, ",")
 	assert.Len(t, parts, 100, "should be bounded to 100 entries")
 }
@@ -588,7 +590,7 @@ func Test_newErrDims(t *testing.T) {
 			name:        "generic error is failure",
 			mappedErr:   errors.New("boom"),
 			originalErr: errors.New("boom"),
-			want:        ghtelemetry.Dimensions{"outcome": "error", "errTypes": "errors.errorString"},
+			want:        ghtelemetry.Dimensions{"outcome": "error", "errTypes": ""},
 		},
 		{
 			name:        "silent error is failure",
@@ -606,7 +608,7 @@ func Test_newErrDims(t *testing.T) {
 			name:        "wrapped user cancellation error is success",
 			mappedErr:   gherrs.UserCancellationError,
 			originalErr: fmt.Errorf("wrapped: %w", gherrs.UserCancellationError),
-			want:        ghtelemetry.Dimensions{"outcome": "success", "errTypes": "fmt.wrapError,gherrs.userCancellationError"},
+			want:        ghtelemetry.Dimensions{"outcome": "success", "errTypes": "gherrs.userCancellationError"},
 		},
 		{
 			name:        "pending error is success",
@@ -618,7 +620,7 @@ func Test_newErrDims(t *testing.T) {
 			name:        "mapped sentinel preserves original error chain for errTypes",
 			mappedErr:   gherrs.SilentError,
 			originalErr: fmt.Errorf("context: %w", errors.New("root cause")),
-			want:        ghtelemetry.Dimensions{"outcome": "error", "errTypes": "fmt.wrapError,errors.errorString"},
+			want:        ghtelemetry.Dimensions{"outcome": "error", "errTypes": ""},
 		},
 	}
 	for _, tt := range tests {

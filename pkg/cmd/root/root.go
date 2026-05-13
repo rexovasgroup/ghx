@@ -258,3 +258,9 @@ func NewCmdRoot(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, versi
 	referenceCmd.SetHelpFunc(longPager(f.IOStreams))
 	return cmd, nil
 }
+
+// IsExtensionCommand returns true if args resolve to an extension command.
+func IsExtensionCommand(rootCmd *cobra.Command, args []string) bool {
+	c, _, err := rootCmd.Find(args)
+	return err == nil && c != nil && c.GroupID == "extension"
+}
