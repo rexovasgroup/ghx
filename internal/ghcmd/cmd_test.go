@@ -561,7 +561,7 @@ func Test_grabAllUnwrappableNestedErrorTypes(t *testing.T) {
 	}
 }
 
-func Test_grabAllUnwrappableNestedErrorTypes_boundedAgainstCycles(t *testing.T) {
+func Test_grabAllUnwrappableNestedErrorTypes_boundedByDepthLimit(t *testing.T) {
 	// Build a chain deeper than the 100-element bound to ensure the loop terminates.
 	err := errors.New("leaf")
 	for range 101 {
@@ -758,4 +758,31 @@ func TestMain_recordsCommandInvocationTelemetry_flagError(t *testing.T) {
 	assert.Equal(t, "gh version", event.Dimensions["command"])
 	assert.Equal(t, "error", event.Dimensions["outcome"])
 	assert.NotEmpty(t, event.Dimensions["errTypes"], "errTypes should be populated on error")
+}
+
+func TestMain_recordsCommandInvocationTelemetry_flagsDimension(t *testing.T) {
+	exit, payloads := runMainAndCaptureTelemetry(t, []string{"gh", "api", "--method", "GET", "--hostname", "example.com", "/"})
+
+	// The command will fail (no auth), but that's fine - we only care about
+	// the flags dimension being present and sorted.
+	_ = exit
+
+	event := findCommandInvocation(payloads)
+	require.NotNil(t, event, "expected a command_invocation event in telemetry payloads")
+
+	assert.Equal(t, "gh api", event.Dimensions["command"])
+	flags := event.Dimensions["flags"]
+	assert.Contains(t, flags, "hostname")
+	assert.Contains(t, flags, "method")
+	// Flags should be sorted alphabetically.
+	assert.Equal(t, "hostname,method", flags)
+}
+
+func TestMain_telemetryDisabledCommand_noCommandInvocationEvent(t *testing.T) {
+	exit, payloads := runMainAndCaptureTelemetry(t, []string{"gh", "completion"})
+
+	assert.Equal(t, exitOK, exit)
+
+	event := findCommandInvocation(payloads)
+	assert.Nil(t, event, "telemetry-disabled commands should not emit command_invocation")
 }

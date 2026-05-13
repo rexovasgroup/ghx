@@ -261,7 +261,7 @@ func Main() exitCode {
 				fmt.Fprintf(&s, "%v\n", dnsErr)
 			}
 			fmt.Fprint(&s, "check your internet connection or https://githubstatus.com")
-			err = gherrs.GeneralError{Message: s.String()}
+			err = gherrs.GeneralError{WrappedErr: err, Message: s.String()}
 		case strings.Contains(err.Error(), "Incorrect function"):
 			var s strings.Builder
 			fmt.Fprintln(&s, "You appear to be running in MinTTY without pseudo terminal support.")
