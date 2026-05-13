@@ -899,7 +899,7 @@ func Test_editRun(t *testing.T) {
 				Interactive:  true,
 				FieldsToEditSurvey: func(_ prShared.EditPrompter, eo *prShared.Editable) error {
 					// Verify the survey is allowed to offer Type as an option for issue edit.
-					assert.True(t, eo.IssueType.Allowed)
+					assert.True(t, eo.IssueType.Selectable)
 					eo.IssueType.Edited = true
 					return nil
 				},
