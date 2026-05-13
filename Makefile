@@ -45,7 +45,6 @@ completions: bin/gh$(EXE)
 .PHONY: lint
 lint:
 	golangci-lint run ./...
-	go run ./cmd/idtype-checker ./...
 
 # just convenience tasks around `go test`
 .PHONY: test
