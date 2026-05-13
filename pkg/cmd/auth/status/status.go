@@ -243,13 +243,13 @@ func statusRun(opts *StatusOptions) error {
 			activeUser, _ = authCfg.ActiveUser(hostname)
 		}
 		entry := buildEntry(httpClient, buildEntryOptions{
-			active:         true,
+			active:          true,
 			getBearerConfig: cfg.BearerAuth,
-			gitProtocol: gitProtocol,
-			hostname:    hostname,
-			token:       activeUserToken,
-			tokenSource: activeUserTokenSource,
-			username:    activeUser,
+			gitProtocol:     gitProtocol,
+			hostname:        hostname,
+			token:           activeUserToken,
+			tokenSource:     activeUserTokenSource,
+			username:        activeUser,
 		})
 		statuses.Hosts[hostname] = append(statuses.Hosts[hostname], entry)
 
@@ -268,13 +268,13 @@ func statusRun(opts *StatusOptions) error {
 			}
 			token, tokenSource, _ := authCfg.TokenForUser(hostname, username)
 			entry := buildEntry(httpClient, buildEntryOptions{
-				active:         false,
+				active:          false,
 				getBearerConfig: cfg.BearerAuth,
-				gitProtocol: gitProtocol,
-				hostname:    hostname,
-				token:       token,
-				tokenSource: tokenSource,
-				username:    username,
+				gitProtocol:     gitProtocol,
+				hostname:        hostname,
+				token:           token,
+				tokenSource:     tokenSource,
+				username:        username,
 			})
 			statuses.Hosts[hostname] = append(statuses.Hosts[hostname], entry)
 
@@ -355,13 +355,13 @@ func expectScopes(token string) bool {
 }
 
 type buildEntryOptions struct {
-	active         bool
+	active          bool
 	getBearerConfig gh.ConfigGetter
-	gitProtocol    string
-	hostname       string
-	token          string
-	tokenSource    string
-	username       string
+	gitProtocol     string
+	hostname        string
+	token           string
+	tokenSource     string
+	username        string
 }
 
 func buildEntry(httpClient *http.Client, opts buildEntryOptions) authEntry {
