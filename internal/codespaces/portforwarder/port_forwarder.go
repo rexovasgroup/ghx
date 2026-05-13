@@ -270,30 +270,28 @@ func (fwd *CodespacesPortForwarder) ListPorts(ctx context.Context) (ports []*tun
 
 // UpdatePortVisibility changes the visibility (private, org, public) of the specified port.
 func (fwd *CodespacesPortForwarder) UpdatePortVisibility(ctx context.Context, remotePort int, visibility string) error {
-	tunnelPort, err := func() (*tunnels.TunnelPort, error) {
-		fwd.connection.ManagerMu.Lock()
-		defer fwd.connection.ManagerMu.Unlock()
-		return fwd.connection.TunnelManager.GetTunnelPort(ctx, fwd.connection.Tunnel, remotePort, fwd.connection.Options)
-	}()
+	fwd.connection.ManagerMu.Lock()
+	tunnelPort, err := fwd.connection.TunnelManager.GetTunnelPort(ctx, fwd.connection.Tunnel, remotePort, fwd.connection.Options)
 	if err != nil {
+		fwd.connection.ManagerMu.Unlock()
 		return fmt.Errorf("error getting tunnel port: %w", err)
 	}
 
 	// If the port visibility isn't changing, don't do anything
 	if AccessControlEntriesToVisibility(tunnelPort.AccessControl.Entries) == visibility {
+		fwd.connection.ManagerMu.Unlock()
 		return nil
 	}
 
 	// Delete the existing tunnel port to update
 	port, err := convertIntToUint16(remotePort)
 	if err != nil {
+		fwd.connection.ManagerMu.Unlock()
 		return fmt.Errorf("error converting port: %w", err)
 	}
-	if err := func() error {
-		fwd.connection.ManagerMu.Lock()
-		defer fwd.connection.ManagerMu.Unlock()
-		return fwd.connection.TunnelManager.DeleteTunnelPort(ctx, fwd.connection.Tunnel, port, fwd.connection.Options)
-	}(); err != nil {
+	err = fwd.connection.TunnelManager.DeleteTunnelPort(ctx, fwd.connection.Tunnel, port, fwd.connection.Options)
+	fwd.connection.ManagerMu.Unlock()
+	if err != nil {
 		return fmt.Errorf("error deleting tunnel port: %w", err)
 	}
 

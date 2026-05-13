@@ -8,7 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/signal"
+
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -135,12 +135,7 @@ func Main() exitCode {
 		}
 	}
 
-	// Intercept SIGINT/SIGTERM so that defers (e.g. telemetry flush) run
-	// before the process exits. Without this, the Go runtime's default
-	// signal handler calls os.Exit immediately, skipping all defers.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
+	ctx := context.Background()
 	updateCtx, updateCancel := context.WithCancel(ctx)
 	defer updateCancel()
 	updateMessageChan := make(chan *update.ReleaseInfo)
