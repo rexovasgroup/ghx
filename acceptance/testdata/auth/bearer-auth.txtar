@@ -17,7 +17,7 @@ exec gh api /user
 stderr '> Authorization: Bearer'
 
 # Non-api commands using the factory HTTP client also respect GH_BEARER_AUTH
-exec gh repo view --json name
+exec gh repo list --limit 1
 stderr '> Authorization: Bearer'
 
 # Auth status (which manually sets auth headers) also respects GH_BEARER_AUTH
