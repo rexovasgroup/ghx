@@ -2,7 +2,9 @@ package edit
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1052,34 +1054,31 @@ func Test_editRun(t *testing.T) {
 			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
 				mockIssueNumberGet(t, reg, 100)
 				reg.Register(
-					httpmock.GraphQL(`query IssueNodeID\b`),
-					httpmock.StringResponse(`
-					{ "data": { "repository": { "issue": { "id": "SUB_123_ID" } } } }
-					`),
+					issueNodeIDByNumberMatcher(123),
+					httpmock.StringResponse(`{ "data": { "repository": { "issue": { "id": "SUB_123_ID" } } } }`),
 				)
 				reg.Register(
-					httpmock.GraphQL(`mutation AddSubIssue\b`),
-					httpmock.GraphQLMutation(`
-					{ "data": { "addSubIssue": { "issue": { "id": "100" } } } }`,
+					issueNodeIDByNumberMatcher(124),
+					httpmock.StringResponse(`{ "data": { "repository": { "issue": { "id": "SUB_124_ID" } } } }`),
+				)
+				reg.Register(
+					httpmock.GraphQLMutationMatcher(`mutation AddSubIssue\b`, func(input map[string]interface{}) bool {
+						return input["subIssueId"] == "SUB_123_ID"
+					}),
+					httpmock.GraphQLMutation(`{ "data": { "addSubIssue": { "issue": { "id": "100" } } } }`,
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "100", inputs["issueId"])
-							assert.Equal(t, "SUB_123_ID", inputs["subIssueId"])
 							assert.Equal(t, false, inputs["replaceParent"])
 						}),
 				)
 				reg.Register(
-					httpmock.GraphQL(`query IssueNodeID\b`),
-					httpmock.StringResponse(`
-					{ "data": { "repository": { "issue": { "id": "SUB_124_ID" } } } }
-					`),
-				)
-				reg.Register(
-					httpmock.GraphQL(`mutation AddSubIssue\b`),
-					httpmock.GraphQLMutation(`
-					{ "data": { "addSubIssue": { "issue": { "id": "100" } } } }`,
+					httpmock.GraphQLMutationMatcher(`mutation AddSubIssue\b`, func(input map[string]interface{}) bool {
+						return input["subIssueId"] == "SUB_124_ID"
+					}),
+					httpmock.GraphQLMutation(`{ "data": { "addSubIssue": { "issue": { "id": "100" } } } }`,
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "100", inputs["issueId"])
-							assert.Equal(t, "SUB_124_ID", inputs["subIssueId"])
+							assert.Equal(t, false, inputs["replaceParent"])
 						}),
 				)
 			},
@@ -1731,4 +1730,31 @@ func TestProjectsV1Deprecation(t *testing.T) {
 		// Verify that our request contained projectCards
 		reg.Verify(t)
 	})
+}
+
+// issueNodeIDByNumberMatcher matches an IssueNodeID GraphQL query whose
+// number variable equals the given value. Used by tests that issue
+// multiple IssueNodeID lookups and need stubs to route by issue number
+// rather than by registration order.
+func issueNodeIDByNumberMatcher(number int) httpmock.Matcher {
+	queryMatcher := httpmock.GraphQL(`query IssueNodeID\b`)
+	return func(req *http.Request) bool {
+		if !queryMatcher(req) {
+			return false
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			return false
+		}
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		var b struct {
+			Variables struct {
+				Number int `json:"number"`
+			} `json:"variables"`
+		}
+		if err := json.Unmarshal(body, &b); err != nil {
+			return false
+		}
+		return b.Variables.Number == number
+	}
 }
