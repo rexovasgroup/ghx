@@ -120,7 +120,7 @@ func AddAuthTokenHeader(rt http.RoundTripper, getToken getTokenFunc, getBearerCo
 				hostname := ghauth.NormalizeHostname(getHost(req))
 				if token, _ := getToken(hostname); token != "" {
 					scheme := "token"
-					if shouldUseBearerAuth(getBearerConfig, hostname) {
+					if ShouldUseBearerAuth(getBearerConfig, hostname) {
 						scheme = "Bearer"
 					}
 					req.Header.Set(authorization, fmt.Sprintf("%s %s", scheme, token))
@@ -174,7 +174,10 @@ func (t telemetryDisablerTransport) RoundTrip(req *http.Request) (*http.Response
 	return t.wrappedTransport.RoundTrip(req)
 }
 
-func shouldUseBearerAuth(getBearerConfig gh.ConfigGetter, hostname string) bool {
+// ShouldUseBearerAuth returns true if Bearer token authentication should be used
+// instead of the default token authentication. It checks both the GH_BEARER_AUTH
+// environment variable and the bearer_auth config setting.
+func ShouldUseBearerAuth(getBearerConfig gh.ConfigGetter, hostname string) bool {
 	if env.IsTruthy("GH_BEARER_AUTH") {
 		return true
 	}

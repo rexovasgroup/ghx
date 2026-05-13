@@ -176,7 +176,7 @@ func refreshRun(opts *RefreshOptions) error {
 
 	if !opts.ResetScopes {
 		if oldToken, _ := authCfg.ActiveToken(hostname); oldToken != "" {
-			if oldScopes, err := shared.GetScopes(plainHTTPClient, hostname, oldToken, cfg.BearerAuth(hostname).Value == "enabled"); err == nil {
+			if oldScopes, err := shared.GetScopes(plainHTTPClient, hostname, oldToken, cfg.BearerAuth); err == nil {
 				for _, s := range strings.Split(oldScopes, ",") {
 					s = strings.TrimSpace(s)
 					if s != "" {

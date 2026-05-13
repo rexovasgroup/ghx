@@ -15,3 +15,7 @@ exec gh config set bearer_auth disabled
 env GH_BEARER_AUTH=1
 exec gh api /user
 stderr '> Authorization: Bearer'
+
+# Auth status also respects GH_BEARER_AUTH env var
+exec gh auth status
+stderr '> Authorization: Bearer'

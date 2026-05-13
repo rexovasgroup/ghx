@@ -292,6 +292,57 @@ func TestHTTPClientRedirectAuthenticationHeaderHandling(t *testing.T) {
 	assert.Equal(t, 204, res.StatusCode)
 }
 
+func TestShouldUseBearerAuth(t *testing.T) {
+	enabledConfig := gh.ConfigGetter(func(string) gh.ConfigEntry {
+		return gh.ConfigEntry{Value: "enabled"}
+	})
+
+	tests := []struct {
+		name            string
+		getBearerConfig gh.ConfigGetter
+		envValue        string
+		want            bool
+	}{
+		{
+			name:            "disabled config and no env var",
+			getBearerConfig: disabledBearerConfig,
+			want:            false,
+		},
+		{
+			name:            "enabled config",
+			getBearerConfig: enabledConfig,
+			want:            true,
+		},
+		{
+			name:            "disabled config but env var set",
+			getBearerConfig: disabledBearerConfig,
+			envValue:        "1",
+			want:            true,
+		},
+		{
+			name:            "env var overrides disabled config",
+			getBearerConfig: disabledBearerConfig,
+			envValue:        "true",
+			want:            true,
+		},
+		{
+			name:            "env var set to falsey value",
+			getBearerConfig: disabledBearerConfig,
+			envValue:        "0",
+			want:            false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("GH_BEARER_AUTH", tt.envValue)
+			}
+			assert.Equal(t, tt.want, ShouldUseBearerAuth(tt.getBearerConfig, "github.com"))
+		})
+	}
+}
+
 func TestHTTPClientSanitizeJSONControlCharactersC0(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		issue := Issue{

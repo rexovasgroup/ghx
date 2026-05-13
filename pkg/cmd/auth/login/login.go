@@ -203,10 +203,10 @@ func loginRun(opts *LoginOptions) error {
 	}
 
 	if opts.Token != "" {
-		if err := shared.HasMinimumScopes(httpClient, hostname, opts.Token, cfg.BearerAuth(hostname).Value == "enabled"); err != nil {
+		if err := shared.HasMinimumScopes(httpClient, hostname, opts.Token, cfg.BearerAuth); err != nil {
 			return fmt.Errorf("error validating token: %w", err)
 		}
-		username, err := shared.GetCurrentLogin(httpClient, hostname, opts.Token, cfg.BearerAuth(hostname).Value == "enabled")
+		username, err := shared.GetCurrentLogin(httpClient, hostname, opts.Token, cfg.BearerAuth)
 		if err != nil {
 			return fmt.Errorf("error retrieving current user: %w", err)
 		}

@@ -174,14 +174,14 @@ func Login(opts *LoginOptions) error {
 			return err
 		}
 
-		if err := HasMinimumScopes(httpClient, hostname, authToken, opts.BearerAuth(hostname).Value == "enabled"); err != nil {
+		if err := HasMinimumScopes(httpClient, hostname, authToken, opts.BearerAuth); err != nil {
 			return fmt.Errorf("error validating token: %w", err)
 		}
 	}
 
 	if username == "" {
 		var err error
-		username, err = GetCurrentLogin(httpClient, hostname, authToken, opts.BearerAuth(hostname).Value == "enabled")
+		username, err = GetCurrentLogin(httpClient, hostname, authToken, opts.BearerAuth)
 		if err != nil {
 			return fmt.Errorf("error retrieving current user: %w", err)
 		}
@@ -255,7 +255,7 @@ func sshKeyUpload(httpClient *http.Client, hostname, keyFile string, title strin
 	return add.SSHKeyUpload(httpClient, hostname, f, title)
 }
 
-func GetCurrentLogin(httpClient httpClient, hostname, authToken string, bearerAuth bool) (string, error) {
+func GetCurrentLogin(httpClient httpClient, hostname, authToken string, getBearerConfig gh.ConfigGetter) (string, error) {
 	query := `query UserCurrent{viewer{login}}`
 	reqBody, err := json.Marshal(map[string]interface{}{"query": query})
 	if err != nil {
@@ -269,7 +269,7 @@ func GetCurrentLogin(httpClient httpClient, hostname, authToken string, bearerAu
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", authTokenHeader(authToken, bearerAuth))
+	req.Header.Set("Authorization", authScheme(getBearerConfig, hostname)+" "+authToken)
 	res, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
@@ -286,11 +286,10 @@ func GetCurrentLogin(httpClient httpClient, hostname, authToken string, bearerAu
 	return result.Data.Viewer.Login, nil
 }
 
-// authTokenHeader returns the Authorization header value for the given token.
-// When bearerAuth is true, it uses the Bearer scheme; otherwise it uses the token scheme.
-func authTokenHeader(token string, bearerAuth bool) string {
-	if bearerAuth {
-		return "Bearer " + token
+// authScheme returns "Bearer" or "token" depending on the bearer auth configuration.
+func authScheme(getBearerConfig gh.ConfigGetter, hostname string) string {
+	if api.ShouldUseBearerAuth(getBearerConfig, hostname) {
+		return "Bearer"
 	}
-	return "token " + token
+	return "token"
 }
