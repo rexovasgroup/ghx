@@ -1,5 +1,6 @@
 package gherrs
 
+// ExitCode represents the numeric exit status returned by the CLI process.
 type ExitCode int
 
 const (
@@ -9,11 +10,14 @@ const (
 	exitPending ExitCode = 8
 )
 
+// ExitCoder is implemented by errors that carry a specific process exit code.
 type ExitCoder interface {
 	error
 	ExitCode() ExitCode
 }
 
+// Silenced is implemented by errors whose message should not be printed to
+// stderr. The process still exits with the error's exit code.
 type Silenced interface {
 	error
 	silent()
@@ -75,6 +79,8 @@ func (e authError) ExitCode() ExitCode {
 
 func (e authError) silent() {}
 
+// ExtensionExecError indicates that an extension process exited with a
+// non-zero status. Code holds the extension's exit code.
 type ExtensionExecError struct {
 	Code int
 }
@@ -89,6 +95,9 @@ func (e ExtensionExecError) ExitCode() ExitCode {
 
 func (e ExtensionExecError) silent() {}
 
+// GeneralError wraps an underlying error with an additional user-facing
+// message. When both WrappedErr and Message are set, Error() returns both
+// separated by a newline.
 type GeneralError struct {
 	WrappedErr error
 	Message    string

@@ -655,6 +655,11 @@ func runMainAndCaptureTelemetry(t *testing.T, args []string) (exitCode, []teleme
 	t.Setenv("GH_ENTERPRISE_TOKEN", "")
 	t.Setenv("GITHUB_ENTERPRISE_TOKEN", "")
 
+	// Clear GitHub.com auth tokens so tests don't accidentally make real API
+	// requests when running in environments that have them set.
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
 	// Disable color to keep the LogFlusher output easy to parse.
 	t.Setenv("NO_COLOR", "1")
 

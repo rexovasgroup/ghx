@@ -201,8 +201,16 @@ func Main() exitCode {
 			return
 		}
 
+		// For telemetry-disabled commands, check whether this is a built-in
+		// alias that stored the expanded command path. If so, record
+		// telemetry using that path; otherwise skip entirely.
+		commandPath := executedCmd.CommandPath()
 		if cmdutil.IsTelemetryDisabled(executedCmd) {
-			return
+			expanded, ok := cmdutil.ExpandedCommandPath(executedCmd)
+			if !ok {
+				return
+			}
+			commandPath = expanded
 		}
 
 		var flags []string
@@ -212,7 +220,7 @@ func Main() exitCode {
 		slices.Sort(flags)
 
 		var dimensions = ghtelemetry.Dimensions{
-			"command": executedCmd.CommandPath(),
+			"command": commandPath,
 			"flags":   strings.Join(flags, ","),
 		}
 		maps.Copy(dimensions, errorDims)
@@ -265,7 +273,11 @@ func Main() exitCode {
 				fmt.Fprintf(&s, "%v\n", dnsErr)
 			}
 			fmt.Fprint(&s, "check your internet connection or https://githubstatus.com")
-			err = gherrs.GeneralError{WrappedErr: err, Message: s.String()}
+			// Do not set WrappedErr here - the original DNS error is captured
+			// separately via originalErr for telemetry, and including it in the
+			// displayed Error() would prepend the raw DNS message before the
+			// user-friendly guidance.
+			err = gherrs.GeneralError{Message: s.String()}
 		case strings.Contains(err.Error(), "Incorrect function"):
 			var s strings.Builder
 			fmt.Fprintln(&s, "You appear to be running in MinTTY without pseudo terminal support.")
@@ -315,6 +327,7 @@ func Main() exitCode {
 	}
 
 	if root.HasFailed() {
+		errorDims = ghtelemetry.Dimensions{"outcome": "error"}
 		return exitError
 	}
 

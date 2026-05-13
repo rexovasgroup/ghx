@@ -61,6 +61,11 @@ func NewCmdAlias(io *iostreams.IOStreams, aliasName, aliasValue string) *cobra.C
 				return err
 			}
 			root := c.Root()
+			// Resolve the expanded command so its path can be recorded for
+			// telemetry without exposing the user-defined alias name.
+			if resolved, _, resolveErr := root.Find(expandedArgs); resolveErr == nil && resolved != nil {
+				cmdutil.SetExpandedCommandPath(c, resolved.CommandPath())
+			}
 			root.SetArgs(expandedArgs)
 			return root.Execute()
 		},
