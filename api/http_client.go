@@ -180,7 +180,7 @@ func shouldUseBearerAuth(getBearerConfig gh.ConfigGetter, hostname string) bool 
 		return true
 	}
 
-	if getBearerConfig != nil && getBearerConfig(hostname).Value == "enabled" {
+	if getBearerConfig(hostname).Value == "enabled" {
 		return true
 	}
 

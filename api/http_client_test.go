@@ -36,9 +36,10 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com",
 			args: args{
-				getToken:       tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
-				appVersion:     "v1.2.3",
-				logVerboseHTTP: false,
+				getToken:        stubGetToken("github.com", "MYTOKEN"),
+				getBearerConfig: disabledBearerConfig,
+				appVersion:      "v1.2.3",
+				logVerboseHTTP:  false,
 			},
 			host: "github.com",
 			wantHeader: map[string][]string{
@@ -52,8 +53,9 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "GHES",
 			args: args{
-				getToken:   tinyConfig{"example.com:oauth_token": "GHETOKEN"}.ActiveToken,
-				appVersion: "v1.2.3",
+				getToken:        stubGetToken("example.com", "GHETOKEN"),
+				getBearerConfig: disabledBearerConfig,
+				appVersion:      "v1.2.3",
 			},
 			host: "example.com",
 			wantHeader: map[string][]string{
@@ -67,7 +69,7 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com with bearer auth",
 			args: args{
-				getToken:        tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
+				getToken:        stubGetToken("github.com", "MYTOKEN"),
 				getBearerConfig: func(string) gh.ConfigEntry { return gh.ConfigEntry{Value: "enabled"} },
 				appVersion:      "v1.2.3",
 			},
@@ -83,7 +85,7 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "GHES with bearer auth",
 			args: args{
-				getToken:        tinyConfig{"example.com:oauth_token": "GHETOKEN"}.ActiveToken,
+				getToken:        stubGetToken("example.com", "GHETOKEN"),
 				getBearerConfig: func(string) gh.ConfigEntry { return gh.ConfigEntry{Value: "enabled"} },
 				appVersion:      "v1.2.3",
 			},
@@ -99,9 +101,10 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com no authentication token",
 			args: args{
-				getToken:       tinyConfig{"example.com:oauth_token": "MYTOKEN"}.ActiveToken,
-				appVersion:     "v1.2.3",
-				logVerboseHTTP: false,
+				getToken:        stubGetToken("example.com", "MYTOKEN"),
+				getBearerConfig: disabledBearerConfig,
+				appVersion:      "v1.2.3",
+				logVerboseHTTP:  false,
 			},
 			host: "github.com",
 			wantHeader: map[string][]string{
@@ -115,9 +118,10 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "GHES no authentication token",
 			args: args{
-				getToken:       tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
-				appVersion:     "v1.2.3",
-				logVerboseHTTP: false,
+				getToken:        stubGetToken("github.com", "MYTOKEN"),
+				getBearerConfig: disabledBearerConfig,
+				appVersion:      "v1.2.3",
+				logVerboseHTTP:  false,
 			},
 			host: "example.com",
 			wantHeader: map[string][]string{
@@ -131,9 +135,10 @@ func TestNewHTTPClient(t *testing.T) {
 		{
 			name: "github.com in verbose mode",
 			args: args{
-				getToken:       tinyConfig{"github.com:oauth_token": "MYTOKEN"}.ActiveToken,
-				appVersion:     "v1.2.3",
-				logVerboseHTTP: true,
+				getToken:        stubGetToken("github.com", "MYTOKEN"),
+				getBearerConfig: disabledBearerConfig,
+				appVersion:      "v1.2.3",
+				logVerboseHTTP:  true,
 			},
 			host: "github.com",
 			wantHeader: map[string][]string{
@@ -259,11 +264,20 @@ func TestHTTPClientRedirectAuthenticationHeaderHandling(t *testing.T) {
 	}))
 	defer redirectServer.Close()
 
+	redirectHost := strings.TrimPrefix(redirectServer.URL, "http://")
+	serverHost := strings.TrimPrefix(server.URL, "http://")
+
 	client, err := NewHTTPClient(HTTPClientOptions{
-		GetToken: tinyConfig{
-			fmt.Sprintf("%s:oauth_token", strings.TrimPrefix(redirectServer.URL, "http://")): "REDIRECT-TOKEN",
-			fmt.Sprintf("%s:oauth_token", strings.TrimPrefix(server.URL, "http://")):         "TOKEN",
-		}.ActiveToken,
+		GetToken: func(h string) (string, string) {
+			switch h {
+			case redirectHost:
+				return "REDIRECT-TOKEN", "oauth_token"
+			case serverHost:
+				return "TOKEN", "oauth_token"
+			}
+			return "", ""
+		},
+		GetBearerConfig: disabledBearerConfig,
 	})
 	require.NoError(t, err)
 
@@ -424,11 +438,20 @@ func (f *fakeTelemetryDisabler) Disable() {
 	f.disabled = true
 }
 
-type tinyConfig map[string]string
-
-func (c tinyConfig) ActiveToken(host string) (string, string) {
-	return c[fmt.Sprintf("%s:%s", host, "oauth_token")], "oauth_token"
+// stubGetToken returns a getTokenFunc that always returns the given token.
+func stubGetToken(host, token string) getTokenFunc {
+	return func(h string) (string, string) {
+		if h == host {
+			return token, "oauth_token"
+		}
+		return "", ""
+	}
 }
+
+// disabledBearerConfig is a ConfigGetter that always returns bearer auth disabled.
+var disabledBearerConfig = gh.ConfigGetter(func(string) gh.ConfigEntry {
+	return gh.ConfigEntry{Value: "disabled"}
+})
 
 var requestAtRE = regexp.MustCompile(`(?m)^\* Request at .+`)
 var dateRE = regexp.MustCompile(`(?m)^< Date: .+`)
