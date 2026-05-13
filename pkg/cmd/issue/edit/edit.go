@@ -36,6 +36,8 @@ type EditOptions struct {
 	IssueNumbers []int
 	Interactive  bool
 
+	RemoveIssueType bool
+
 	Parent          string
 	RemoveParent    bool
 	AddSubIssues    []string
@@ -87,6 +89,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 			$ gh issue edit 23 --body-file body.txt
 			$ gh issue edit 23 34 --add-label "help wanted"
 			$ gh issue edit 23 --type Bug
+			$ gh issue edit 23 --remove-type
 			$ gh issue edit 23 --parent 100
 			$ gh issue edit 23 --remove-parent
 			$ gh issue edit 100 --add-sub-issue 123,124
@@ -143,6 +146,14 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 			}
 
 			if err := cmdutil.MutuallyExclusive(
+				"specify only one of `--type` or `--remove-type`",
+				flags.Changed("type"),
+				opts.RemoveIssueType,
+			); err != nil {
+				return err
+			}
+
+			if err := cmdutil.MutuallyExclusive(
 				"specify only one of --parent or --remove-parent",
 				flags.Changed("parent"),
 				opts.RemoveParent,
@@ -174,13 +185,14 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 				opts.Editable.IssueType.Edited = true
 			}
 
-			hasRelationshipFlags := flags.Changed("parent") || opts.RemoveParent ||
+			hasDeferredFlags := opts.RemoveIssueType ||
+				flags.Changed("parent") || opts.RemoveParent ||
 				len(opts.AddSubIssues) > 0 || len(opts.RemoveSubIssues) > 0 ||
 				len(opts.AddBlockedBy) > 0 || len(opts.RemoveBlockedBy) > 0 ||
 				len(opts.AddBlocking) > 0 || len(opts.RemoveBlocking) > 0
 
 			// Drop into interactive mode only if the user passed no edit flags at all.
-			if !opts.Editable.Dirty() && !hasRelationshipFlags {
+			if !opts.Editable.Dirty() && !hasDeferredFlags {
 				opts.Interactive = true
 			}
 
@@ -216,6 +228,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(*EditOptions) error) *cobra.Comman
 	cmd.Flags().StringVarP(&opts.Editable.Milestone.Value, "milestone", "m", "", "Edit the milestone the issue belongs to by `name`")
 	cmd.Flags().BoolVar(&removeMilestone, "remove-milestone", false, "Remove the milestone association from the issue")
 	cmd.Flags().StringVar(&opts.Editable.IssueType.Value, "type", "", "Set the issue type by `name`")
+	cmd.Flags().BoolVar(&opts.RemoveIssueType, "remove-type", false, "Remove the issue type from the issue")
 	cmd.Flags().StringVar(&opts.Parent, "parent", "", "Set the parent issue by `number` or URL")
 	cmd.Flags().BoolVar(&opts.RemoveParent, "remove-parent", false, "Remove the parent issue")
 	cmd.Flags().StringSliceVar(&opts.AddSubIssues, "add-sub-issue", nil, "Add sub-issues by `number` or URL")
@@ -458,6 +471,7 @@ func deferredUpdateIssueOptions(client *api.Client, baseRepo ghrepo.Interface, i
 		IssueID:               issue.ID,
 		Hostname:              baseRepo.RepoHost(),
 		IssueTypeID:           issueTypeID,
+		RemoveIssueType:       editOpts.RemoveIssueType,
 		ReplaceExistingParent: true,
 	}
 

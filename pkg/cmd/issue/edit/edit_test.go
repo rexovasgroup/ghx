@@ -298,6 +298,19 @@ func TestNewCmdEdit(t *testing.T) {
 			},
 		},
 		{
+			name:  "remove-type flag",
+			input: "23 --remove-type",
+			output: EditOptions{
+				IssueNumbers:    []int{23},
+				RemoveIssueType: true,
+			},
+		},
+		{
+			name:     "both type and remove-type flags",
+			input:    "23 --type Bug --remove-type",
+			wantsErr: true,
+		},
+		{
 			name:  "parent flag",
 			input: "23 --parent 100",
 			output: EditOptions{
@@ -850,6 +863,29 @@ func Test_editRun(t *testing.T) {
 						func(inputs map[string]interface{}) {
 							assert.Equal(t, "123", inputs["issueId"])
 							assert.Equal(t, "BUG_TYPE_ID", inputs["issueTypeId"])
+						}),
+				)
+			},
+			stdout: "https://github.com/OWNER/REPO/issue/123\n",
+		},
+		{
+			name: "remove type",
+			input: &EditOptions{
+				Detector:        &fd.EnabledDetectorMock{},
+				IssueNumbers:    []int{123},
+				Interactive:     false,
+				RemoveIssueType: true,
+				FetchOptions:    prShared.FetchOptions,
+			},
+			httpStubs: func(t *testing.T, reg *httpmock.Registry) {
+				mockIssueGet(t, reg)
+				reg.Register(
+					httpmock.GraphQL(`mutation UpdateIssueIssueType\b`),
+					httpmock.GraphQLMutation(`
+					{ "data": { "updateIssueIssueType": { "issue": { "id": "123" } } } }`,
+						func(inputs map[string]interface{}) {
+							assert.Equal(t, "123", inputs["issueId"])
+							assert.Nil(t, inputs["issueTypeId"])
 						}),
 				)
 			},

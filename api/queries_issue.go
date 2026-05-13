@@ -481,11 +481,12 @@ func (i Issue) CurrentUserComments() []Comment {
 	return i.Comments.CurrentUserComments()
 }
 
-// UpdateIssueIssueType sets the issue type on an issue.
+// UpdateIssueIssueType sets or clears the issue type on an issue. Pass an
+// empty issueTypeID to clear the issue type.
 func UpdateIssueIssueType(client *Client, hostname string, issueID string, issueTypeID string) error {
 	type UpdateIssueIssueTypeInput struct {
-		IssueID     githubv4.ID `json:"issueId"`
-		IssueTypeID githubv4.ID `json:"issueTypeId"`
+		IssueID     githubv4.ID  `json:"issueId"`
+		IssueTypeID *githubv4.ID `json:"issueTypeId"`
 	}
 
 	var mutation struct {
@@ -496,10 +497,16 @@ func UpdateIssueIssueType(client *Client, hostname string, issueID string, issue
 		} `graphql:"updateIssueIssueType(input: $input)"`
 	}
 
+	var typeID *githubv4.ID
+	if issueTypeID != "" {
+		id := githubv4.ID(issueTypeID)
+		typeID = &id
+	}
+
 	variables := map[string]interface{}{
 		"input": UpdateIssueIssueTypeInput{
 			IssueID:     githubv4.ID(issueID),
-			IssueTypeID: githubv4.ID(issueTypeID),
+			IssueTypeID: typeID,
 		},
 	}
 
@@ -614,7 +621,8 @@ type DeferredUpdateIssueOptions struct {
 	IssueID  string
 	Hostname string
 
-	IssueTypeID string
+	IssueTypeID     string
+	RemoveIssueType bool
 
 	ParentID              string
 	ReplaceExistingParent bool
@@ -639,7 +647,7 @@ type DeferredUpdateIssueOptions struct {
 func DeferredUpdateIssue(client *Client, opts DeferredUpdateIssueOptions) error {
 	var mutations []func() error
 
-	if opts.IssueTypeID != "" {
+	if opts.IssueTypeID != "" || opts.RemoveIssueType {
 		mutations = append(mutations, func() error {
 			return UpdateIssueIssueType(client, opts.Hostname, opts.IssueID, opts.IssueTypeID)
 		})
