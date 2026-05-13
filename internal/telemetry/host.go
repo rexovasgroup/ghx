@@ -5,6 +5,7 @@ import (
 
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/ghrepo"
+	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +35,7 @@ func GuessTargetHost(
 
 	// 2. --hostname flag (used by auth, api, attestation commands)
 	if hostname, err := cmd.Flags().GetString("hostname"); err == nil && hostname != "" {
-		return hostname
+		return ghauth.NormalizeHostname(hostname)
 	}
 
 	// 3. Positional repo argument for "gh repo <subcommand> [OWNER/REPO]" commands
@@ -54,7 +55,9 @@ func GuessTargetHost(
 	}
 
 	// 5. Git remotes; expected to be BaseRepoFunc (local, no network) in root's closure.
-	if baseRepo != nil {
+	// Only attempt this for commands that are likely repo-scoped (have a --repo flag)
+	// to avoid triggering git remote discovery for host-agnostic commands like "gh version".
+	if baseRepo != nil && cmd.Flags().Lookup("repo") != nil {
 		if repo, err := baseRepo(); err == nil {
 			return repo.RepoHost()
 		}
