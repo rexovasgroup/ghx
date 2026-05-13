@@ -16,6 +16,10 @@ env GH_BEARER_AUTH=1
 exec gh api /user
 stderr '> Authorization: Bearer'
 
-# Auth status also respects GH_BEARER_AUTH env var
+# Non-api commands using the factory HTTP client also respect GH_BEARER_AUTH
+exec gh repo view --json name
+stderr '> Authorization: Bearer'
+
+# Auth status (which manually sets auth headers) also respects GH_BEARER_AUTH
 exec gh auth status
 stderr '> Authorization: Bearer'
