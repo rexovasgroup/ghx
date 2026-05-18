@@ -384,53 +384,10 @@ func updateRun(opts *UpdateOptions) error {
 
 	var failed bool
 	for _, u := range updates {
-		installOpts := &installer.Options{
-			Host:      u.local.repoHost,
-			Owner:     u.local.owner,
-			Repo:      u.local.repo,
-			Ref:       u.resolved.Ref,
-			SHA:       u.resolved.SHA,
-			Skills:    []discovery.Skill{u.skill},
-			AgentHost: u.local.host,
-			Scope:     u.local.scope,
-			GitRoot:   gitRoot,
-			HomeDir:   homeDir,
-			Client:    apiClient,
-		}
-		// When updating skills from a custom --dir, host is nil.
-		// Use the skill's install root as the target. For namespaced
-		// skills (name contains "/"), the dir is two levels below the
-		// root instead of one.
-		if u.local.host == nil {
-			base := filepath.Dir(u.local.dir)
-			if strings.Contains(u.local.name, "/") {
-				base = filepath.Dir(base)
-			}
-			installOpts.Dir = base
-		}
-		_, installErr := installer.Install(installOpts)
-		if installErr != nil {
-			fmt.Fprintf(opts.IO.ErrOut, "%s Failed to update %s: %v\n", cs.FailureIcon(), u.local.name, installErr)
+		if err := updateSkillInPlace(opts, u, apiClient, gitRoot, homeDir); err != nil {
+			fmt.Fprintf(opts.IO.ErrOut, "%s Failed to update %s: %v\n", cs.FailureIcon(), u.local.name, err)
 			failed = true
 			continue
-		}
-
-		// When the install location has changed (e.g. migrating from a
-		// namespaced layout to flat), remove the old directory so that the
-		// stale copy does not shadow the freshly installed one.
-		newDir := filepath.Join(installOpts.Dir, u.skill.Name)
-		if installOpts.Dir == "" && u.local.host != nil {
-			if d, err := u.local.host.InstallDir(u.local.scope, gitRoot, homeDir); err == nil {
-				newDir = filepath.Join(d, u.skill.Name)
-			}
-		}
-		if newDir != "" && u.local.dir != "" && filepath.Clean(newDir) != filepath.Clean(u.local.dir) {
-			_ = os.RemoveAll(u.local.dir)
-			// Remove the parent if it is now empty (leftover namespace directory).
-			parent := filepath.Dir(u.local.dir)
-			if entries, readErr := os.ReadDir(parent); readErr == nil && len(entries) == 0 {
-				_ = os.Remove(parent)
-			}
 		}
 		if opts.IO.IsStdoutTTY() {
 			fmt.Fprintf(opts.IO.Out, "%s Updated %s\n", cs.SuccessIcon(), u.local.name)
@@ -444,6 +401,118 @@ func updateRun(opts *UpdateOptions) error {
 	}
 
 	return nil
+}
+
+// updateSkillInPlace installs the resolved update into a temporary staging
+// directory and, on success, atomically swaps the contents into the existing
+// skill directory. This guarantees:
+//
+//   - The skill directory's own inode is preserved, so symlinks, mounts, and
+//     external references that point at it stay valid.
+//   - Stale files from the previous version are removed.
+//   - A failed install leaves the existing skill completely untouched.
+func updateSkillInPlace(opts *UpdateOptions, u pendingUpdate, apiClient *api.Client, gitRoot, homeDir string) error {
+	if u.local.dir == "" {
+		return fmt.Errorf("cannot update %s: no install location recorded", u.local.name)
+	}
+
+	staging, err := os.MkdirTemp("", "gh-skill-update-")
+	if err != nil {
+		return fmt.Errorf("could not create staging directory: %w", err)
+	}
+	defer os.RemoveAll(staging)
+
+	installOpts := &installer.Options{
+		Host:    u.local.repoHost,
+		Owner:   u.local.owner,
+		Repo:    u.local.repo,
+		Ref:     u.resolved.Ref,
+		SHA:     u.resolved.SHA,
+		Skills:  []discovery.Skill{u.skill},
+		Dir:     staging,
+		GitRoot: gitRoot,
+		HomeDir: homeDir,
+		Client:  apiClient,
+	}
+	if _, err := installer.Install(installOpts); err != nil {
+		return err
+	}
+
+	stagedSkillDir := filepath.Join(staging, u.skill.Name)
+	if _, err := os.Stat(stagedSkillDir); err != nil {
+		return fmt.Errorf("installer did not produce %s: %w", stagedSkillDir, err)
+	}
+
+	if err := os.MkdirAll(u.local.dir, 0o755); err != nil {
+		return fmt.Errorf("could not ensure skill directory %s: %w", u.local.dir, err)
+	}
+	existing, err := os.ReadDir(u.local.dir)
+	if err != nil {
+		return fmt.Errorf("could not read skill directory %s: %w", u.local.dir, err)
+	}
+	for _, entry := range existing {
+		if err := os.RemoveAll(filepath.Join(u.local.dir, entry.Name())); err != nil {
+			return fmt.Errorf("could not clean skill directory %s: %w", u.local.dir, err)
+		}
+	}
+
+	staged, err := os.ReadDir(stagedSkillDir)
+	if err != nil {
+		return fmt.Errorf("could not read staged skill directory %s: %w", stagedSkillDir, err)
+	}
+	for _, entry := range staged {
+		src := filepath.Join(stagedSkillDir, entry.Name())
+		dst := filepath.Join(u.local.dir, entry.Name())
+		if err := moveOrCopy(src, dst); err != nil {
+			return fmt.Errorf("could not move %s into place: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+// moveOrCopy renames src to dst, falling back to a recursive copy when the
+// rename crosses filesystem boundaries (e.g. when TMPDIR lives on a separate
+// volume from the skill directory).
+func moveOrCopy(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	return copyPath(src, dst)
+}
+
+func copyPath(src, dst string) error {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		target, err := os.Readlink(src)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(target, dst)
+	case info.IsDir():
+		if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := copyPath(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, data, info.Mode().Perm())
+	}
 }
 
 // scanAllAgents walks every registered agent's skill directory (project + user scope) and

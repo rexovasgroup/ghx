@@ -673,7 +673,7 @@ func TestUpdateRun(t *testing.T) {
 			wantStdout: "Updated code-review",
 		},
 		{
-			name: "namespaced skill with --dir resolves install base correctly",
+			name: "namespaced skill with --dir updates in-place",
 			setup: func(t *testing.T, dir string) {
 				t.Helper()
 				homeDir := t.TempDir()
@@ -691,6 +691,8 @@ func TestUpdateRun(t *testing.T) {
 					---
 					Old namespaced content
 				`)), 0o644))
+				// Plant a stale file that should be cleaned during update.
+				require.NoError(t, os.WriteFile(filepath.Join(skillDir, "STALE.txt"), []byte("leftover"), 0o644))
 			},
 			stubs: func(reg *httpmock.Registry) {
 				reg.Register(
@@ -726,14 +728,20 @@ func TestUpdateRun(t *testing.T) {
 			},
 			verify: func(t *testing.T, dir string) {
 				t.Helper()
-				// After update, skill should be installed flat (not namespaced).
-				content, err := os.ReadFile(filepath.Join(dir, "code-review", "SKILL.md"))
+				// Skill must stay in its original namespaced directory.
+				content, err := os.ReadFile(filepath.Join(dir, "monalisa", "code-review", "SKILL.md"))
 				require.NoError(t, err)
 				assert.Contains(t, string(content), "github-repo: https://github.com/monalisa/octocat-skills")
 				assert.NotContains(t, string(content), "Old namespaced content")
-				// Old namespaced directory should be cleaned up.
+				// Skill must NOT have been relocated to a flat path.
+				_, err = os.Stat(filepath.Join(dir, "code-review", "SKILL.md"))
+				assert.True(t, os.IsNotExist(err), "skill should not be relocated to flat path")
+				// Namespace directory must still exist.
 				_, err = os.Stat(filepath.Join(dir, "monalisa", "code-review"))
-				assert.True(t, os.IsNotExist(err), "old namespaced directory should be removed")
+				assert.False(t, os.IsNotExist(err), "namespaced directory must not be deleted")
+				// Stale file should have been cleaned during update.
+				_, err = os.Stat(filepath.Join(dir, "monalisa", "code-review", "STALE.txt"))
+				assert.True(t, os.IsNotExist(err), "stale file should be removed during update")
 			},
 			wantStdout: "Updated monalisa/code-review",
 		},
@@ -1183,9 +1191,9 @@ func TestUpdateRun(t *testing.T) {
 
 			if tt.wantErr != "" {
 				assert.EqualError(t, err, tt.wantErr)
-				return
+			} else {
+				require.NoError(t, err)
 			}
-			require.NoError(t, err)
 			if tt.wantStderr != "" {
 				assert.Contains(t, stderr.String(), tt.wantStderr)
 			}
