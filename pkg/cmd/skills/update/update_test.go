@@ -1206,3 +1206,73 @@ func TestUpdateRun(t *testing.T) {
 		})
 	}
 }
+
+func TestSwapDirectoryContents_RollsBackOnFailure(t *testing.T) {
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "code-review")
+	require.NoError(t, os.MkdirAll(dest, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dest, "SKILL.md"), []byte("original"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dest, "extra.txt"), []byte("keep me"), 0o644))
+	subdir := filepath.Join(dest, "examples")
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subdir, "demo.txt"), []byte("demo"), 0o644))
+
+	destBefore, err := os.Stat(dest)
+	require.NoError(t, err)
+
+	// Point src at a path that does not exist so the staged ReadDir fails
+	// after the existing entries have already been moved aside. This is the
+	// only deterministic, portable way to exercise the rollback branch from
+	// outside the swap.
+	src := filepath.Join(parent, "does-not-exist")
+
+	err = swapDirectoryContents(dest, src)
+	require.Error(t, err, "swap should fail when staged dir cannot be read")
+
+	destAfter, err := os.Stat(dest)
+	require.NoError(t, err)
+	assert.True(t, os.SameFile(destBefore, destAfter), "dest directory identity must be preserved across rollback")
+
+	content, readErr := os.ReadFile(filepath.Join(dest, "SKILL.md"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "original", string(content), "original SKILL.md must be restored")
+	extra, readErr := os.ReadFile(filepath.Join(dest, "extra.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "keep me", string(extra), "original extra.txt must be restored")
+	demo, readErr := os.ReadFile(filepath.Join(subdir, "demo.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "demo", string(demo), "original nested subdir must be restored intact")
+
+	entries, err := os.ReadDir(parent)
+	require.NoError(t, err)
+	for _, e := range entries {
+		if e.Name() != "code-review" {
+			t.Errorf("unexpected leftover entry in parent: %s", e.Name())
+		}
+	}
+}
+
+func TestSwapDirectoryContents_PreservesDestInode(t *testing.T) {
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "code-review")
+	require.NoError(t, os.MkdirAll(dest, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dest, "old.txt"), []byte("old"), 0o644))
+
+	src := filepath.Join(parent, "staged")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "new.txt"), []byte("new"), 0o644))
+
+	destBefore, err := os.Stat(dest)
+	require.NoError(t, err)
+
+	require.NoError(t, swapDirectoryContents(dest, src))
+
+	destAfter, err := os.Stat(dest)
+	require.NoError(t, err)
+	assert.True(t, os.SameFile(destBefore, destAfter), "dest directory identity must be preserved")
+
+	assert.NoFileExists(t, filepath.Join(dest, "old.txt"), "stale files must be removed")
+	content, err := os.ReadFile(filepath.Join(dest, "new.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(content), "staged content must be installed")
+}

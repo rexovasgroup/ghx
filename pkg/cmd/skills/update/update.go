@@ -403,20 +403,30 @@ func updateRun(opts *UpdateOptions) error {
 	return nil
 }
 
-// updateSkillInPlace installs the resolved update into a temporary staging
-// directory and, on success, atomically swaps the contents into the existing
-// skill directory. This guarantees:
+// updateSkillInPlace installs the resolved update into a staging directory
+// alongside the existing skill directory and, on success, atomically swaps
+// the staged contents into place via same-filesystem renames. This
+// guarantees:
 //
 //   - The skill directory's own inode is preserved, so symlinks, mounts, and
 //     external references that point at it stay valid.
 //   - Stale files from the previous version are removed.
-//   - A failed install leaves the existing skill completely untouched.
+//   - A failure at any point (install, read, rename) leaves the existing
+//     skill completely untouched: existing files are first moved aside into
+//     a backup directory and restored if any subsequent step fails.
 func updateSkillInPlace(opts *UpdateOptions, u pendingUpdate, apiClient *api.Client, gitRoot, homeDir string) error {
 	if u.local.dir == "" {
 		return fmt.Errorf("cannot update %s: no install location recorded", u.local.name)
 	}
 
-	staging, err := os.MkdirTemp("", "gh-skill-update-")
+	parent := filepath.Dir(u.local.dir)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return fmt.Errorf("could not ensure parent directory %s: %w", parent, err)
+	}
+
+	// Stage as a sibling of the existing skill directory so the swap stays
+	// on the same filesystem and every rename is atomic.
+	staging, err := os.MkdirTemp(parent, "."+u.skill.Name+".gh-skill-update-")
 	if err != nil {
 		return fmt.Errorf("could not create staging directory: %w", err)
 	}
@@ -446,73 +456,66 @@ func updateSkillInPlace(opts *UpdateOptions, u pendingUpdate, apiClient *api.Cli
 	if err := os.MkdirAll(u.local.dir, 0o755); err != nil {
 		return fmt.Errorf("could not ensure skill directory %s: %w", u.local.dir, err)
 	}
-	existing, err := os.ReadDir(u.local.dir)
+
+	return swapDirectoryContents(u.local.dir, stagedSkillDir)
+}
+
+// swapDirectoryContents replaces the entries inside dest with the entries
+// inside src, preserving dest's inode. It first moves every existing entry
+// into a sibling backup directory, then moves the staged entries into dest.
+// If any step fails, the original contents are restored from the backup.
+//
+// src and dest must live on the same filesystem so renames are atomic.
+func swapDirectoryContents(dest, src string) error {
+	backup, err := os.MkdirTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".gh-skill-backup-")
 	if err != nil {
-		return fmt.Errorf("could not read skill directory %s: %w", u.local.dir, err)
-	}
-	for _, entry := range existing {
-		if err := os.RemoveAll(filepath.Join(u.local.dir, entry.Name())); err != nil {
-			return fmt.Errorf("could not clean skill directory %s: %w", u.local.dir, err)
-		}
+		return fmt.Errorf("could not create backup directory: %w", err)
 	}
 
-	staged, err := os.ReadDir(stagedSkillDir)
+	existing, err := os.ReadDir(dest)
 	if err != nil {
-		return fmt.Errorf("could not read staged skill directory %s: %w", stagedSkillDir, err)
+		_ = os.RemoveAll(backup)
+		return fmt.Errorf("could not read skill directory %s: %w", dest, err)
 	}
+	var movedOut []string
+	for _, entry := range existing {
+		if err := os.Rename(filepath.Join(dest, entry.Name()), filepath.Join(backup, entry.Name())); err != nil {
+			restoreBackup(dest, backup, movedOut, nil)
+			return fmt.Errorf("could not move %s aside: %w", entry.Name(), err)
+		}
+		movedOut = append(movedOut, entry.Name())
+	}
+
+	staged, err := os.ReadDir(src)
+	if err != nil {
+		restoreBackup(dest, backup, movedOut, nil)
+		return fmt.Errorf("could not read staged skill directory %s: %w", src, err)
+	}
+	var movedIn []string
 	for _, entry := range staged {
-		src := filepath.Join(stagedSkillDir, entry.Name())
-		dst := filepath.Join(u.local.dir, entry.Name())
-		if err := moveOrCopy(src, dst); err != nil {
+		from := filepath.Join(src, entry.Name())
+		to := filepath.Join(dest, entry.Name())
+		if err := os.Rename(from, to); err != nil {
+			restoreBackup(dest, backup, movedOut, movedIn)
 			return fmt.Errorf("could not move %s into place: %w", entry.Name(), err)
 		}
+		movedIn = append(movedIn, entry.Name())
 	}
+
+	_ = os.RemoveAll(backup)
 	return nil
 }
 
-// moveOrCopy renames src to dst, falling back to a recursive copy when the
-// rename crosses filesystem boundaries (e.g. when TMPDIR lives on a separate
-// volume from the skill directory).
-func moveOrCopy(src, dst string) error {
-	if err := os.Rename(src, dst); err == nil {
-		return nil
+// restoreBackup undoes a partial swap by removing any freshly installed
+// entries and moving the original entries back from backup into dest.
+func restoreBackup(dest, backup string, movedOut, movedIn []string) {
+	for _, name := range movedIn {
+		_ = os.RemoveAll(filepath.Join(dest, name))
 	}
-	return copyPath(src, dst)
-}
-
-func copyPath(src, dst string) error {
-	info, err := os.Lstat(src)
-	if err != nil {
-		return err
+	for _, name := range movedOut {
+		_ = os.Rename(filepath.Join(backup, name), filepath.Join(dest, name))
 	}
-	switch {
-	case info.Mode()&os.ModeSymlink != 0:
-		target, err := os.Readlink(src)
-		if err != nil {
-			return err
-		}
-		return os.Symlink(target, dst)
-	case info.IsDir():
-		if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
-			return err
-		}
-		entries, err := os.ReadDir(src)
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if err := copyPath(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())); err != nil {
-				return err
-			}
-		}
-		return nil
-	default:
-		data, err := os.ReadFile(src)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(dst, data, info.Mode().Perm())
-	}
+	_ = os.RemoveAll(backup)
 }
 
 // scanAllAgents walks every registered agent's skill directory (project + user scope) and
