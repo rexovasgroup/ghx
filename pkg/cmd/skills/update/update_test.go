@@ -1207,6 +1207,9 @@ func TestUpdateRun(t *testing.T) {
 	}
 }
 
+// If the staged contents cannot be installed after the existing entries
+// have already been moved aside, the original skill directory must be
+// restored byte-for-byte and its inode must be preserved.
 func TestSwapDirectoryContents_RollsBackOnFailure(t *testing.T) {
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "code-review")
@@ -1245,13 +1248,19 @@ func TestSwapDirectoryContents_RollsBackOnFailure(t *testing.T) {
 
 	entries, err := os.ReadDir(parent)
 	require.NoError(t, err)
+	var leftovers []string
 	for _, e := range entries {
 		if e.Name() != "code-review" {
-			t.Errorf("unexpected leftover entry in parent: %s", e.Name())
+			leftovers = append(leftovers, e.Name())
 		}
 	}
+	assert.Empty(t, leftovers, "no staging or backup directories should remain after rollback")
 }
 
+// The skill directory's own inode must survive an update so symlinks,
+// bind mounts, and other external references pointing at it remain
+// valid. Per-entry rename swaps satisfy this; replacing the directory
+// itself would not.
 func TestSwapDirectoryContents_PreservesDestInode(t *testing.T) {
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "code-review")
