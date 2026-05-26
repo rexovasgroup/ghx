@@ -92,3 +92,38 @@ func TestFetchRefSHA(t *testing.T) {
 		})
 	}
 }
+
+func TestDigestAlgForRef(t *testing.T) {
+	tests := []struct {
+		name     string
+		digest   string
+		expected string
+	}{
+		{
+			name:     "sha1 (40 hex chars)",
+			digest:   "1234567890abcdef1234567890abcdef12345678",
+			expected: "sha1",
+		},
+		{
+			name:     "sha256 (64 hex chars)",
+			digest:   "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+			expected: "sha256",
+		},
+		{
+			name:     "empty string defaults to sha1",
+			digest:   "",
+			expected: "sha1",
+		},
+		{
+			name:     "unexpected length defaults to sha1",
+			digest:   "abc",
+			expected: "sha1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, DigestAlgForRef(tt.digest))
+		})
+	}
+}

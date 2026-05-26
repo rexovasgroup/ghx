@@ -142,7 +142,7 @@ func verifyAssetRun(config *VerifyAssetConfig) error {
 		return err
 	}
 
-	releaseRefDigest := artifact.NewDigestedArtifactForRelease(ref, "sha1")
+	releaseRefDigest := artifact.NewDigestedArtifactForRelease(ref, shared.DigestAlgForRef(ref))
 
 	// Find attestations for the release tag SHA
 	attestations, err := config.AttClient.GetByDigest(api.FetchParams{

@@ -60,9 +60,9 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 		Short: "List secrets",
 		Long: heredoc.Doc(`
 			List secrets on one of the following levels:
-			- repository (default): available to GitHub Actions runs or Dependabot in a repository
+			- repository (default): available to GitHub Actions runs, Agents sessions, or Dependabot in a repository
 			- environment: available to GitHub Actions runs for a deployment environment in a repository
-			- organization: available to GitHub Actions runs, Dependabot, or Codespaces within an organization
+			- organization: available to GitHub Actions runs, Agents sessions, Dependabot, or Codespaces within an organization
 			- user: available to Codespaces for your user
 		`),
 		Aliases: []string{"ls"},
@@ -98,7 +98,7 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 	cmd.Flags().StringVarP(&opts.OrgName, "org", "o", "", "List secrets for an organization")
 	cmd.Flags().StringVarP(&opts.EnvName, "env", "e", "", "List secrets for an environment")
 	cmd.Flags().BoolVarP(&opts.UserSecrets, "user", "u", false, "List a secret for your user")
-	cmdutil.StringEnumFlag(cmd, &opts.Application, "app", "a", "", []string{shared.Actions, shared.Codespaces, shared.Dependabot}, "List secrets for a specific application")
+	cmdutil.StringEnumFlag(cmd, &opts.Application, "app", "a", "", []string{shared.Actions, shared.Agents, shared.Codespaces, shared.Dependabot}, "List secrets for a specific application")
 	cmdutil.AddJSONFlags(cmd, &opts.Exporter, secretFields)
 	return cmd
 }

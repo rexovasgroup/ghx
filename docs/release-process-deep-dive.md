@@ -11,7 +11,6 @@ From a high level, the [release workflow](https://github.com/cli/cli/blob/537a22
  * Builds and updates the [manual](https://cli.github.com/manual) and repository packages
  * Creates GitHub Attestations for the artifacts
  * Creates a GitHub Release and attaches the artifacts
- * Bumps the `gh` [homebrew-core formula](https://github.com/Homebrew/homebrew-core/blob/2df031cbd8f7bc9b9a380e941ccefcf3c8f3d02b/Formula/g/gh.rb)
 
 # Jobs Deep Dive
 
@@ -569,16 +568,6 @@ release:
             git log --oneline @{upstream}..
             git diff --name-status @{upstream}..
           fi
-      - name: Bump homebrew-core formula
-        uses: mislav/bump-homebrew-formula-action@v3
-        if: inputs.environment == 'production' && !contains(inputs.tag_name, '-')
-        with:
-          formula-name: gh
-          formula-path: Formula/g/gh.rb
-          tag-name: ${{ inputs.tag_name }}
-          push-to: williammartin/homebrew-core
-        env:
-          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_PR_PAT }}
 ```
 </details>
 
@@ -647,11 +636,11 @@ In previous steps, a git commit was made for the manual, and files had moved int
 
 Occasionally, the repository can become unwieldy due to hosting so many large binary artifacts. Instructions can be found in the README for that repository.
 
-#### Homebrew Formula
+#### Homebrew
 
-Using [`mislav/bump-homebrew-formula-action`](https://github.com/mislav/bump-homebrew-formula-action), a PR for the `gh` [`homebrew-core` formula](https://github.com/Homebrew/homebrew-core/blob/master/Formula/g/gh.rb) is created. The fork repository is currently owned by `williammartin` as PRs are [not accepted from organizations.](https://github.com/cli/cli/pull/7953)
+Historically, we used [`mislav/bump-homebrew-formula-action`](https://github.com/mislav/bump-homebrew-formula-action). It created a PR for the `gh` [`homebrew-core` formula](https://github.com/Homebrew/homebrew-core/blob/master/Formula/g/gh.rb). The fork repository was owned by `williammartin` because PRs are [not accepted from organizations.](https://github.com/cli/cli/pull/7953)
 
-`Homebrew/formulae.brew.sh` makes new formula versions available every 15 minutes through scheduled CI workflow. For more information, see https://docs.brew.sh/Formula-Cookbook#an-introduction
+However, since this required a legacy PAT token to open a PR between these repositories, it was deemed too much risk for our security. As such, we now rely on [Homebrew's autobump](https://docs.brew.sh/Autobump).
 
 ## <a id="deepest-dive">Deepest Dive</a>
 
@@ -659,7 +648,7 @@ Using [`mislav/bump-homebrew-formula-action`](https://github.com/mislav/bump-hom
 
 [`./script/release`](https://github.com/cli/cli/blob/817eeb26e567de11007c8a82c25e61c7e20e4337/script/release) is used by `gh` maintainers to [create a new release](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/docs/releasing.md). When invoked it executes `gh workflow run` in order to kick off the workflow described in detail above. However, that workflow also calls back into `./script/release` with the `--local` flag resulting in release artifacts being created on the machine invoking it. Each OS specific job in the workflow additionally provides the `--platform` flag.
 
-The surprising behaviour in `./script/release` is that it uses `sed` to modify the base [`.goreleaser.yml` ](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml) file, so that only platform specific sections are retained. For example, in the case of of `linux` only the [`linux` build](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml#L27) and [`npmfs`](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml#L78) section would be configured for `GoReleaser`. The `archive` sections are addressed by [requirements](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml#L52) on previous platform builds.
+The surprising behaviour in `./script/release` is that it uses `sed` to modify the base [`.goreleaser.yml` ](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml) file, so that only platform specific sections are retained. For example, in the case of `linux` only the [`linux` build](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml#L27) and [`npmfs`](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml#L78) section would be configured for `GoReleaser`. The `archive` sections are addressed by [requirements](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml#L52) on previous platform builds.
 
 Each build entry in [`.goreleaser.yml` ](https://github.com/cli/cli/blob/756f4ec04abdc9fdbab3fef35b182c546ef1dd17/.goreleaser.yml) specifies the platforms that are supported, for example:
 

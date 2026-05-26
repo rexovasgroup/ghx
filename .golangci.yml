@@ -29,8 +29,6 @@ linters:
     # - staticcheck
     # - errcheck
   exclusions:
-    paths:
-      - third-party
     rules:
       - path: _test\.go$
         linters:
@@ -62,9 +60,6 @@ linters:
 formatters:
   enable:
     - gofmt
-  exclusions:
-    paths:
-      - third-party
 
 issues:
   max-issues-per-linter: 0

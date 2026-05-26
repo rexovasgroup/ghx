@@ -170,6 +170,19 @@ func FetchRefSHA(ctx context.Context, httpClient *http.Client, repo ghrepo.Inter
 	return ref.Object.SHA, nil
 }
 
+// DigestAlgForRef returns the digest algorithm name corresponding to the given
+// git ref SHA. SHA-1 git object IDs are 40 hex characters and SHA-256 git
+// object IDs are 64 hex characters. Unknown lengths default to "sha1" to
+// preserve backwards-compatible behavior.
+func DigestAlgForRef(digest string) string {
+	switch len(digest) {
+	case 64:
+		return "sha256"
+	default:
+		return "sha1"
+	}
+}
+
 // FetchRelease finds a published repository release by its tagName, or a draft release by its pending tag name.
 func FetchRelease(ctx context.Context, httpClient *http.Client, repo ghrepo.Interface, tagName string) (*Release, error) {
 	cc, cancel := context.WithCancel(ctx)
