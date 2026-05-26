@@ -13,6 +13,8 @@ cd $SCRIPT_NAME-$RANDOM_STRING
 exec gh issue create --title 'typed-bug' --body '' --type 'Bug'
 exec gh issue create --title 'untyped' --body ''
 
+sleep 3
+
 # Filtering by type returns only the typed issue
 exec gh issue list --type 'Bug'
 stdout 'typed-bug'
