@@ -1,0 +1,176 @@
+name: "ghx: Sync upstream & build"
+
+on:
+  # Trigger when main is updated (from upstream sync via Pull App or manual)
+  push:
+    branches: [main]
+  # Manual trigger
+  workflow_dispatch:
+  # Fallback: check daily in case Pull App misses something
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out rexovas branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: rexovas
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "ghx-bot"
+          git config user.email "ghx-bot@rexovasgroup.github.io"
+
+      - name: Fetch upstream main
+        run: |
+          git remote add upstream https://github.com/cli/cli.git || true
+          git fetch upstream trunk
+
+      - name: Rebase rexovas onto upstream
+        id: rebase
+        run: |
+          if git rebase upstream/trunk; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue on conflict
+        if: steps.rebase.outputs.status == 'conflict'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'rebase-conflict',
+              state: 'open'
+            });
+            if (existing.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Rebase conflict: rexovas branch needs manual resolution',
+                body: `The automated rebase of the \`rexovas\` branch onto upstream \`trunk\` failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout rexovas\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
+                labels: ['rebase-conflict']
+              });
+            }
+
+      - name: Check for upstream changes to patched files
+        if: steps.rebase.outputs.status == 'success'
+        id: overlap
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            // Files we've patched — if upstream touches these, flag for review
+            const patchedFiles = [
+              'internal/config/config.go',
+              'internal/config/config_test.go'
+            ];
+            const upstreamChanges = execSync(
+              'git diff HEAD~1 HEAD --name-only', { encoding: 'utf8' }
+            ).trim().split('\n');
+            const overlapping = patchedFiles.filter(f => upstreamChanges.includes(f));
+            if (overlapping.length > 0) {
+              const existing = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: 'patch-overlap',
+                state: 'open'
+              });
+              if (existing.data.length === 0) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: 'Upstream modified patched files — review needed',
+                  body: `Upstream changed files that contain ghx patches. The rebase succeeded but the changes should be reviewed.\n\n**Overlapping files:**\n${overlapping.map(f => '- \`' + f + '\`').join('\n')}\n\nPlease verify our patches still behave correctly.`,
+                  labels: ['patch-overlap']
+                });
+              }
+            }
+
+      - name: Run tests
+        if: steps.rebase.outputs.status == 'success'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Test patched code
+        if: steps.rebase.outputs.status == 'success'
+        run: go test ./internal/config/...
+
+      - name: Push rebased branch
+        if: steps.rebase.outputs.status == 'success'
+        run: git push --force-with-lease origin rexovas
+
+      - name: Determine version
+        if: steps.rebase.outputs.status == 'success'
+        id: version
+        run: |
+          # Get the latest upstream tag
+          UPSTREAM_VERSION=$(git describe --tags --abbrev=0 upstream/trunk 2>/dev/null || echo "v0.0.0")
+
+          # ghx version: read from GHX_VERSION file, format: MAJOR.MINOR.PATCH
+          GHX_VERSION=$(cat GHX_VERSION 2>/dev/null || echo "1.0.0")
+
+          echo "version=${UPSTREAM_VERSION}-ghx.${GHX_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "upstream=${UPSTREAM_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ghx=${GHX_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Cross-compile
+        if: steps.rebase.outputs.status == 'success'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          LDFLAGS="-s -w -X github.com/cli/cli/v2/internal/build.Version=${VERSION}"
+          mkdir -p dist
+
+          for pair in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
+            OS="${pair%/*}"
+            ARCH="${pair#*/}"
+            echo "Building ${OS}/${ARCH}..."
+            GOOS="${OS}" GOARCH="${ARCH}" CGO_ENABLED=0 \
+              go build -ldflags "${LDFLAGS}" -o "dist/gh_${OS}_${ARCH}" ./cmd/gh/
+          done
+
+          cd dist && sha256sum gh_* > checksums.txt
+
+      - name: Create release
+        if: steps.rebase.outputs.status == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          UPSTREAM="${{ steps.version.outputs.upstream }}"
+
+          # Delete existing release for this version if it exists
+          gh release delete "${VERSION}" --yes 2>/dev/null || true
+          git tag -d "${VERSION}" 2>/dev/null || true
+          git push origin ":refs/tags/${VERSION}" 2>/dev/null || true
+
+          gh release create "${VERSION}" dist/* \
+            --target rexovas \
+            --title "ghx ${VERSION}" \
+            --notes "Based on upstream cli/cli ${UPSTREAM} with ghx patches:
+          - Auto-select authenticated account based on repo context (GH_USER, git config, account_rules)
+
+          ## Install
+          \`\`\`bash
+          # macOS Apple Silicon
+          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+
+          # macOS Intel
+          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+
+          # Linux x86_64
+          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+          \`\`\`"

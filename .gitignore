@@ -44,3 +44,6 @@ gh
 # Test coverage artifacts
 coverage.out
 lcov.info
+
+# ghx internal docs — keep out of public repo
+GHX_*.md
