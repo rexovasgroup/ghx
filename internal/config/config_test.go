@@ -183,6 +183,165 @@ func TestSetUserSpecificKeyNoUserPresent(t *testing.T) {
 	requireNoKey(t, c.cfg, []string{hostsKey, host, usersKey})
 }
 
+func TestActiveUserResolutionOrder(t *testing.T) {
+	tests := []struct {
+		name         string
+		envUser      string
+		gitAccount   string
+		remoteOwner  string
+		accountRules map[string]string // owner → account
+		storedUser   string
+		knownUsers   []string
+		expectedUser string
+		expectError  bool
+	}{
+		{
+			name:         "GH_USER env var takes highest priority",
+			envUser:      "env-user",
+			gitAccount:   "git-user",
+			storedUser:   "stored-user",
+			knownUsers:   []string{"env-user", "git-user", "stored-user"},
+			expectedUser: "env-user",
+		},
+		{
+			name:         "GH_USER skipped if not authenticated",
+			envUser:      "unknown-env-user",
+			gitAccount:   "git-user",
+			storedUser:   "stored-user",
+			knownUsers:   []string{"git-user", "stored-user"},
+			expectedUser: "git-user",
+		},
+		{
+			name:         "git config github.account used when no env var",
+			gitAccount:   "git-user",
+			storedUser:   "stored-user",
+			knownUsers:   []string{"git-user", "stored-user"},
+			expectedUser: "git-user",
+		},
+		{
+			name:         "git config skipped if not authenticated",
+			gitAccount:   "unknown-git-user",
+			storedUser:   "stored-user",
+			knownUsers:   []string{"stored-user"},
+			expectedUser: "stored-user",
+		},
+		{
+			name:         "remote origin owner matched via account_rules",
+			remoteOwner:  "MyWorkOrg",
+			accountRules: map[string]string{"MyWorkOrg": "work-user"},
+			storedUser:   "personal-user",
+			knownUsers:   []string{"personal-user", "work-user"},
+			expectedUser: "work-user",
+		},
+		{
+			name:         "remote origin owner match is case-insensitive",
+			remoteOwner:  "myworkorg",
+			accountRules: map[string]string{"MyWorkOrg": "work-user"},
+			storedUser:   "personal-user",
+			knownUsers:   []string{"personal-user", "work-user"},
+			expectedUser: "work-user",
+		},
+		{
+			name:         "account_rules skipped if matched account not authenticated",
+			remoteOwner:  "SomeOrg",
+			accountRules: map[string]string{"SomeOrg": "unknown-user"},
+			storedUser:   "stored-user",
+			knownUsers:   []string{"stored-user"},
+			expectedUser: "stored-user",
+		},
+		{
+			name:         "no overrides falls back to stored user",
+			storedUser:   "stored-user",
+			knownUsers:   []string{"stored-user"},
+			expectedUser: "stored-user",
+		},
+		{
+			name:        "no overrides and no stored user returns error",
+			knownUsers:  []string{},
+			expectError: true,
+		},
+		{
+			name:         "git config takes priority over account_rules",
+			gitAccount:   "git-user",
+			remoteOwner:  "SomeOrg",
+			accountRules: map[string]string{"SomeOrg": "rule-user"},
+			storedUser:   "stored-user",
+			knownUsers:   []string{"git-user", "rule-user", "stored-user"},
+			expectedUser: "git-user",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Override function pointers for testing
+			origGit := gitConfigAccountFunc
+			origRemote := remoteOriginOwnerFunc
+			gitConfigAccountFunc = func() string { return tt.gitAccount }
+			remoteOriginOwnerFunc = func() string { return tt.remoteOwner }
+			t.Cleanup(func() {
+				gitConfigAccountFunc = origGit
+				remoteOriginOwnerFunc = origRemote
+			})
+
+			if tt.envUser != "" {
+				t.Setenv("GH_USER", tt.envUser)
+			}
+
+			c := newTestConfig()
+			host := "github.com"
+
+			if tt.storedUser != "" {
+				c.cfg.Set([]string{hostsKey, host, userKey}, tt.storedUser)
+			}
+			for _, user := range tt.knownUsers {
+				c.cfg.Set([]string{hostsKey, host, usersKey, user, oauthTokenKey}, "test-token")
+			}
+
+			// Set up account_rules
+			i := 0
+			for owner, account := range tt.accountRules {
+				c.cfg.Set([]string{accountRulesKey, fmt.Sprintf("%d", i), "owner"}, owner)
+				c.cfg.Set([]string{accountRulesKey, fmt.Sprintf("%d", i), "account"}, account)
+				i++
+			}
+
+			authCfg := c.Authentication().(*AuthConfig)
+			user, err := authCfg.ActiveUser(host)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedUser, user)
+			}
+		})
+	}
+}
+
+func TestOwnerFromRemoteURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		expected string
+	}{
+		{"SSH with .git", "git@github.com:acme-corp/some-repo.git", "acme-corp"},
+		{"SSH without .git", "git@github.com:acme-corp/some-repo", "acme-corp"},
+		{"HTTPS with .git", "https://github.com/my-org/repo.git", "my-org"},
+		{"HTTPS without .git", "https://github.com/my-org/repo", "my-org"},
+		{"SSH with custom host alias", "git@github-work:acme-corp/repo.git", "acme-corp"},
+		{"ssh:// protocol", "ssh://git@github.com/other-org/repo.git", "other-org"},
+		{"empty string", "", ""},
+		{"no path", "https://github.com", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ownerFromRemoteURL(tt.url)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestTelemetry(t *testing.T) {
 	t.Run("returns default when not configured", func(t *testing.T) {
 		c := newTestConfig()
