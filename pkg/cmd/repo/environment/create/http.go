@@ -17,9 +17,9 @@ type EnvironmentCreator struct {
 }
 
 type EnvironmentCreateRequest struct {
-	WaitTimer              *int                         `json:"wait_timer,omitempty"`
-	PreventSelfReview      *bool                        `json:"prevent_self_review,omitempty"`
-	Reviewers              []ReviewerRequest            `json:"reviewers,omitempty"`
+	WaitTimer              *int                           `json:"wait_timer,omitempty"`
+	PreventSelfReview      *bool                          `json:"prevent_self_review,omitempty"`
+	Reviewers              []ReviewerRequest              `json:"reviewers,omitempty"`
 	DeploymentBranchPolicy *shared.DeploymentBranchPolicy `json:"deployment_branch_policy,omitempty"`
 }
 

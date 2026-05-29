@@ -11,10 +11,10 @@ import (
 )
 
 type deleteOptions struct {
-	BaseRepo              func() (ghrepo.Interface, error)
-	EnvironmentClient     EnvironmentDeleteClient
-	IO                    *iostreams.IOStreams
-	Prompter              prompter.Prompter
+	BaseRepo          func() (ghrepo.Interface, error)
+	EnvironmentClient EnvironmentDeleteClient
+	IO                *iostreams.IOStreams
+	Prompter          prompter.Prompter
 
 	Name      string
 	Confirmed bool

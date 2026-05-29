@@ -15,9 +15,9 @@ import (
 )
 
 type listOptions struct {
-	BaseRepo            func() (ghrepo.Interface, error)
-	EnvironmentClient   EnvironmentListClient
-	IO                  *iostreams.IOStreams
+	BaseRepo          func() (ghrepo.Interface, error)
+	EnvironmentClient EnvironmentListClient
+	IO                *iostreams.IOStreams
 
 	Exporter cmdutil.Exporter
 }
