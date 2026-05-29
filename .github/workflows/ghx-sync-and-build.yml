@@ -1,4 +1,4 @@
-name: "ghx: Sync upstream & build"
+name: "ghx: Sync upstream"
 
 on:
   # Trigger when Pull App syncs upstream branch from cli/cli:trunk
@@ -13,9 +13,10 @@ on:
 permissions:
   contents: write
   actions: write
+  pull-requests: write
 
 jobs:
-  sync-and-build:
+  sync:
     runs-on: ubuntu-latest
     steps:
       - name: Check out main
@@ -29,7 +30,7 @@ jobs:
           git config user.name "ghx-bot"
           git config user.email "ghx-bot@rexovasgroup.github.io"
 
-      - name: Fetch upstream main
+      - name: Fetch upstream
         run: |
           git remote add upstream https://github.com/cli/cli.git || true
           git fetch upstream trunk
@@ -119,98 +120,27 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           owner: rexovasgroup
 
-      - name: Push rebased branch
-        if: steps.rebase.outputs.status == 'success'
-        run: |
-          git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}.git"
-          git push --force-with-lease origin main
-
-      - name: Determine version
-        if: steps.rebase.outputs.status == 'success'
-        id: version
-        run: |
-          # Get the latest upstream tag
-          UPSTREAM_VERSION=$(git describe --tags --abbrev=0 upstream/trunk 2>/dev/null || echo "v0.0.0")
-
-          # ghx version: read from GHX_VERSION file, format: MAJOR.MINOR.PATCH
-          GHX_VERSION=$(cat GHX_VERSION 2>/dev/null || echo "1.0.0")
-
-          echo "version=${UPSTREAM_VERSION}-ghx.${GHX_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "upstream=${UPSTREAM_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "ghx=${GHX_VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Cross-compile
-        if: steps.rebase.outputs.status == 'success'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          LDFLAGS="-s -w -X github.com/cli/cli/v2/internal/build.Version=${VERSION}"
-          mkdir -p dist
-
-          for pair in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
-            OS="${pair%/*}"
-            ARCH="${pair#*/}"
-            echo "Building ${OS}/${ARCH}..."
-            GOOS="${OS}" GOARCH="${ARCH}" CGO_ENABLED=0 \
-              go build -ldflags "${LDFLAGS}" -o "dist/gh_${OS}_${ARCH}" ./cmd/gh/
-          done
-
-          cd dist && sha256sum gh_* > checksums.txt
-
-      - name: Create release
-        if: steps.rebase.outputs.status == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          UPSTREAM="${{ steps.version.outputs.upstream }}"
-
-          # Delete existing release for this version if it exists
-          gh release delete "${VERSION}" --yes 2>/dev/null || true
-          git tag -d "${VERSION}" 2>/dev/null || true
-          git push origin ":refs/tags/${VERSION}" 2>/dev/null || true
-
-          gh release create "${VERSION}" dist/* \
-            --target main \
-            --title "ghx ${VERSION}" \
-            --notes "Based on upstream cli/cli ${UPSTREAM} with ghx patches.
-
-          ## Install
-          \`\`\`bash
-          curl -sL https://get.rexov.as/ghx/install.sh | sh
-          \`\`\`
-
-          ### Manual download (install as ghx)
-          \`\`\`bash
-          # macOS Apple Silicon
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
-
-          # macOS Intel
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
-
-          # Linux x86_64
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
-          \`\`\`
-
-          ### Replace stock gh
-          \`\`\`bash
-          # macOS Apple Silicon
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-
-          # macOS Intel
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-
-          # Linux x86_64
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-          \`\`\`"
-
-      - name: Post-release hook
+      - name: Push sync branch and create PR
         if: steps.rebase.outputs.status == 'success'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          HOOK_TARGET: ${{ secrets.HOOK_TARGET }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          gh api "repos/${HOOK_TARGET}/dispatches" \
-            -f event_type=ghx-release \
-            -f "client_payload[version]=${VERSION}" \
-            -f "client_payload[tag]=${VERSION}"
+          SYNC_BRANCH="sync/upstream-$(date +%Y%m%d-%H%M%S)"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin "HEAD:refs/heads/${SYNC_BRANCH}"
+
+          # Close any stale sync PRs
+          gh pr list --repo "${{ github.repository }}" --label upstream-sync --state open --json number --jq '.[].number' | \
+            xargs -I{} gh pr close {} --repo "${{ github.repository }}" --delete-branch 2>/dev/null || true
+
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "${SYNC_BRANCH}" \
+            --title "Upstream sync $(date +%Y-%m-%d)" \
+            --body "Automated rebase of ghx patches onto latest upstream cli/cli trunk." \
+            --label upstream-sync
+
+          gh pr merge "${SYNC_BRANCH}" \
+            --repo "${{ github.repository }}" \
+            --squash --auto
