@@ -24,8 +24,8 @@ jobs:
 
       - name: Configure git
         run: |
-          git config user.name "ghx-bot"
-          git config user.email "ghx-bot@rexovasgroup.github.io"
+          git config user.name "rexovas-artifact-relay[bot]"
+          git config user.email "3902638+rexovas-artifact-relay[bot]@users.noreply.github.com"
 
       - name: Fetch upstream
         run: |
