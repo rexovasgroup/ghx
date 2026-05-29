@@ -54,7 +54,7 @@ jobs:
 
       - name: Open issue on conflict
         if: steps.rebase.outputs.status == 'conflict'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const existing = await github.rest.issues.listForRepo({
@@ -75,7 +75,7 @@ jobs:
 
       - name: Check for upstream changes to patched files
         if: steps.rebase.outputs.status == 'success'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { execSync } = require('child_process');
@@ -120,12 +120,11 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          DATED_BRANCH="trunk/$(date +%Y-%m-%d)"
+          DATED_BRANCH="ghx/$(date +%Y-%m-%d)"
           REPO="${{ github.repository }}"
 
-          # Delete previous dated trunk branches
-          gh api "repos/${REPO}/git/matching-refs/heads/trunk/" --jq '.[].ref' | \
-            grep -v '^refs/heads/trunk$' | \
+          # Delete previous dated branches
+          gh api "repos/${REPO}/git/matching-refs/heads/ghx/" --jq '.[].ref' | \
             while read ref; do
               gh api "repos/${REPO}/git/${ref}" --method DELETE 2>/dev/null || true
             done
