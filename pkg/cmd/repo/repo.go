@@ -10,6 +10,7 @@ import (
 	repoDeleteCmd "github.com/cli/cli/v2/pkg/cmd/repo/delete"
 	deployKeyCmd "github.com/cli/cli/v2/pkg/cmd/repo/deploy-key"
 	repoEditCmd "github.com/cli/cli/v2/pkg/cmd/repo/edit"
+	repoEnvironmentCmd "github.com/cli/cli/v2/pkg/cmd/repo/environment"
 	repoForkCmd "github.com/cli/cli/v2/pkg/cmd/repo/fork"
 	gardenCmd "github.com/cli/cli/v2/pkg/cmd/repo/garden"
 	gitIgnoreCmd "github.com/cli/cli/v2/pkg/cmd/repo/gitignore"
@@ -67,6 +68,7 @@ func NewCmdRepo(f *cmdutil.Factory) *cobra.Command {
 		creditsCmd.NewCmdRepoCredits(f, nil),
 		gardenCmd.NewCmdGarden(f, nil),
 		repoAutolinkCmd.NewCmdAutolink(f),
+		repoEnvironmentCmd.NewCmdEnvironment(f),
 	)
 
 	return cmd
