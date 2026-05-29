@@ -18,10 +18,10 @@ jobs:
   sync-and-build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out rexovas branch
+      - name: Check out main
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: rexovas
+          ref: main
           fetch-depth: 0
 
       - name: Configure git
@@ -34,7 +34,7 @@ jobs:
           git remote add upstream https://github.com/cli/cli.git || true
           git fetch upstream trunk
 
-      - name: Rebase rexovas onto upstream
+      - name: Rebase main onto upstream
         id: rebase
         run: |
           if git rebase upstream/trunk; then
@@ -59,8 +59,8 @@ jobs:
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: 'Rebase conflict: rexovas branch needs manual resolution',
-                body: `The automated rebase of the \`rexovas\` branch onto upstream \`trunk\` failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout rexovas\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
+                title: 'Rebase conflict: main branch needs manual resolution',
+                body: `The automated rebase of \`main\` onto upstream \`trunk\` failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout main\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
                 labels: ['rebase-conflict']
               });
             }
@@ -111,7 +111,7 @@ jobs:
 
       - name: Push rebased branch
         if: steps.rebase.outputs.status == 'success'
-        run: git push --force-with-lease origin rexovas
+        run: git push --force-with-lease origin main
 
       - name: Determine version
         if: steps.rebase.outputs.status == 'success'
@@ -191,10 +191,19 @@ jobs:
           curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
           \`\`\`"
 
+      - name: Generate app token
+        if: steps.rebase.outputs.status == 'success'
+        id: app-token
+        uses: actions/create-github-app-token@df432a427e19f1aab4028b0a89c93c5eebab8e6e # v2.0.6
+        with:
+          app-id: ${{ secrets.HOOK_APP_ID }}
+          private-key: ${{ secrets.HOOK_APP_PRIVATE_KEY }}
+          owner: rexovasgroup
+
       - name: Post-release hook
         if: steps.rebase.outputs.status == 'success'
         env:
-          GH_TOKEN: ${{ secrets.HOOK_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HOOK_TARGET: ${{ secrets.HOOK_TARGET }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
