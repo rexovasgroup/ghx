@@ -16,11 +16,21 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.HOOK_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOOK_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          owner: rexovasgroup
+
       - name: Check out trunk
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: trunk
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
         run: |
@@ -44,7 +54,7 @@ jobs:
 
       - name: Open issue on conflict
         if: steps.rebase.outputs.status == 'conflict'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const existing = await github.rest.issues.listForRepo({
@@ -65,7 +75,7 @@ jobs:
 
       - name: Check for upstream changes to patched files
         if: steps.rebase.outputs.status == 'success'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { execSync } = require('child_process');
@@ -105,40 +115,23 @@ jobs:
         if: steps.rebase.outputs.status == 'success'
         run: go test ./internal/config/...
 
-      - name: Generate app token
-        if: steps.rebase.outputs.status == 'success'
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ secrets.HOOK_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HOOK_APP_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          owner: rexovasgroup
-
-      - name: Push sync branch and create PR
+      - name: Publish sync
         if: steps.rebase.outputs.status == 'success'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push --force-with-lease origin HEAD:refs/heads/sync
+          DATED_BRANCH="release/$(date +%Y-%m-%d)"
+          REPO="${{ github.repository }}"
 
-          # Close any stale sync PRs
-          gh pr list --repo "${{ github.repository }}" --label upstream-sync --state open --json number --jq '.[].number' | \
-            xargs -I{} gh pr close {} --repo "${{ github.repository }}" --delete-branch 2>/dev/null || true
+          # Delete previous dated branches
+          gh api "repos/${REPO}/git/matching-refs/heads/release/" --jq '.[].ref' | \
+            while read ref; do
+              gh api "repos/${REPO}/git/${ref}" --method DELETE 2>/dev/null || true
+            done
 
-          # Create PR if one doesn't already exist
-          EXISTING=$(gh pr list --repo "${{ github.repository }}" --head sync --base trunk --state open --json number --jq 'length')
-          if [ "$EXISTING" = "0" ]; then
-            gh pr create \
-              --repo "${{ github.repository }}" \
-              --base trunk \
-              --head sync \
-              --title "Upstream sync $(date +%Y-%m-%d)" \
-              --body "Automated rebase of ghx patches onto latest upstream cli/cli trunk." \
-              --label upstream-sync
-          fi
+          # Push rebased code to dated branch and update trunk
+          git push --force-with-lease origin "HEAD:refs/heads/${DATED_BRANCH}"
+          git push --force-with-lease origin HEAD:refs/heads/trunk
 
-          gh pr merge sync \
-            --repo "${{ github.repository }}" \
-            --squash --auto
+          # Set dated branch as default (for GitHub ahead/behind comparison)
+          gh api "repos/${REPO}" --method PATCH -f default_branch="${DATED_BRANCH}" --silent
