@@ -11,38 +11,23 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out main
+      - name: Check out trunk
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: trunk
           fetch-depth: 0
 
-      - name: Check if build needed
-        id: check
-        run: |
-          # Only build if the latest commit is a sync PR merge or manual dispatch
-          COMMIT_MSG=$(git log -1 --pretty=%s)
-          if [[ "$COMMIT_MSG" == "Upstream sync"* ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping build — not a sync merge"
-          fi
-
       - name: Setup Go
-        if: steps.check.outputs.build == 'true'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
 
       - name: Fetch upstream tags
-        if: steps.check.outputs.build == 'true'
         run: |
           git remote add upstream https://github.com/cli/cli.git || true
           git fetch upstream --tags
 
       - name: Determine version
-        if: steps.check.outputs.build == 'true'
         id: version
         run: |
           UPSTREAM_VERSION=$(git describe --tags --abbrev=0 upstream/trunk 2>/dev/null || echo "v0.0.0")
@@ -53,7 +38,6 @@ jobs:
           echo "ghx=${GHX_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Cross-compile
-        if: steps.check.outputs.build == 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           LDFLAGS="-s -w -X github.com/cli/cli/v2/internal/build.Version=${VERSION}"
@@ -70,13 +54,11 @@ jobs:
           cd dist && sha256sum gh_* > checksums.txt
 
       - name: Create release
-        if: steps.check.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           UPSTREAM="${{ steps.version.outputs.upstream }}"
-
           REPO="${{ github.repository }}"
 
           # Delete existing release for this version if it exists
@@ -120,7 +102,6 @@ jobs:
           \`\`\`"
 
       - name: Generate app token
-        if: steps.check.outputs.build == 'true'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -129,7 +110,6 @@ jobs:
           owner: rexovasgroup
 
       - name: Post-release hook
-        if: steps.check.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HOOK_TARGET: ${{ secrets.HOOK_TARGET }}
