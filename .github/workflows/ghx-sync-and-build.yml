@@ -190,3 +190,15 @@ jobs:
           # Linux x86_64
           curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
           \`\`\`"
+
+      - name: Post-release hook
+        if: steps.rebase.outputs.status == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.HOOK_TOKEN }}
+          HOOK_TARGET: ${{ secrets.HOOK_TARGET }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh api "repos/${HOOK_TARGET}/dispatches" \
+            -f event_type=ghx-release \
+            -f "client_payload[version]=${VERSION}" \
+            -f "client_payload[tag]=${VERSION}"
