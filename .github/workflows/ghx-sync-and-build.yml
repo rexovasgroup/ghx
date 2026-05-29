@@ -1,12 +1,9 @@
 name: "ghx: Sync upstream"
 
 on:
-  # Trigger when Pull App syncs upstream branch from cli/cli:trunk
   push:
     branches: [upstream]
-  # Manual trigger
   workflow_dispatch:
-  # Fallback: check daily in case Pull App misses something
   schedule:
     - cron: "0 6 * * *"
 
@@ -19,10 +16,10 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out main
+      - name: Check out trunk
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: main
+          ref: trunk
           fetch-depth: 0
 
       - name: Configure git
@@ -35,7 +32,7 @@ jobs:
           git remote add upstream https://github.com/cli/cli.git || true
           git fetch upstream trunk
 
-      - name: Rebase main onto upstream
+      - name: Rebase trunk onto upstream
         id: rebase
         run: |
           if git rebase upstream/trunk; then
@@ -60,20 +57,18 @@ jobs:
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: 'Rebase conflict: main branch needs manual resolution',
-                body: `The automated rebase of \`main\` onto upstream \`trunk\` failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout main\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
+                title: 'Rebase conflict: trunk needs manual resolution',
+                body: `The automated rebase of \`trunk\` onto upstream failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout trunk\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
                 labels: ['rebase-conflict']
               });
             }
 
       - name: Check for upstream changes to patched files
         if: steps.rebase.outputs.status == 'success'
-        id: overlap
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const { execSync } = require('child_process');
-            // Files we've patched — if upstream touches these, flag for review
             const patchedFiles = [
               'internal/config/config.go',
               'internal/config/config_test.go'
@@ -125,22 +120,25 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          SYNC_BRANCH="sync/upstream-$(date +%Y%m%d-%H%M%S)"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin "HEAD:refs/heads/${SYNC_BRANCH}"
+          git push --force-with-lease origin HEAD:refs/heads/sync
 
           # Close any stale sync PRs
           gh pr list --repo "${{ github.repository }}" --label upstream-sync --state open --json number --jq '.[].number' | \
             xargs -I{} gh pr close {} --repo "${{ github.repository }}" --delete-branch 2>/dev/null || true
 
-          gh pr create \
-            --repo "${{ github.repository }}" \
-            --base main \
-            --head "${SYNC_BRANCH}" \
-            --title "Upstream sync $(date +%Y-%m-%d)" \
-            --body "Automated rebase of ghx patches onto latest upstream cli/cli trunk." \
-            --label upstream-sync
+          # Create PR if one doesn't already exist
+          EXISTING=$(gh pr list --repo "${{ github.repository }}" --head sync --base trunk --state open --json number --jq 'length')
+          if [ "$EXISTING" = "0" ]; then
+            gh pr create \
+              --repo "${{ github.repository }}" \
+              --base trunk \
+              --head sync \
+              --title "Upstream sync $(date +%Y-%m-%d)" \
+              --body "Automated rebase of ghx patches onto latest upstream cli/cli trunk." \
+              --label upstream-sync
+          fi
 
-          gh pr merge "${SYNC_BRANCH}" \
+          gh pr merge sync \
             --repo "${{ github.repository }}" \
             --squash --auto
