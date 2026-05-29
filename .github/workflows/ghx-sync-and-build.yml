@@ -1,9 +1,9 @@
 name: "ghx: Sync upstream & build"
 
 on:
-  # Trigger when main is updated (from upstream sync via Pull App or manual)
+  # Trigger when Pull App syncs upstream branch from cli/cli:trunk
   push:
-    branches: [main]
+    branches: [upstream]
   # Manual trigger
   workflow_dispatch:
   # Fallback: check daily in case Pull App misses something
@@ -194,7 +194,7 @@ jobs:
       - name: Generate app token
         if: steps.rebase.outputs.status == 'success'
         id: app-token
-        uses: actions/create-github-app-token@df432a427e19f1aab4028b0a89c93c5eebab8e6e # v2.0.6
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.HOOK_APP_ID }}
           private-key: ${{ secrets.HOOK_APP_PRIVATE_KEY }}
