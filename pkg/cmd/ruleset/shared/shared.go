@@ -3,11 +3,105 @@ package shared
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 )
+
+// Request body types for POST/PUT endpoints
+
+type RulesetRequest struct {
+	Name         string                 `json:"name"`
+	Target       string                 `json:"target"`
+	Enforcement  string                 `json:"enforcement"`
+	Conditions   map[string]interface{} `json:"conditions,omitempty"`
+	BypassActors []BypassActor          `json:"bypass_actors,omitempty"`
+	Rules        []RuleRequest          `json:"rules"`
+}
+
+type BypassActor struct {
+	ActorID    *int   `json:"actor_id"`
+	ActorType  string `json:"actor_type"`
+	BypassMode string `json:"bypass_mode"`
+}
+
+type RuleRequest struct {
+	Type       string                 `json:"type"`
+	Parameters map[string]interface{} `json:"parameters,omitempty"`
+}
+
+var ValidEnforcements = []string{"active", "evaluate", "disabled"}
+var ValidTargets = []string{"branch", "tag", "push"}
+
+func ParseBypassActor(s string) (BypassActor, error) {
+	parts := strings.SplitN(s, ":", 3)
+	if len(parts) != 3 {
+		return BypassActor{}, fmt.Errorf("invalid bypass-actor format %q, expected id:type:mode (e.g. 123:Team:always)", s)
+	}
+
+	var actorID *int
+	if parts[0] != "" && parts[0] != "null" {
+		id, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return BypassActor{}, fmt.Errorf("invalid actor_id %q: must be an integer", parts[0])
+		}
+		actorID = &id
+	}
+
+	return BypassActor{
+		ActorID:    actorID,
+		ActorType:  parts[1],
+		BypassMode: parts[2],
+	}, nil
+}
+
+func BuildPullRequestRule(approvals int, dismissStale, codeOwner, lastPush, threadResolution bool) RuleRequest {
+	params := map[string]interface{}{
+		"required_approving_review_count":    approvals,
+		"dismiss_stale_reviews_on_push":      dismissStale,
+		"require_code_owner_review":          codeOwner,
+		"require_last_push_approval":         lastPush,
+		"required_review_thread_resolution":  threadResolution,
+	}
+	return RuleRequest{
+		Type:       "pull_request",
+		Parameters: params,
+	}
+}
+
+func RulesetRESTToRequest(rs *RulesetREST) *RulesetRequest {
+	req := &RulesetRequest{
+		Name:        rs.Name,
+		Target:      rs.Target,
+		Enforcement: rs.Enforcement,
+		Conditions:  make(map[string]interface{}),
+		Rules:       make([]RuleRequest, 0, len(rs.Rules)),
+	}
+
+	for k, v := range rs.Conditions {
+		req.Conditions[k] = v
+	}
+
+	for _, ba := range rs.BypassActors {
+		id := ba.ActorId
+		req.BypassActors = append(req.BypassActors, BypassActor{
+			ActorID:    &id,
+			ActorType:  ba.ActorType,
+			BypassMode: ba.BypassMode,
+		})
+	}
+
+	for _, rule := range rs.Rules {
+		req.Rules = append(req.Rules, RuleRequest{
+			Type:       rule.Type,
+			Parameters: rule.Parameters,
+		})
+	}
+
+	return req
+}
 
 type RulesetGraphQL struct {
 	DatabaseId  int
