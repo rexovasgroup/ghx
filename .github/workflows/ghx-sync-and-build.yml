@@ -167,7 +167,7 @@ jobs:
           curl -sL https://get.rexov.as/ghx/install.sh | sh
           \`\`\`
 
-          ### Manual download
+          ### Manual download (install as ghx)
           \`\`\`bash
           # macOS Apple Silicon
           curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
@@ -177,4 +177,16 @@ jobs:
 
           # Linux x86_64
           curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
+          \`\`\`
+
+          ### Replace stock gh
+          \`\`\`bash
+          # macOS Apple Silicon
+          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+
+          # macOS Intel
+          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+
+          # Linux x86_64
+          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
           \`\`\`"
