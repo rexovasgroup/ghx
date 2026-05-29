@@ -9,6 +9,7 @@ import (
 	creditsCmd "github.com/cli/cli/v2/pkg/cmd/repo/credits"
 	repoDeleteCmd "github.com/cli/cli/v2/pkg/cmd/repo/delete"
 	deployKeyCmd "github.com/cli/cli/v2/pkg/cmd/repo/deploy-key"
+	repoEnvironmentCmd "github.com/cli/cli/v2/pkg/cmd/repo/environment"
 	repoEditCmd "github.com/cli/cli/v2/pkg/cmd/repo/edit"
 	repoForkCmd "github.com/cli/cli/v2/pkg/cmd/repo/fork"
 	gardenCmd "github.com/cli/cli/v2/pkg/cmd/repo/garden"
@@ -67,6 +68,7 @@ func NewCmdRepo(f *cmdutil.Factory) *cobra.Command {
 		creditsCmd.NewCmdRepoCredits(f, nil),
 		gardenCmd.NewCmdGarden(f, nil),
 		repoAutolinkCmd.NewCmdAutolink(f),
+		repoEnvironmentCmd.NewCmdEnvironment(f),
 	)
 
 	return cmd
