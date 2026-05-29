@@ -59,11 +59,11 @@ func ParseBypassActor(s string) (BypassActor, error) {
 
 func BuildPullRequestRule(approvals int, dismissStale, codeOwner, lastPush, threadResolution bool) RuleRequest {
 	params := map[string]interface{}{
-		"required_approving_review_count":    approvals,
-		"dismiss_stale_reviews_on_push":      dismissStale,
-		"require_code_owner_review":          codeOwner,
-		"require_last_push_approval":         lastPush,
-		"required_review_thread_resolution":  threadResolution,
+		"required_approving_review_count":   approvals,
+		"dismiss_stale_reviews_on_push":     dismissStale,
+		"require_code_owner_review":         codeOwner,
+		"require_last_push_approval":        lastPush,
+		"required_review_thread_resolution": threadResolution,
 	}
 	return RuleRequest{
 		Type:       "pull_request",
