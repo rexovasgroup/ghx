@@ -77,12 +77,15 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           UPSTREAM="${{ steps.version.outputs.upstream }}"
 
+          REPO="${{ github.repository }}"
+
           # Delete existing release for this version if it exists
-          gh release delete "${VERSION}" --yes 2>/dev/null || true
+          gh release delete "${VERSION}" --repo "${REPO}" --yes 2>/dev/null || true
           git tag -d "${VERSION}" 2>/dev/null || true
           git push origin ":refs/tags/${VERSION}" 2>/dev/null || true
 
           gh release create "${VERSION}" dist/* \
+            --repo "${REPO}" \
             --target trunk \
             --title "ghx ${VERSION}" \
             --notes "Based on upstream cli/cli ${UPSTREAM} with ghx patches.
