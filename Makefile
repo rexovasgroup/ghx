@@ -23,6 +23,15 @@ else
 	go build -o $@ $<
 endif
 
+.PHONY: ghx
+ghx:
+	$(eval UPSTREAM := $(shell git describe --tags --abbrev=0 $$(git rev-parse --verify upstream/trunk 2>/dev/null || echo HEAD) 2>/dev/null || echo v0.0.0))
+	$(eval GHX_V := $(shell cat GHX_VERSION 2>/dev/null | tr -d '[:space:]'))
+	$(eval VERSION := $(UPSTREAM)-ghx.$(GHX_V))
+	@echo "Building ghx $(VERSION)..."
+	go build -ldflags "-s -w -X github.com/cli/cli/v2/internal/build.Version=$(VERSION)" -o /usr/local/bin/gh ./cmd/gh/
+	@echo "Installed: $$(gh --version)"
+
 .PHONY: clean
 clean: script/build$(EXE)
 	@$< $@
