@@ -30,7 +30,9 @@ ghx:
 	$(eval VERSION := $(UPSTREAM)-ghx.$(GHX_V))
 	@echo "Building ghx $(VERSION)..."
 	go build -ldflags "-s -w -X github.com/cli/cli/v2/internal/build.Version=$(VERSION)" -o /usr/local/bin/gh ./cmd/gh/
+	cp /usr/local/bin/gh /usr/local/bin/ghx
 	@echo "Installed: $$(gh --version)"
+	@echo "Available as both 'gh' and 'ghx'"
 
 .PHONY: clean
 clean: script/build$(EXE)
