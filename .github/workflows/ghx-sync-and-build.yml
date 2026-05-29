@@ -158,19 +158,23 @@ jobs:
           git push origin ":refs/tags/${VERSION}" 2>/dev/null || true
 
           gh release create "${VERSION}" dist/* \
-            --target rexovas \
+            --target main \
             --title "ghx ${VERSION}" \
-            --notes "Based on upstream cli/cli ${UPSTREAM} with ghx patches:
-          - Auto-select authenticated account based on repo context (GH_USER, git config, account_rules)
+            --notes "Based on upstream cli/cli ${UPSTREAM} with ghx patches.
 
           ## Install
           \`\`\`bash
+          curl -sL https://get.rexov.as/ghx/install.sh | sh
+          \`\`\`
+
+          ### Manual download
+          \`\`\`bash
           # macOS Apple Silicon
-          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
 
           # macOS Intel
-          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
 
           # Linux x86_64
-          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
           \`\`\`"

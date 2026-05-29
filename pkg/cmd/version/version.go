@@ -40,7 +40,7 @@ func Format(version, buildDate string) string {
 
 func changelogURL(version string) string {
 	if strings.Contains(version, "-ghx.") {
-		path := "https://github.com/rexovasgroup/gh"
+		path := "https://github.com/rexovasgroup/ghx"
 		r := regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[\w.]+)?$`)
 		if !r.MatchString(version) {
 			return fmt.Sprintf("%s/releases/latest", path)
