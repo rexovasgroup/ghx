@@ -114,6 +114,35 @@ jobs:
         if: steps.rebase.outputs.status == 'success'
         run: go test ./internal/config/...
 
-      - name: Push to trunk
+      - name: Push to trunk (API-signed)
         if: steps.rebase.outputs.status == 'success'
-        run: git push --force origin HEAD:refs/heads/trunk
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          REPO="${{ github.repository }}"
+
+          # Get ghx patch commits (oldest first) that sit on top of upstream
+          COMMITS=$(git rev-list --reverse upstream/trunk..HEAD)
+          PARENT=$(git rev-parse upstream/trunk)
+
+          for COMMIT in $COMMITS; do
+            TREE=$(git rev-parse "${COMMIT}^{tree}")
+            MESSAGE=$(git log -1 --pretty=%B "$COMMIT")
+
+            # Create commit via API — GitHub auto-signs with app identity
+            PARENT=$(gh api "repos/${REPO}/git/commits" \
+              --method POST \
+              -f "message=${MESSAGE}" \
+              -f "tree=${TREE}" \
+              -f "parents[]=${PARENT}" \
+              --jq '.sha')
+
+            echo "Created commit ${PARENT} for $(git log -1 --pretty=%s "$COMMIT")"
+          done
+
+          # Force-update trunk ref to the last created commit
+          gh api "repos/${REPO}/git/refs/heads/trunk" \
+            --method PATCH \
+            --input - <<EOF
+          {"sha": "${PARENT}", "force": true}
+          EOF
