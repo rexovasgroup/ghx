@@ -1,40 +1,47 @@
-name: "ghx: Sync upstream & build"
+name: "ghx: Sync upstream"
 
 on:
-  # Trigger when main is updated (from upstream sync via Pull App or manual)
   push:
-    branches: [main]
-  # Manual trigger
+    branches: [upstream]
   workflow_dispatch:
-  # Fallback: check daily in case Pull App misses something
   schedule:
     - cron: "0 6 * * *"
 
 permissions:
   contents: write
   actions: write
+  pull-requests: write
 
 jobs:
-  sync-and-build:
+  sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out rexovas branch
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.HOOK_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOOK_APP_PRIVATE_KEY }}
+          owner: rexovasgroup
+
+      - name: Check out trunk
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: rexovas
+          ref: trunk
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
         run: |
-          git config user.name "ghx-bot"
-          git config user.email "ghx-bot@rexovasgroup.github.io"
+          git config user.name "rexovas-artifact-relay[bot]"
+          git config user.email "3902638+rexovas-artifact-relay[bot]@users.noreply.github.com"
 
-      - name: Fetch upstream main
+      - name: Fetch upstream
         run: |
           git remote add upstream https://github.com/cli/cli.git || true
           git fetch upstream trunk
 
-      - name: Rebase rexovas onto upstream
+      - name: Rebase trunk onto upstream
         id: rebase
         run: |
           if git rebase upstream/trunk; then
@@ -46,7 +53,7 @@ jobs:
 
       - name: Open issue on conflict
         if: steps.rebase.outputs.status == 'conflict'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const existing = await github.rest.issues.listForRepo({
@@ -59,20 +66,18 @@ jobs:
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: 'Rebase conflict: rexovas branch needs manual resolution',
-                body: `The automated rebase of the \`rexovas\` branch onto upstream \`trunk\` failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout rexovas\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
+                title: 'Rebase conflict: trunk needs manual resolution',
+                body: `The automated rebase of \`trunk\` onto upstream failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout trunk\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
                 labels: ['rebase-conflict']
               });
             }
 
       - name: Check for upstream changes to patched files
         if: steps.rebase.outputs.status == 'success'
-        id: overlap
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { execSync } = require('child_process');
-            // Files we've patched — if upstream touches these, flag for review
             const patchedFiles = [
               'internal/config/config.go',
               'internal/config/config_test.go'
@@ -109,68 +114,6 @@ jobs:
         if: steps.rebase.outputs.status == 'success'
         run: go test ./internal/config/...
 
-      - name: Push rebased branch
+      - name: Push to trunk
         if: steps.rebase.outputs.status == 'success'
-        run: git push --force-with-lease origin rexovas
-
-      - name: Determine version
-        if: steps.rebase.outputs.status == 'success'
-        id: version
-        run: |
-          # Get the latest upstream tag
-          UPSTREAM_VERSION=$(git describe --tags --abbrev=0 upstream/trunk 2>/dev/null || echo "v0.0.0")
-
-          # ghx version: read from GHX_VERSION file, format: MAJOR.MINOR.PATCH
-          GHX_VERSION=$(cat GHX_VERSION 2>/dev/null || echo "1.0.0")
-
-          echo "version=${UPSTREAM_VERSION}-ghx.${GHX_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "upstream=${UPSTREAM_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "ghx=${GHX_VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Cross-compile
-        if: steps.rebase.outputs.status == 'success'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          LDFLAGS="-s -w -X github.com/cli/cli/v2/internal/build.Version=${VERSION}"
-          mkdir -p dist
-
-          for pair in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
-            OS="${pair%/*}"
-            ARCH="${pair#*/}"
-            echo "Building ${OS}/${ARCH}..."
-            GOOS="${OS}" GOARCH="${ARCH}" CGO_ENABLED=0 \
-              go build -ldflags "${LDFLAGS}" -o "dist/gh_${OS}_${ARCH}" ./cmd/gh/
-          done
-
-          cd dist && sha256sum gh_* > checksums.txt
-
-      - name: Create release
-        if: steps.rebase.outputs.status == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          UPSTREAM="${{ steps.version.outputs.upstream }}"
-
-          # Delete existing release for this version if it exists
-          gh release delete "${VERSION}" --yes 2>/dev/null || true
-          git tag -d "${VERSION}" 2>/dev/null || true
-          git push origin ":refs/tags/${VERSION}" 2>/dev/null || true
-
-          gh release create "${VERSION}" dist/* \
-            --target rexovas \
-            --title "ghx ${VERSION}" \
-            --notes "Based on upstream cli/cli ${UPSTREAM} with ghx patches:
-          - Auto-select authenticated account based on repo context (GH_USER, git config, account_rules)
-
-          ## Install
-          \`\`\`bash
-          # macOS Apple Silicon
-          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-
-          # macOS Intel
-          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-
-          # Linux x86_64
-          curl -sL https://github.com/rexovasgroup/gh/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-          \`\`\`"
+        run: git push --force origin HEAD:refs/heads/trunk
