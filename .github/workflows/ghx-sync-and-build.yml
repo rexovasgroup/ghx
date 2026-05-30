@@ -22,7 +22,6 @@ jobs:
         with:
           client-id: ${{ secrets.HOOK_APP_CLIENT_ID }}
           private-key: ${{ secrets.HOOK_APP_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
           owner: rexovasgroup
 
       - name: Check out trunk
@@ -127,7 +126,7 @@ jobs:
           git push --force origin "HEAD:refs/heads/${DATED_BRANCH}"
 
           # Temporarily set dated branch as default (so trunk can be force-pushed)
-          gh api "repos/${REPO}" --method PATCH -f default_branch="${DATED_BRANCH}" --include
+          gh api "repos/${REPO}" --method PATCH -f default_branch="${DATED_BRANCH}" --silent
 
           # Force-update trunk to match
           git push --force origin HEAD:refs/heads/trunk
