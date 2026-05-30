@@ -114,25 +114,6 @@ jobs:
         if: steps.rebase.outputs.status == 'success'
         run: go test ./internal/config/...
 
-      - name: Publish sync
+      - name: Push to trunk
         if: steps.rebase.outputs.status == 'success'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          DATED_BRANCH="ghx/$(date +%Y-%m-%d)"
-          REPO="${{ github.repository }}"
-
-          # Force-push trunk (app bypasses branch protection)
-          git push --force origin HEAD:refs/heads/trunk
-
-          # Push dated branch and set as default (for GitHub 0-behind comparison)
-          git push --force origin "HEAD:refs/heads/${DATED_BRANCH}"
-          gh api "repos/${REPO}" --method PATCH -f default_branch="${DATED_BRANCH}" --silent
-
-          # Delete old dated branches
-          gh api "repos/${REPO}/git/matching-refs/heads/ghx/" --jq '.[].ref' | \
-            while read ref; do
-              if [ "$ref" != "refs/heads/${DATED_BRANCH}" ]; then
-                gh api "repos/${REPO}/git/${ref}" --method DELETE 2>/dev/null || true
-              fi
-            done
+        run: git push --force origin HEAD:refs/heads/trunk
