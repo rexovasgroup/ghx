@@ -1,6 +1,6 @@
 # ghx — GitHub CLI Xtreme
 
-An extended fork of [cli/cli](https://github.com/cli/cli) with additional features and capabilities. Trunk automatically rebases onto upstream daily — every commit is verified.
+An extended fork of [cli/cli](https://github.com/cli/cli) with additional features and capabilities. Trunk automatically rebases onto upstream in real time — every commit is verified.
 
 ## Additional Features
 
