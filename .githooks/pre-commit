@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# --- Block internal/sensitive files from being committed ---
+BLOCKED_PATTERNS=(
+  "GHX_.*\.md"
+  "ROADMAP"
+  "INTERNAL"
+  "\.env$"
+  "credentials"
+  "secrets"
+)
+
+staged=$(git diff --cached --name-only --diff-filter=ACR)
+blocked=()
+
+for file in $staged; do
+  for pattern in "${BLOCKED_PATTERNS[@]}"; do
+    if echo "$file" | grep -qiE "$pattern"; then
+      blocked+=("  $file (matched: $pattern)")
+    fi
+  done
+done
+
+if [ ${#blocked[@]} -gt 0 ]; then
+  echo "❌ Blocked files detected in commit:"
+  printf '%s\n' "${blocked[@]}"
+  echo ""
+  echo "These files should not be in a public repo."
+  echo "If intentional, use: git commit --no-verify"
+  exit 1
+fi
+
+# --- Run Go tests on changed config files ---
+config_changed=$(echo "$staged" | grep -c "internal/config/" || true)
+if [ "$config_changed" -gt 0 ]; then
+  echo "Running config tests..."
+  go test ./internal/config/... -count=1 -short || {
+    echo "❌ Config tests failed. Fix before committing."
+    exit 1
+  }
+fi
+
+# --- Lint check (if golangci-lint available) ---
+if command -v golangci-lint &>/dev/null; then
+  go_changed=$(echo "$staged" | grep '\.go$' || true)
+  if [ -n "$go_changed" ]; then
+    echo "Running linter..."
+    golangci-lint run --new-from-rev=HEAD~1 || {
+      echo "❌ Lint errors. Fix before committing."
+      exit 1
+    }
+  fi
+fi
+
+echo "✓ Pre-commit checks passed"
