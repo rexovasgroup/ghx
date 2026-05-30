@@ -41,6 +41,8 @@ type UpdateOptions struct {
 	RequireCodeOwnerReview         bool
 	RequireLastPushApproval        bool
 	RequiredReviewThreadResolution bool
+	RequirePR                      bool
+	AllowedMergeMethods            []string
 
 	// Track which flags were explicitly set
 	flagsChanged map[string]bool
@@ -117,6 +119,8 @@ func NewCmdUpdate(f *cmdutil.Factory, runF func(*UpdateOptions) error) *cobra.Co
 	cmd.Flags().BoolVar(&opts.RequireCodeOwnerReview, "require-code-owner-review", false, "Require code owner review")
 	cmd.Flags().BoolVar(&opts.RequireLastPushApproval, "require-last-push-approval", false, "Require approval from someone other than the last pusher")
 	cmd.Flags().BoolVar(&opts.RequiredReviewThreadResolution, "require-review-thread-resolution", false, "Require all review threads to be resolved")
+	cmd.Flags().BoolVar(&opts.RequirePR, "require-pr", false, "Require pull requests (shorthand for --required-approvals 0)")
+	cmd.Flags().StringSliceVar(&opts.AllowedMergeMethods, "allowed-merge-methods", nil, "Allowed merge methods: merge, squash, rebase")
 
 	return cmd
 }
@@ -246,13 +250,19 @@ func buildMergedBody(httpClient *http.Client, opts *UpdateOptions) (io.Reader, e
 		}
 	}
 
-	hasPRFlags := opts.flagsChanged["required-approvals"] || opts.flagsChanged["dismiss-stale-reviews"] || opts.flagsChanged["require-code-owner-review"] || opts.flagsChanged["require-last-push-approval"] || opts.flagsChanged["require-review-thread-resolution"]
+	hasPRFlags := opts.flagsChanged["required-approvals"] || opts.flagsChanged["require-pr"] ||
+		opts.flagsChanged["dismiss-stale-reviews"] || opts.flagsChanged["require-code-owner-review"] ||
+		opts.flagsChanged["require-last-push-approval"] || opts.flagsChanged["require-review-thread-resolution"] ||
+		opts.flagsChanged["allowed-merge-methods"]
 	if hasPRFlags {
 		approvals := opts.RequiredApprovals
-		if approvals == 0 {
+		if !opts.flagsChanged["required-approvals"] && !opts.RequirePR {
 			approvals = 1
 		}
-		prRule := shared.BuildPullRequestRule(approvals, opts.DismissStaleReviews, opts.RequireCodeOwnerReview, opts.RequireLastPushApproval, opts.RequiredReviewThreadResolution)
+		if opts.RequirePR && !opts.flagsChanged["required-approvals"] {
+			approvals = 0
+		}
+		prRule := shared.BuildPullRequestRule(approvals, opts.DismissStaleReviews, opts.RequireCodeOwnerReview, opts.RequireLastPushApproval, opts.RequiredReviewThreadResolution, opts.AllowedMergeMethods)
 
 		// Replace existing pull_request rule or append
 		replaced := false

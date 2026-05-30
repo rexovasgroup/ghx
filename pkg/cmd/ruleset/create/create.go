@@ -16,6 +16,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type CreateOptions struct {
@@ -39,12 +40,17 @@ type CreateOptions struct {
 	RequireCodeOwnerReview         bool
 	RequireLastPushApproval        bool
 	RequiredReviewThreadResolution bool
+	RequirePR                      bool
+	AllowedMergeMethods            []string
+
+	flagsChanged map[string]bool
 }
 
 func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Command {
 	opts := CreateOptions{
-		HttpClient: f.HttpClient,
-		IO:         f.IOStreams,
+		HttpClient:   f.HttpClient,
+		IO:           f.IOStreams,
+		flagsChanged: make(map[string]bool),
 	}
 
 	cmd := &cobra.Command{
@@ -73,6 +79,9 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			opts.BaseRepo = f.BaseRepo
+			c.Flags().Visit(func(f *pflag.Flag) {
+				opts.flagsChanged[f.Name] = true
+			})
 
 			if opts.FromJSON == "" {
 				if len(args) == 0 {
@@ -113,6 +122,8 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 	cmd.Flags().BoolVar(&opts.RequireCodeOwnerReview, "require-code-owner-review", false, "Require code owner review")
 	cmd.Flags().BoolVar(&opts.RequireLastPushApproval, "require-last-push-approval", false, "Require approval from someone other than the last pusher")
 	cmd.Flags().BoolVar(&opts.RequiredReviewThreadResolution, "require-review-thread-resolution", false, "Require all review threads to be resolved")
+	cmd.Flags().BoolVar(&opts.RequirePR, "require-pr", false, "Require pull requests (shorthand for --required-approvals 0)")
+	cmd.Flags().StringSliceVar(&opts.AllowedMergeMethods, "allowed-merge-methods", nil, "Allowed merge methods: merge, squash, rebase")
 
 	return cmd
 }
@@ -212,14 +223,20 @@ func buildRequestBody(opts *CreateOptions) (io.Reader, error) {
 		req.Rules = append(req.Rules, shared.RuleRequest{Type: r})
 	}
 
-	// PR rule shortcuts
-	hasPRFlags := opts.RequiredApprovals > 0 || opts.DismissStaleReviews || opts.RequireCodeOwnerReview || opts.RequireLastPushApproval || opts.RequiredReviewThreadResolution
+	// PR rule shortcuts — use flagsChanged to detect explicit --required-approvals 0
+	hasPRFlags := opts.flagsChanged["required-approvals"] || opts.flagsChanged["require-pr"] ||
+		opts.DismissStaleReviews || opts.RequireCodeOwnerReview ||
+		opts.RequireLastPushApproval || opts.RequiredReviewThreadResolution ||
+		len(opts.AllowedMergeMethods) > 0
 	if hasPRFlags {
 		approvals := opts.RequiredApprovals
-		if approvals == 0 {
+		if !opts.flagsChanged["required-approvals"] && !opts.RequirePR {
 			approvals = 1
 		}
-		prRule := shared.BuildPullRequestRule(approvals, opts.DismissStaleReviews, opts.RequireCodeOwnerReview, opts.RequireLastPushApproval, opts.RequiredReviewThreadResolution)
+		if opts.RequirePR && !opts.flagsChanged["required-approvals"] {
+			approvals = 0
+		}
+		prRule := shared.BuildPullRequestRule(approvals, opts.DismissStaleReviews, opts.RequireCodeOwnerReview, opts.RequireLastPushApproval, opts.RequiredReviewThreadResolution, opts.AllowedMergeMethods)
 		req.Rules = append(req.Rules, prRule)
 	}
 
