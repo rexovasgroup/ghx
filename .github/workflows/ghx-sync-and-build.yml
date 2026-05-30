@@ -1,0 +1,148 @@
+name: "ghx: Sync upstream"
+
+on:
+  push:
+    branches: [upstream]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.OSS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OSS_APP_PRIVATE_KEY }}
+          owner: rexovasgroup
+
+      - name: Check out trunk
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: trunk
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git
+        run: |
+          git config user.name "rexovas-open-source[bot]"
+          git config user.email "3902638+rexovas-open-source[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/cli/cli.git || true
+          git fetch upstream trunk
+
+      - name: Rebase trunk onto upstream
+        id: rebase
+        run: |
+          if git rebase upstream/trunk; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue on conflict
+        if: steps.rebase.outputs.status == 'conflict'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'rebase-conflict',
+              state: 'open'
+            });
+            if (existing.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Rebase conflict: trunk needs manual resolution',
+                body: `The automated rebase of \`trunk\` onto upstream failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout trunk\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
+                labels: ['rebase-conflict']
+              });
+            }
+
+      - name: Check for upstream changes to patched files
+        if: steps.rebase.outputs.status == 'success'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const patchedFiles = [
+              'internal/config/config.go',
+              'internal/config/config_test.go'
+            ];
+            const upstreamChanges = execSync(
+              'git diff HEAD~1 HEAD --name-only', { encoding: 'utf8' }
+            ).trim().split('\n');
+            const overlapping = patchedFiles.filter(f => upstreamChanges.includes(f));
+            if (overlapping.length > 0) {
+              const existing = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: 'patch-overlap',
+                state: 'open'
+              });
+              if (existing.data.length === 0) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: 'Upstream modified patched files — review needed',
+                  body: `Upstream changed files that contain ghx patches. The rebase succeeded but the changes should be reviewed.\n\n**Overlapping files:**\n${overlapping.map(f => '- \`' + f + '\`').join('\n')}\n\nPlease verify our patches still behave correctly.`,
+                  labels: ['patch-overlap']
+                });
+              }
+            }
+
+      - name: Run tests
+        if: steps.rebase.outputs.status == 'success'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Test patched code
+        if: steps.rebase.outputs.status == 'success'
+        run: go test ./internal/config/...
+
+      - name: Push to trunk (API-signed)
+        if: steps.rebase.outputs.status == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          REPO="${{ github.repository }}"
+
+          # Get ghx patch commits (oldest first) that sit on top of upstream
+          COMMITS=$(git rev-list --reverse upstream/trunk..HEAD)
+          PARENT=$(git rev-parse upstream/trunk)
+
+          for COMMIT in $COMMITS; do
+            TREE=$(git rev-parse "${COMMIT}^{tree}")
+            MESSAGE=$(git log -1 --pretty=%B "$COMMIT")
+
+            # Create commit via API — GitHub auto-signs with app identity
+            PARENT=$(gh api "repos/${REPO}/git/commits" \
+              --method POST \
+              -f "message=${MESSAGE}" \
+              -f "tree=${TREE}" \
+              -f "parents[]=${PARENT}" \
+              --jq '.sha')
+
+            echo "Created commit ${PARENT} for $(git log -1 --pretty=%s "$COMMIT")"
+          done
+
+          # Force-update trunk ref to the last created commit
+          gh api "repos/${REPO}/git/refs/heads/trunk" \
+            --method PATCH \
+            --input - <<EOF
+          {"sha": "${PARENT}", "force": true}
+          EOF
