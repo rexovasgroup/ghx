@@ -57,13 +57,16 @@ func ParseBypassActor(s string) (BypassActor, error) {
 	}, nil
 }
 
-func BuildPullRequestRule(approvals int, dismissStale, codeOwner, lastPush, threadResolution bool) RuleRequest {
+func BuildPullRequestRule(approvals int, dismissStale, codeOwner, lastPush, threadResolution bool, allowedMergeMethods []string) RuleRequest {
 	params := map[string]interface{}{
-		"required_approving_review_count":    approvals,
-		"dismiss_stale_reviews_on_push":      dismissStale,
-		"require_code_owner_review":          codeOwner,
-		"require_last_push_approval":         lastPush,
-		"required_review_thread_resolution":  threadResolution,
+		"required_approving_review_count":   approvals,
+		"dismiss_stale_reviews_on_push":     dismissStale,
+		"require_code_owner_review":         codeOwner,
+		"require_last_push_approval":        lastPush,
+		"required_review_thread_resolution": threadResolution,
+	}
+	if len(allowedMergeMethods) > 0 {
+		params["allowed_merge_methods"] = allowedMergeMethods
 	}
 	return RuleRequest{
 		Type:       "pull_request",
