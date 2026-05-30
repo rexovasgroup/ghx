@@ -122,17 +122,12 @@ jobs:
           DATED_BRANCH="ghx/$(date +%Y-%m-%d)"
           REPO="${{ github.repository }}"
 
-          # Push rebased code to dated branch
-          git push --force origin "HEAD:refs/heads/${DATED_BRANCH}"
-
-          # Temporarily set dated branch as default (so trunk can be force-pushed)
-          gh api "repos/${REPO}" --method PATCH -f default_branch="${DATED_BRANCH}" --silent
-
-          # Force-update trunk to match
+          # Force-push trunk (app bypasses branch protection)
           git push --force origin HEAD:refs/heads/trunk
 
-          # Set trunk back as default
-          gh api "repos/${REPO}" --method PATCH -f default_branch=trunk --silent
+          # Push dated branch and set as default (for GitHub 0-behind comparison)
+          git push --force origin "HEAD:refs/heads/${DATED_BRANCH}"
+          gh api "repos/${REPO}" --method PATCH -f default_branch="${DATED_BRANCH}" --silent
 
           # Delete old dated branches
           gh api "repos/${REPO}/git/matching-refs/heads/ghx/" --jq '.[].ref' | \
