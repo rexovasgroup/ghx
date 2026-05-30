@@ -20,8 +20,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          client-id: ${{ secrets.HOOK_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HOOK_APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.OSS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OSS_APP_PRIVATE_KEY }}
           owner: rexovasgroup
 
       - name: Check out trunk
@@ -33,8 +33,8 @@ jobs:
 
       - name: Configure git
         run: |
-          git config user.name "rexovas-artifact-relay[bot]"
-          git config user.email "3902638+rexovas-artifact-relay[bot]@users.noreply.github.com"
+          git config user.name "rexovas-open-source[bot]"
+          git config user.email "3902638+rexovas-open-source[bot]@users.noreply.github.com"
 
       - name: Fetch upstream
         run: |
