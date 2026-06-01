@@ -1,3 +1,32 @@
+# ghx — GitHub CLI Xtreme
+
+An extended fork of [cli/cli](https://github.com/cli/cli) with additional features and capabilities. Trunk automatically rebases onto upstream daily — every commit is verified.
+
+## Additional Features
+
+| Feature | Since | Upstream | Shipped upstream |
+|---------|-------|----------|-----------------|
+| **Auto-select account** — picks the right authenticated account based on the repo you're in. Supports `GH_USER` env var, `git config github.account`, and org-to-account mapping rules. | May 2026 | [cli/cli#12459](https://github.com/cli/cli/issues/12459) | — |
+| **Ruleset CRUD** — `gh ruleset create`, `update`, and `delete` commands. | May 2026 | [cli/cli#9698](https://github.com/cli/cli/issues/9698) | — |
+
+## Install
+
+```bash
+curl -sL https://get.rexov.as/ghx/install.sh | sh
+```
+
+Pass `--replace-gh` to also install as `gh`.
+
+### Manual download
+
+Binaries are available on the [releases page](https://github.com/rexovasgroup/ghx/releases).
+
+---
+
+*Everything below is from the upstream README.*
+
+---
+
 # GitHub CLI
 
 `gh` is GitHub on the command line. It brings pull requests, issues, and other GitHub concepts to the terminal next to where you are already working with `git` and your code.
