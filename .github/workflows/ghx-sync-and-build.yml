@@ -164,3 +164,25 @@ jobs:
             --input - <<EOF
           {"sha": "${PARENT}", "force": true}
           EOF
+
+      - name: Open issue on sync failure
+        if: failure()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'sync-failure',
+              state: 'open'
+            });
+            if (existing.data.length === 0) {
+              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Upstream sync failed',
+                body: `The \`ghx: Sync upstream\` workflow failed.\n\nThis covers any failing step (e.g. the trunk push), not just rebase conflicts.\n\n**Failed run:** ${runUrl}\n\nThe issue stays open until closed manually, so repeated failures won't spam — close it once the sync is green again.`,
+                labels: ['sync-failure']
+              });
+            }
