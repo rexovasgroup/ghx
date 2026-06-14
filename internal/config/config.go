@@ -3,9 +3,12 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/keyring"
@@ -314,10 +317,133 @@ func (c *AuthConfig) TokenFromKeyringForUser(hostname, username string) (string,
 	return keyring.Get(keyringServiceName(hostname), username)
 }
 
+// Overridable for testing.
+var (
+	gitConfigAccountFunc  = gitConfigAccount
+	remoteOriginOwnerFunc = remoteOriginOwner
+)
+
 // ActiveUser will retrieve the username for the active user at the given hostname.
 // This will not be accurate if the oauth token is set from an environment variable.
+//
+// Resolution order (first authenticated match wins):
+//  1. GH_USER env var — explicit override for scripts/CI
+//  2. git config github.account — works with git includeIf for per-directory identity
+//  3. Remote origin owner → account_rules mapping in gh config
+//  4. Stored active user (original behavior)
 func (c *AuthConfig) ActiveUser(hostname string) (string, error) {
+	users := c.UsersForHost(hostname)
+
+	// 1. GH_USER env var
+	if envUser := os.Getenv("GH_USER"); envUser != "" {
+		if slices.Contains(users, envUser) {
+			return envUser, nil
+		}
+	}
+
+	// 2. git config github.account
+	if gitAccount := gitConfigAccountFunc(); gitAccount != "" {
+		if slices.Contains(users, gitAccount) {
+			return gitAccount, nil
+		}
+	}
+
+	// 3. Remote origin owner → account_rules
+	if owner := remoteOriginOwnerFunc(); owner != "" {
+		if account := c.accountRuleMatch(hostname, owner); account != "" {
+			if slices.Contains(users, account) {
+				return account, nil
+			}
+		}
+	}
+
+	// 4. Stored active user
 	return c.cfg.Get([]string{hostsKey, hostname, userKey})
+}
+
+// gitConfigAccount reads "github.account" from git config.
+// Returns empty string if not set or git is unavailable.
+func gitConfigAccount() string {
+	cmd := exec.Command("git", "config", "github.account")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// remoteOriginOwner extracts the owner/org from the current repo's remote origin URL.
+// Supports both SSH (git@github.com:owner/repo.git) and HTTPS (https://github.com/owner/repo.git).
+// Returns empty string if not in a git repo or origin is not set.
+func remoteOriginOwner() string {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return ownerFromRemoteURL(strings.TrimSpace(string(out)))
+}
+
+// ownerFromRemoteURL parses the owner/org from a git remote URL.
+func ownerFromRemoteURL(rawURL string) string {
+	// SSH: git@github.com:owner/repo.git or ssh://git@github.com/owner/repo.git
+	if strings.Contains(rawURL, ":") && !strings.Contains(rawURL, "://") {
+		// git@github.com:owner/repo.git → owner/repo.git
+		parts := strings.SplitN(rawURL, ":", 2)
+		if len(parts) == 2 {
+			path := strings.TrimSuffix(parts[1], ".git")
+			segments := strings.SplitN(path, "/", 2)
+			if len(segments) >= 1 {
+				return segments[0]
+			}
+		}
+		return ""
+	}
+
+	// HTTPS or ssh:// URL
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	path := strings.TrimPrefix(u.Path, "/")
+	path = strings.TrimSuffix(path, ".git")
+	segments := strings.SplitN(path, "/", 2)
+	if len(segments) >= 1 {
+		return segments[0]
+	}
+	return ""
+}
+
+const accountRulesKey = "account_rules"
+
+// accountRuleMatch looks up the owner in account_rules config and returns the matching account.
+// Config format in ~/.config/gh/config.yml:
+//
+//	account_rules:
+//	  - owner: MyOrg
+//	    account: work-user
+//	  - owner: PersonalOrg
+//	    account: personal-user
+func (c *AuthConfig) accountRuleMatch(hostname, owner string) string {
+	// account_rules is stored as a top-level config key, not under hosts.
+	// We iterate through the rules looking for an owner match (case-insensitive).
+	lowerOwner := strings.ToLower(owner)
+
+	// The gh config library stores YAML lists as indexed keys.
+	// We iterate through indices until we stop finding entries.
+	for i := 0; ; i++ {
+		ruleOwner, err := c.cfg.Get([]string{accountRulesKey, fmt.Sprintf("%d", i), "owner"})
+		if err != nil {
+			break
+		}
+		if strings.ToLower(ruleOwner) == lowerOwner {
+			account, err := c.cfg.Get([]string{accountRulesKey, fmt.Sprintf("%d", i), "account"})
+			if err == nil {
+				return account
+			}
+		}
+	}
+	return ""
 }
 
 func (c *AuthConfig) Hosts() []string {
