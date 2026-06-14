@@ -66,40 +66,25 @@ jobs:
           git tag -d "${VERSION}" 2>/dev/null || true
           git push origin ":refs/tags/${VERSION}" 2>/dev/null || true
 
+          # Generate changelog from ghx patch commits
+          CHANGELOG=$(git log --pretty="- %s" upstream/trunk..HEAD -- ':!.github' ':!.githooks' ':!.gitignore' ':!GHX_VERSION' ':!Makefile' ':!install.sh' 2>/dev/null || echo "- Upstream sync")
+
           gh release create "${VERSION}" dist/* \
             --repo "${REPO}" \
             --target trunk \
             --title "ghx ${VERSION}" \
-            --notes "Based on upstream cli/cli ${UPSTREAM} with ghx patches.
+            --notes "$(cat <<NOTES
+          Synced with upstream cli/cli ${UPSTREAM}.
 
           ## Install
           \`\`\`bash
           curl -sL https://get.rexov.as/ghx/install.sh | sh
           \`\`\`
 
-          ### Manual download (install as ghx)
-          \`\`\`bash
-          # macOS Apple Silicon
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
-
-          # macOS Intel
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
-
-          # Linux x86_64
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/ghx && chmod +x /usr/local/bin/ghx
-          \`\`\`
-
-          ### Replace stock gh
-          \`\`\`bash
-          # macOS Apple Silicon
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_arm64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-
-          # macOS Intel
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_darwin_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-
-          # Linux x86_64
-          curl -sL https://github.com/rexovasgroup/ghx/releases/download/${VERSION}/gh_linux_amd64 -o /usr/local/bin/gh && chmod +x /usr/local/bin/gh
-          \`\`\`"
+          ## ghx patches
+          ${CHANGELOG}
+          NOTES
+          )"
 
       - name: Generate app token
         id: app-token
