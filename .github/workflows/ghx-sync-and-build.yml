@@ -122,13 +122,16 @@ jobs:
           REPO="${{ github.repository }}"
 
           # Re-create each ghx patch commit entirely through the Git Data API so
-          # GitHub signs it with the app identity. We never `git push`: the push
-          # protocol refuses an app token without `workflows` permission whenever
-          # the sync carries a `.github/workflows/` change, but the Git Data API
-          # is not subject to that guard. To do this we must materialise every
-          # object server-side ourselves — a local rebase's trees/blobs exist
-          # only on the runner, which is why a naive API call hits
-          # "Tree SHA does not exist (422)".
+          # GitHub signs it with the app identity, materialising every object
+          # server-side (a local rebase's trees/blobs exist only on the runner,
+          # which is why a naive API commit hits "Tree SHA does not exist (422)").
+          #
+          # NOTE: object creation (blobs/trees/commits) is exempt from the
+          # workflows-permission guard, but the trunk *ref* update below is NOT —
+          # updating a ref whose tip changes .github/workflows/ requires the app
+          # to hold `workflows: write` (X-Accepted-GitHub-Permissions:
+          # contents=write,workflows=write), exactly like `git push`. The
+          # rexovas-open-source app must have Workflows: Read and write granted.
           COMMITS=$(git rev-list --reverse upstream/trunk..HEAD)
           PARENT_COMMIT=$(git rev-parse upstream/trunk)
           PARENT_TREE=$(git rev-parse "upstream/trunk^{tree}")
@@ -173,22 +176,14 @@ jobs:
             echo "Signed: $(git log -1 --pretty=%s "$COMMIT") -> ${PARENT_COMMIT}"
           done
 
-          # Point trunk at the final signed commit.
-          echo "Updating trunk -> ${PARENT_COMMIT}"
-          CODE=$(curl -sS -o /tmp/ref_resp.json -D /tmp/ref_hdr.txt -w '%{http_code}' \
-            -X PATCH \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${REPO}/git/refs/heads/trunk" \
-            -d "{\"sha\":\"${PARENT_COMMIT}\",\"force\":true}")
-          echo "HTTP ${CODE}"
-          echo "--- required permissions (X-Accepted-GitHub-Permissions) ---"
-          grep -i '^x-accepted-github-permissions:' /tmp/ref_hdr.txt || echo "(header absent)"
-          echo "--- response body ---"; cat /tmp/ref_resp.json; echo
-          if [ "$CODE" -lt 200 ] || [ "$CODE" -ge 300 ]; then exit 1; fi
+          # Point trunk at the final signed commit. Requires the app to hold
+          # `workflows: write` (see NOTE above) — otherwise this 403s with
+          # "Resource not accessible by integration".
+          gh api "repos/${REPO}/git/refs/heads/trunk" --method PATCH \
+            -f "sha=${PARENT_COMMIT}" -F "force=true"
 
-          # Keep a dated snapshot branch (created/updated via API, so the
-          # workflows-permission guard never applies).
+          # Keep a dated snapshot branch (also requires workflows: write since
+          # its tip carries the same workflow changes).
           SYNC_BRANCH="ghx/$(date +%F)"
           gh api "repos/${REPO}/git/refs" --method POST \
             -f "ref=refs/heads/${SYNC_BRANCH}" -f "sha=${PARENT_COMMIT}" 2>/dev/null \
