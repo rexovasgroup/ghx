@@ -174,8 +174,18 @@ jobs:
           done
 
           # Point trunk at the final signed commit.
-          gh api "repos/${REPO}/git/refs/heads/trunk" --method PATCH \
-            -f "sha=${PARENT_COMMIT}" -F "force=true"
+          echo "Updating trunk -> ${PARENT_COMMIT}"
+          CODE=$(curl -sS -o /tmp/ref_resp.json -D /tmp/ref_hdr.txt -w '%{http_code}' \
+            -X PATCH \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/git/refs/heads/trunk" \
+            -d "{\"sha\":\"${PARENT_COMMIT}\",\"force\":true}")
+          echo "HTTP ${CODE}"
+          echo "--- required permissions (X-Accepted-GitHub-Permissions) ---"
+          grep -i '^x-accepted-github-permissions:' /tmp/ref_hdr.txt || echo "(header absent)"
+          echo "--- response body ---"; cat /tmp/ref_resp.json; echo
+          if [ "$CODE" -lt 200 ] || [ "$CODE" -ge 300 ]; then exit 1; fi
 
           # Keep a dated snapshot branch (created/updated via API, so the
           # workflows-permission guard never applies).
