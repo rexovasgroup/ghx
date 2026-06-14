@@ -114,6 +114,22 @@ jobs:
         if: steps.rebase.outputs.status == 'success'
         run: go test ./internal/config/...
 
+      - name: Publish dated sync branch
+        id: sync-branch
+        if: steps.rebase.outputs.status == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # Push the rebased commits to a dated branch BEFORE creating the
+          # API-signed commits below. The Git Data API can only build a commit
+          # from a tree that already exists server-side — and a local rebase
+          # produces new trees that live only on the runner until pushed.
+          # Skipping this upload is what caused "Tree SHA does not exist (422)"
+          # on every sync that actually changed a file.
+          SYNC_BRANCH="ghx/$(date +%F)"
+          git push --force origin "HEAD:refs/heads/${SYNC_BRANCH}"
+          echo "branch=${SYNC_BRANCH}" >> "$GITHUB_OUTPUT"
+
       - name: Push to trunk (API-signed)
         if: steps.rebase.outputs.status == 'success'
         env:
@@ -121,7 +137,9 @@ jobs:
         run: |
           REPO="${{ github.repository }}"
 
-          # Get ghx patch commits (oldest first) that sit on top of upstream
+          # Get ghx patch commits (oldest first) that sit on top of upstream.
+          # Their trees were uploaded by the dated-branch push above, so the
+          # API can re-create each commit signed with the app identity.
           COMMITS=$(git rev-list --reverse upstream/trunk..HEAD)
           PARENT=$(git rev-parse upstream/trunk)
 
