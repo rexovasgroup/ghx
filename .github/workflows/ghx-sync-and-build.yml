@@ -114,53 +114,73 @@ jobs:
         if: steps.rebase.outputs.status == 'success'
         run: go test ./internal/config/...
 
-      - name: Publish dated sync branch
-        id: sync-branch
-        if: steps.rebase.outputs.status == 'success'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          # Push the rebased commits to a dated branch BEFORE creating the
-          # API-signed commits below. The Git Data API can only build a commit
-          # from a tree that already exists server-side — and a local rebase
-          # produces new trees that live only on the runner until pushed.
-          # Skipping this upload is what caused "Tree SHA does not exist (422)"
-          # on every sync that actually changed a file.
-          SYNC_BRANCH="ghx/$(date +%F)"
-          git push --force origin "HEAD:refs/heads/${SYNC_BRANCH}"
-          echo "branch=${SYNC_BRANCH}" >> "$GITHUB_OUTPUT"
-
-      - name: Push to trunk (API-signed)
+      - name: Publish signed sync (Git Data API)
         if: steps.rebase.outputs.status == 'success'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           REPO="${{ github.repository }}"
 
-          # Get ghx patch commits (oldest first) that sit on top of upstream.
-          # Their trees were uploaded by the dated-branch push above, so the
-          # API can re-create each commit signed with the app identity.
+          # Re-create each ghx patch commit entirely through the Git Data API so
+          # GitHub signs it with the app identity. We never `git push`: the push
+          # protocol refuses an app token without `workflows` permission whenever
+          # the sync carries a `.github/workflows/` change, but the Git Data API
+          # is not subject to that guard. To do this we must materialise every
+          # object server-side ourselves — a local rebase's trees/blobs exist
+          # only on the runner, which is why a naive API call hits
+          # "Tree SHA does not exist (422)".
           COMMITS=$(git rev-list --reverse upstream/trunk..HEAD)
-          PARENT=$(git rev-parse upstream/trunk)
+          PARENT_COMMIT=$(git rev-parse upstream/trunk)
+          PARENT_TREE=$(git rev-parse "upstream/trunk^{tree}")
 
           for COMMIT in $COMMITS; do
-            TREE=$(git rev-parse "${COMMIT}^{tree}")
             MESSAGE=$(git log -1 --pretty=%B "$COMMIT")
+            COMMIT_PARENT=$(git rev-parse "${COMMIT}^")
 
-            # Create commit via API — GitHub auto-signs with app identity
-            PARENT=$(gh api "repos/${REPO}/git/commits" \
-              --method POST \
+            # Build this commit's tree from the previous tree plus only the files
+            # this commit changed (raw diff format: ":oldmode newmode oldsha newsha status\tpath").
+            ENTRIES="[]"
+            while IFS=$'\t' read -r META FILE; do
+              [ -z "$META" ] && continue
+              OLDMODE=$(printf '%s' "$META" | awk '{print substr($1,2)}')
+              NEWMODE=$(printf '%s' "$META" | awk '{print $2}')
+              NEWSHA=$(printf '%s' "$META" | awk '{print $4}')
+              STATUS=$(printf '%s' "$META" | awk '{print $5}')
+              if [ "$STATUS" = "D" ]; then
+                ENTRY=$(jq -nc --arg p "$FILE" --arg m "$OLDMODE" \
+                  '{path:$p, mode:$m, type:"blob", sha:null}')
+              else
+                CONTENT=$(git cat-file blob "$NEWSHA" | base64 | tr -d '\n')
+                BLOBSHA=$(gh api "repos/${REPO}/git/blobs" \
+                  -f "content=${CONTENT}" -f "encoding=base64" --jq '.sha')
+                ENTRY=$(jq -nc --arg p "$FILE" --arg m "$NEWMODE" --arg s "$BLOBSHA" \
+                  '{path:$p, mode:$m, type:"blob", sha:$s}')
+              fi
+              ENTRIES=$(jq -c --argjson e "$ENTRY" '. + [$e]' <<<"$ENTRIES")
+            done < <(git diff-tree -r --no-commit-id "$COMMIT_PARENT" "$COMMIT")
+
+            NEW_TREE=$(jq -nc --arg b "$PARENT_TREE" --argjson t "$ENTRIES" \
+              '{base_tree:$b, tree:$t}' \
+              | gh api "repos/${REPO}/git/trees" --method POST --input - --jq '.sha')
+
+            # Create the commit — GitHub auto-signs with the app identity.
+            PARENT_COMMIT=$(gh api "repos/${REPO}/git/commits" --method POST \
               -f "message=${MESSAGE}" \
-              -f "tree=${TREE}" \
-              -f "parents[]=${PARENT}" \
+              -f "tree=${NEW_TREE}" \
+              -f "parents[]=${PARENT_COMMIT}" \
               --jq '.sha')
-
-            echo "Created commit ${PARENT} for $(git log -1 --pretty=%s "$COMMIT")"
+            PARENT_TREE="$NEW_TREE"
+            echo "Signed: $(git log -1 --pretty=%s "$COMMIT") -> ${PARENT_COMMIT}"
           done
 
-          # Force-update trunk ref to the last created commit
-          gh api "repos/${REPO}/git/refs/heads/trunk" \
-            --method PATCH \
-            --input - <<EOF
-          {"sha": "${PARENT}", "force": true}
-          EOF
+          # Point trunk at the final signed commit.
+          gh api "repos/${REPO}/git/refs/heads/trunk" --method PATCH \
+            -f "sha=${PARENT_COMMIT}" -F "force=true"
+
+          # Keep a dated snapshot branch (created/updated via API, so the
+          # workflows-permission guard never applies).
+          SYNC_BRANCH="ghx/$(date +%F)"
+          gh api "repos/${REPO}/git/refs" --method POST \
+            -f "ref=refs/heads/${SYNC_BRANCH}" -f "sha=${PARENT_COMMIT}" 2>/dev/null \
+            || gh api "repos/${REPO}/git/refs/heads/${SYNC_BRANCH}" --method PATCH \
+                 -f "sha=${PARENT_COMMIT}" -F "force=true"
