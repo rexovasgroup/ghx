@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/MakeNowJust/heredoc"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cli/cli/v2/internal/gh"
@@ -184,46 +185,51 @@ func TestSetUserSpecificKeyNoUserPresent(t *testing.T) {
 }
 
 func TestActiveUserResolutionOrder(t *testing.T) {
+	// gitAccountMerged models `git config github.account` (the effective value,
+	// including repo-local and includeIf gitdir rules); gitAccountGlobal models
+	// `git config --global github.account`. A directory-specific account exists
+	// when the two differ.
 	tests := []struct {
-		name         string
-		envUser      string
-		gitAccount   string
-		remoteOwner  string
-		accountRules map[string]string // owner → account
-		storedUser   string
-		knownUsers   []string
-		expectedUser string
-		expectError  bool
+		name             string
+		envUser          string
+		gitAccountMerged string
+		gitAccountGlobal string
+		remoteOwner      string
+		accountRules     map[string]string // owner → account
+		storedUser       string
+		knownUsers       []string
+		expectedUser     string
+		expectError      bool
 	}{
 		{
-			name:         "GH_USER env var takes highest priority",
-			envUser:      "env-user",
-			gitAccount:   "git-user",
-			storedUser:   "stored-user",
-			knownUsers:   []string{"env-user", "git-user", "stored-user"},
-			expectedUser: "env-user",
+			name:             "GH_USER env var takes highest priority",
+			envUser:          "env-user",
+			gitAccountMerged: "git-user",
+			storedUser:       "stored-user",
+			knownUsers:       []string{"env-user", "git-user", "stored-user"},
+			expectedUser:     "env-user",
 		},
 		{
-			name:         "GH_USER skipped if not authenticated",
-			envUser:      "unknown-env-user",
-			gitAccount:   "git-user",
-			storedUser:   "stored-user",
-			knownUsers:   []string{"git-user", "stored-user"},
-			expectedUser: "git-user",
+			name:             "GH_USER skipped if not authenticated",
+			envUser:          "unknown-env-user",
+			gitAccountMerged: "git-user",
+			storedUser:       "stored-user",
+			knownUsers:       []string{"git-user", "stored-user"},
+			expectedUser:     "git-user",
 		},
 		{
-			name:         "git config github.account used when no env var",
-			gitAccount:   "git-user",
-			storedUser:   "stored-user",
-			knownUsers:   []string{"git-user", "stored-user"},
-			expectedUser: "git-user",
+			name:             "directory-specific git config used when no env var",
+			gitAccountMerged: "git-user",
+			storedUser:       "stored-user",
+			knownUsers:       []string{"git-user", "stored-user"},
+			expectedUser:     "git-user",
 		},
 		{
-			name:         "git config skipped if not authenticated",
-			gitAccount:   "unknown-git-user",
-			storedUser:   "stored-user",
-			knownUsers:   []string{"stored-user"},
-			expectedUser: "stored-user",
+			name:             "directory-specific git config skipped if not authenticated",
+			gitAccountMerged: "unknown-git-user",
+			storedUser:       "stored-user",
+			knownUsers:       []string{"stored-user"},
+			expectedUser:     "stored-user",
 		},
 		{
 			name:         "remote origin owner matched via account_rules",
@@ -261,25 +267,66 @@ func TestActiveUserResolutionOrder(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:         "git config takes priority over account_rules",
-			gitAccount:   "git-user",
-			remoteOwner:  "SomeOrg",
-			accountRules: map[string]string{"SomeOrg": "rule-user"},
-			storedUser:   "stored-user",
-			knownUsers:   []string{"git-user", "rule-user", "stored-user"},
-			expectedUser: "git-user",
+			name:             "directory-specific git config takes priority over account_rules",
+			gitAccountMerged: "git-user",
+			remoteOwner:      "SomeOrg",
+			accountRules:     map[string]string{"SomeOrg": "rule-user"},
+			storedUser:       "stored-user",
+			knownUsers:       []string{"git-user", "rule-user", "stored-user"},
+			expectedUser:     "git-user",
+		},
+		{
+			// Only a global default is set, so merged == global: the global value
+			// is NOT treated as directory-specific and account_rules wins.
+			name:             "account_rules takes priority over global git config default",
+			gitAccountMerged: "default-user",
+			gitAccountGlobal: "default-user",
+			remoteOwner:      "SomeOrg",
+			accountRules:     map[string]string{"SomeOrg": "rule-user"},
+			storedUser:       "stored-user",
+			knownUsers:       []string{"default-user", "rule-user", "stored-user"},
+			expectedUser:     "rule-user",
+		},
+		{
+			// merged differs from global (e.g. an includeIf gitdir rule), so the
+			// directory-specific value wins over the global default.
+			name:             "directory-specific git config takes priority over global default",
+			gitAccountMerged: "local-user",
+			gitAccountGlobal: "global-user",
+			storedUser:       "stored-user",
+			knownUsers:       []string{"local-user", "global-user", "stored-user"},
+			expectedUser:     "local-user",
+		},
+		{
+			name:             "global git config used as default when no directory-specific signal",
+			gitAccountMerged: "global-user",
+			gitAccountGlobal: "global-user",
+			storedUser:       "stored-user",
+			knownUsers:       []string{"global-user", "stored-user"},
+			expectedUser:     "global-user",
+		},
+		{
+			name:             "global git config falls through to stored user if not authenticated",
+			gitAccountMerged: "unknown-global-user",
+			gitAccountGlobal: "unknown-global-user",
+			storedUser:       "stored-user",
+			knownUsers:       []string{"stored-user"},
+			expectedUser:     "stored-user",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Override function pointers for testing
-			origGit := gitConfigAccountFunc
+			origMerged := gitConfigAccountFunc
+			origGlobal := gitConfigAccountGlobalFunc
 			origRemote := remoteOriginOwnerFunc
-			gitConfigAccountFunc = func() string { return tt.gitAccount }
+			gitConfigAccountFunc = func() string { return tt.gitAccountMerged }
+			gitConfigAccountGlobalFunc = func() string { return tt.gitAccountGlobal }
 			remoteOriginOwnerFunc = func() string { return tt.remoteOwner }
 			t.Cleanup(func() {
-				gitConfigAccountFunc = origGit
+				gitConfigAccountFunc = origMerged
+				gitConfigAccountGlobalFunc = origGlobal
 				remoteOriginOwnerFunc = origRemote
 			})
 
@@ -298,11 +345,8 @@ func TestActiveUserResolutionOrder(t *testing.T) {
 			}
 
 			// Set up account_rules
-			i := 0
 			for owner, account := range tt.accountRules {
-				c.cfg.Set([]string{accountRulesKey, fmt.Sprintf("%d", i), "owner"}, owner)
-				c.cfg.Set([]string{accountRulesKey, fmt.Sprintf("%d", i), "account"}, account)
-				i++
+				c.cfg.Set([]string{accountRulesKey, owner}, account)
 			}
 
 			authCfg := c.Authentication().(*AuthConfig)
@@ -316,6 +360,23 @@ func TestActiveUserResolutionOrder(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAccountRuleMatchReadsYAMLMap guards against regressing to a YAML-sequence
+// schema, which the gh config library cannot traverse by key. account_rules must
+// be an owner → account map parsed straight from real YAML.
+func TestAccountRuleMatchReadsYAMLMap(t *testing.T) {
+	c := &cfg{cfg: ghConfig.ReadFromString(heredoc.Doc(`
+		account_rules:
+		    MyWorkOrg: work-user
+		    PersonalOrg: personal-user
+	`))}
+	authCfg := c.Authentication().(*AuthConfig)
+
+	require.Equal(t, "work-user", authCfg.accountRuleMatch("github.com", "MyWorkOrg"))
+	require.Equal(t, "work-user", authCfg.accountRuleMatch("github.com", "myworkorg"), "match should be case-insensitive")
+	require.Equal(t, "personal-user", authCfg.accountRuleMatch("github.com", "PersonalOrg"))
+	require.Equal(t, "", authCfg.accountRuleMatch("github.com", "UnknownOrg"))
 }
 
 func TestOwnerFromRemoteURL(t *testing.T) {
