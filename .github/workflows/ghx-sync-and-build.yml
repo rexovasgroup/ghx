@@ -46,7 +46,14 @@ jobs:
       - name: Rebase trunk onto upstream
         id: rebase
         run: |
-          if git rebase upstream/trunk; then
+          # Skip entirely when upstream is already contained in trunk: a plain
+          # rebase still "succeeds" with nothing to do, which would re-sign and
+          # force-push every ghx commit (new SHAs) on every poll. Only do work
+          # when upstream actually advanced.
+          if git merge-base --is-ancestor upstream/trunk HEAD; then
+            echo "No new upstream commits — nothing to sync."
+            echo "status=nochange" >> "$GITHUB_OUTPUT"
+          elif git rebase upstream/trunk; then
             echo "status=success" >> "$GITHUB_OUTPUT"
           else
             git rebase --abort
