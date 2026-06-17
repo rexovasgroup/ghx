@@ -39,7 +39,7 @@
 *~
 
 vendor/
-gh
+/gh
 
 # Test coverage artifacts
 coverage.out
