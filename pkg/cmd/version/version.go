@@ -32,10 +32,23 @@ func Format(version, buildDate string) string {
 		dateStr = fmt.Sprintf(" (%s)", buildDate)
 	}
 
+	if strings.Contains(version, "-ghx.") {
+		return fmt.Sprintf("gh xtreme %s%s\n%s\n", version, dateStr, changelogURL(version))
+	}
 	return fmt.Sprintf("gh version %s%s\n%s\n", version, dateStr, changelogURL(version))
 }
 
 func changelogURL(version string) string {
+	if strings.Contains(version, "-ghx.") {
+		path := "https://github.com/rexovasgroup/gh"
+		r := regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[\w.]+)?$`)
+		if !r.MatchString(version) {
+			return fmt.Sprintf("%s/releases/latest", path)
+		}
+		url := fmt.Sprintf("%s/releases/tag/v%s", path, strings.TrimPrefix(version, "v"))
+		return url
+	}
+
 	path := "https://github.com/cli/cli"
 	r := regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[\w.]+)?$`)
 	if !r.MatchString(version) {
