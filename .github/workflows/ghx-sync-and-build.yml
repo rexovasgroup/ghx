@@ -1,11 +1,13 @@
 name: "ghx: Sync upstream"
 
 on:
-  push:
-    branches: [upstream]
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *"
+    # Poll cli/cli hourly so trunk tracks upstream within ~1h. GitHub can't
+    # push a parent repo's commits into a fork, so frequent polling is the
+    # sync mechanism. Runs at :23 rather than :00 — off-peak minutes start far
+    # closer to on time, since the top of the hour is the most congested slot.
+    - cron: "23 * * * *"
 
 permissions:
   contents: write
