@@ -28,15 +28,16 @@ const (
 )
 
 type authEntry struct {
-	State       authEntryState `json:"state"`
-	Error       string         `json:"error,omitempty"`
-	Active      bool           `json:"active"`
-	Host        string         `json:"host"`
-	Login       string         `json:"login"`
-	TokenSource string         `json:"tokenSource"`
-	Token       string         `json:"token,omitempty"`
-	Scopes      string         `json:"scopes,omitempty"`
-	GitProtocol string         `json:"gitProtocol"`
+	State         authEntryState `json:"state"`
+	Error         string         `json:"error,omitempty"`
+	Active        bool           `json:"active"`
+	Host          string         `json:"host"`
+	Login         string         `json:"login"`
+	AccountSource string         `json:"accountSource,omitempty"`
+	TokenSource   string         `json:"tokenSource"`
+	Token         string         `json:"token,omitempty"`
+	Scopes        string         `json:"scopes,omitempty"`
+	GitProtocol   string         `json:"gitProtocol"`
 }
 
 type authStatus struct {
@@ -67,6 +68,9 @@ func (e authEntry) String(cs *iostreams.ColorScheme) string {
 		)
 		activeStr := fmt.Sprintf("%v", e.Active)
 		sb.WriteString(fmt.Sprintf("  - Active account: %s\n", cs.Bold(activeStr)))
+		if e.Active && e.AccountSource != "" {
+			sb.WriteString(fmt.Sprintf("  - Active account selected by: %s\n", cs.Bold(e.AccountSource)))
+		}
 		sb.WriteString(fmt.Sprintf("  - Git operations protocol: %s\n", cs.Bold(e.GitProtocol)))
 		sb.WriteString(fmt.Sprintf("  - Token: %s\n", cs.Bold(e.Token)))
 
@@ -237,18 +241,21 @@ func statusRun(opts *StatusOptions) error {
 		}
 
 		var activeUser string
+		var activeUserSource string
 		gitProtocol := cfg.GitProtocol(hostname).Value
 		activeUserToken, activeUserTokenSource := authCfg.ActiveToken(hostname)
 		if authTokenWriteable(activeUserTokenSource) {
 			activeUser, _ = authCfg.ActiveUser(hostname)
+			activeUserSource = authCfg.ActiveUserSource(hostname)
 		}
 		entry := buildEntry(httpClient, buildEntryOptions{
-			active:      true,
-			gitProtocol: gitProtocol,
-			hostname:    hostname,
-			token:       activeUserToken,
-			tokenSource: activeUserTokenSource,
-			username:    activeUser,
+			active:        true,
+			gitProtocol:   gitProtocol,
+			hostname:      hostname,
+			token:         activeUserToken,
+			tokenSource:   activeUserTokenSource,
+			username:      activeUser,
+			accountSource: activeUserSource,
 		})
 		statuses.Hosts[hostname] = append(statuses.Hosts[hostname], entry)
 
@@ -353,12 +360,13 @@ func expectScopes(token string) bool {
 }
 
 type buildEntryOptions struct {
-	active      bool
-	gitProtocol string
-	hostname    string
-	token       string
-	tokenSource string
-	username    string
+	active        bool
+	gitProtocol   string
+	hostname      string
+	token         string
+	tokenSource   string
+	username      string
+	accountSource string
 }
 
 func buildEntry(httpClient *http.Client, opts buildEntryOptions) authEntry {
@@ -369,12 +377,13 @@ func buildEntry(httpClient *http.Client, opts buildEntryOptions) authEntry {
 		tokenSource = filepath.Join(config.ConfigDir(), "hosts.yml")
 	}
 	entry := authEntry{
-		Active:      opts.active,
-		Host:        opts.hostname,
-		Login:       opts.username,
-		TokenSource: tokenSource,
-		Token:       opts.token,
-		GitProtocol: opts.gitProtocol,
+		Active:        opts.active,
+		Host:          opts.hostname,
+		Login:         opts.username,
+		AccountSource: opts.accountSource,
+		TokenSource:   tokenSource,
+		Token:         opts.token,
+		GitProtocol:   opts.gitProtocol,
 	}
 
 	// If token is not writeable, then it came from an environment variable and
