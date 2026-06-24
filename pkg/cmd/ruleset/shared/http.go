@@ -2,6 +2,7 @@ package shared
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -82,6 +83,26 @@ func listRulesets(httpClient *http.Client, query string, variables map[string]in
 	}
 
 	return &res, nil
+}
+
+func GetRepoRuleset(httpClient *http.Client, repo ghrepo.Interface, databaseId string) (*RulesetREST, error) {
+	path := fmt.Sprintf("repos/%s/%s/rulesets/%s", repo.RepoOwner(), repo.RepoName(), databaseId)
+	return getRuleset(httpClient, repo.RepoHost(), path)
+}
+
+func GetOrgRuleset(httpClient *http.Client, orgLogin string, databaseId string, host string) (*RulesetREST, error) {
+	path := fmt.Sprintf("orgs/%s/rulesets/%s", orgLogin, databaseId)
+	return getRuleset(httpClient, host, path)
+}
+
+func getRuleset(httpClient *http.Client, hostname string, path string) (*RulesetREST, error) {
+	apiClient := api.NewClientFromHTTP(httpClient)
+	result := RulesetREST{}
+	err := apiClient.REST(hostname, "GET", path, nil, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 func min(a, b int) int {
