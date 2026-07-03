@@ -6,6 +6,7 @@ An extended fork of [cli/cli](https://github.com/cli/cli) with additional featur
 
 | Feature | Since | Upstream | Shipped upstream |
 |---------|-------|----------|-----------------|
+| **Custom CA bundle** — set `GH_SSL_CERT_FILE` (or `SSL_CERT_FILE`) to verify TLS against an explicit PEM bundle, so HTTPS works behind enterprise/private CAs and in sandboxes where macOS `trustd` is unreachable. | Jun 2026 | [cli/cli#13676](https://github.com/cli/cli/issues/13676) | — |
 | **Auto-select account** — picks the right authenticated account based on the repo you're in. Supports `GH_USER` env var, `git config github.account`, and org-to-account mapping rules. | May 2026 | [cli/cli#12459](https://github.com/cli/cli/issues/12459) | — |
 | **Ruleset CRUD** — `gh ruleset create`, `update`, and `delete` commands. | May 2026 | [cli/cli#9698](https://github.com/cli/cli/issues/9698) | — |
 
