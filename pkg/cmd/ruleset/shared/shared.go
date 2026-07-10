@@ -22,7 +22,7 @@ type RulesetRequest struct {
 }
 
 type BypassActor struct {
-	ActorID    *int   `json:"actor_id"`
+	ActorID    *int64 `json:"actor_id"`
 	ActorType  string `json:"actor_type"`
 	BypassMode string `json:"bypass_mode"`
 }
@@ -41,9 +41,9 @@ func ParseBypassActor(s string) (BypassActor, error) {
 		return BypassActor{}, fmt.Errorf("invalid bypass-actor format %q, expected id:type:mode (e.g. 123:Team:always)", s)
 	}
 
-	var actorID *int
+	var actorID *int64
 	if parts[0] != "" && parts[0] != "null" {
-		id, err := strconv.Atoi(parts[0])
+		id, err := strconv.ParseInt(parts[0], 10, 64)
 		if err != nil {
 			return BypassActor{}, fmt.Errorf("invalid actor_id %q: must be an integer", parts[0])
 		}
