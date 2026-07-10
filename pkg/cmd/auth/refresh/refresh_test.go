@@ -545,3 +545,113 @@ func Test_refreshRun(t *testing.T) {
 		})
 	}
 }
+
+// Test_refreshRun_userFlag covers `gh auth refresh --user`, which lets a specific
+// account be refreshed without switching to it first, and aborts if the browser
+// login lands on a different account.
+func Test_refreshRun_userFlag(t *testing.T) {
+	tests := []struct {
+		name       string
+		username   string
+		authedUser string
+		wantErr    string
+		wantScopes []string
+		oldScopes  string
+		wantActive string
+	}{
+		{
+			name:       "unknown account errors before any auth flow",
+			username:   "ghost-user",
+			wantErr:    "not logged in to github.com as ghost-user",
+			wantActive: "active-user",
+		},
+		{
+			name:       "refreshes the targeted inactive account without switching",
+			username:   "inactive-user",
+			authedUser: "inactive-user",
+			oldScopes:  "repo, read:org",
+			wantScopes: []string{"repo", "read:org"},
+			wantActive: "active-user",
+		},
+		{
+			name:       "aborts when browser login is a different account",
+			username:   "inactive-user",
+			authedUser: "active-user",
+			wantErr:    "error refreshing credentials for inactive-user, received credentials for active-user",
+			wantActive: "active-user",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, _ := config.NewIsolatedTestConfig(t)
+			authCfg := cfg.Authentication()
+			// active-user is logged in last, so it is the stored active account;
+			// inactive-user has its own token to be refreshed.
+			_, err := authCfg.Login("github.com", "inactive-user", "inactive-token", "https", false)
+			require.NoError(t, err)
+			_, err = authCfg.Login("github.com", "active-user", "active-token", "https", false)
+			require.NoError(t, err)
+
+			aa := authArgs{}
+			opts := &RefreshOptions{
+				Hostname: "github.com",
+				Username: tt.username,
+				Config: func() (gh.Config, error) {
+					return cfg, nil
+				},
+				AuthFlow: func(_ *http.Client, _ *iostreams.IOStreams, hostname string, scopes []string, interactive bool, clipboard bool) (token, username, error) {
+					aa.hostname = hostname
+					aa.scopes = scopes
+					return token("new-token"), username(tt.authedUser), nil
+				},
+			}
+
+			ios, _, _, _ := iostreams.Test()
+			ios.SetStdinTTY(true)
+			ios.SetStdoutTTY(true)
+			opts.IO = ios
+
+			httpReg := &httpmock.Registry{}
+			httpReg.Register(
+				httpmock.REST("GET", ""),
+				func(req *http.Request) (*http.Response, error) {
+					// Old scopes are read from the *targeted* account's token, so
+					// the inactive account's token must be the one presented.
+					statusCode := 200
+					if req.Header.Get("Authorization") != "token inactive-token" {
+						statusCode = 400
+					}
+					return &http.Response{
+						Request:    req,
+						StatusCode: statusCode,
+						Body:       io.NopCloser(strings.NewReader(``)),
+						Header:     http.Header{"X-Oauth-Scopes": {tt.oldScopes}},
+					}, nil
+				},
+			)
+			opts.PlainHttpClient = func() (*http.Client, error) {
+				return &http.Client{Transport: httpReg}, nil
+			}
+			opts.Prompter = &prompter.PrompterMock{}
+
+			err = refreshRun(opts)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				// The active account must be untouched on error.
+				activeUser, _ := authCfg.ActiveUser("github.com")
+				require.Equal(t, tt.wantActive, activeUser)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.wantScopes, aa.scopes)
+			// The targeted account received the refreshed token...
+			refreshedToken, _, _ := authCfg.TokenForUser("github.com", "inactive-user")
+			require.Equal(t, "new-token", refreshedToken)
+			// ...and the active account was not changed.
+			activeUser, _ := authCfg.ActiveUser("github.com")
+			require.Equal(t, tt.wantActive, activeUser)
+		})
+	}
+}
