@@ -113,18 +113,29 @@ jobs:
               }
             }
 
-      - name: Run tests
+      - name: Set up Go
         if: steps.rebase.outputs.status == 'success'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
 
-      - name: Test patched code
+      # Gate the publish on a real build + tests of the patched packages. A rebase
+      # can apply our patches cleanly yet still break compilation when upstream
+      # changes a type our code depends on (e.g. cli/cli#13403 switching IDs to
+      # int64), so a full `go build ./...` is the key check; tests cover
+      # behavioural regressions in the areas we patch.
+      - name: Verify build and patched tests
         if: steps.rebase.outputs.status == 'success'
-        run: go test ./internal/config/...
+        run: |
+          go build ./...
+          go test ./internal/config/... ./internal/gh/... ./pkg/cmd/auth/... ./pkg/cmd/ruleset/... ./pkg/cmd/version/...
 
       - name: Publish signed sync (Git Data API)
-        if: steps.rebase.outputs.status == 'success'
+        # Only publish when the rebase succeeded AND the build/test gate above
+        # passed. The explicit success() is required: a custom `if` otherwise
+        # replaces the default success() check, which would publish even on a
+        # failed build (how a non-compiling trunk shipped before).
+        if: steps.rebase.outputs.status == 'success' && success()
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
