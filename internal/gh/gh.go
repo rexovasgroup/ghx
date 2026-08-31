@@ -164,6 +164,12 @@ type AuthConfig interface {
 	// This will not be accurate if the oauth token is set from an environment variable.
 	ActiveUser(hostname string) (username string, err error)
 
+	// ActiveUserSource describes which resolution tier selected the active user
+	// (e.g. GH_USER, git config, or account_rules). It returns an empty string
+	// when the account is the plainly stored active user, so callers can surface
+	// only surprising, override-driven selections.
+	ActiveUserSource(hostname string) string
+
 	// Hosts retrieves a list of known hosts.
 	Hosts() []string
 

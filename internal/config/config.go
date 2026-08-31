@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -327,10 +329,186 @@ func (c *AuthConfig) TokenFromKeyringForUser(hostname, username string) (string,
 	return keyring.Get(keyringServiceName(hostname), username)
 }
 
+// Overridable for testing.
+var (
+	gitConfigAccountFunc       = gitConfigAccount
+	gitConfigAccountGlobalFunc = gitConfigAccountGlobal
+	remoteOriginOwnerFunc      = remoteOriginOwner
+)
+
 // ActiveUser will retrieve the username for the active user at the given hostname.
 // This will not be accurate if the oauth token is set from an environment variable.
+//
+// Resolution order (first authenticated match wins). Directory-specific signals
+// are intentionally ranked above the global default so that context-aware
+// auto-selection works without needing `gh auth switch`:
+//  1. GH_USER env var — explicit override for scripts/CI
+//  2. Directory-specific git config github.account — a value set per-repo
+//     (`git config --local`) or for a directory tree (`includeIf "gitdir:…"`),
+//     detected as the merged value differing from the global default.
+//  3. Remote origin owner → account_rules mapping in gh config — per-org auto-select
+//  4. Global git config github.account — the user's default account
+//  5. Stored active user (set by `gh auth switch`) — last resort
+//
+// Distinguishing the directory-specific value from the plain global default is
+// what keeps a global default from overriding the smarter account_rules match,
+// while still honoring per-repo and per-directory-tree git config.
 func (c *AuthConfig) ActiveUser(hostname string) (string, error) {
-	return c.cfg.Get([]string{hostsKey, hostname, userKey})
+	user, _, err := c.activeUserWithSource(hostname)
+	return user, err
+}
+
+// ActiveUserSource describes which resolution tier selected the active user for
+// the given hostname. It returns a non-empty, human-readable string only when an
+// override (GH_USER, git config, or account_rules) selected the account — i.e.
+// the cases where the active account differs from a plain `gh auth switch`. When
+// the account is the plainly stored active user (or none is resolved), it returns
+// an empty string. This lets callers surface *why* a surprising account is active.
+func (c *AuthConfig) ActiveUserSource(hostname string) string {
+	_, source, _ := c.activeUserWithSource(hostname)
+	return source
+}
+
+// activeUserWithSource resolves the active user and, alongside it, a description
+// of which precedence tier selected it. The source is empty for the default
+// stored-user tier so that only overrides are surfaced to users.
+func (c *AuthConfig) activeUserWithSource(hostname string) (string, string, error) {
+	users := c.UsersForHost(hostname)
+
+	// 1. GH_USER env var
+	if envUser := os.Getenv("GH_USER"); envUser != "" {
+		if slices.Contains(users, envUser) {
+			return envUser, "GH_USER environment variable", nil
+		}
+	}
+
+	// 2. Directory-specific git config github.account. The merged value differs
+	// from the global default only when something more specific set it — a
+	// repo-local config or an `includeIf "gitdir:…"` rule for a directory tree.
+	globalAccount := gitConfigAccountGlobalFunc()
+	if mergedAccount := gitConfigAccountFunc(); mergedAccount != "" && mergedAccount != globalAccount {
+		if slices.Contains(users, mergedAccount) {
+			return mergedAccount, "git config github.account (directory-specific)", nil
+		}
+	}
+
+	// 3. Remote origin owner → account_rules
+	if owner := remoteOriginOwnerFunc(); owner != "" {
+		if account := c.accountRuleMatch(hostname, owner); account != "" {
+			if slices.Contains(users, account) {
+				return account, fmt.Sprintf("account_rules (owner %q)", owner), nil
+			}
+		}
+	}
+
+	// 4. Global git config github.account (default account)
+	if globalAccount != "" {
+		if slices.Contains(users, globalAccount) {
+			return globalAccount, "git config --global github.account", nil
+		}
+	}
+
+	// 5. Stored active user (the unsurprising default — no source surfaced)
+	user, err := c.cfg.Get([]string{hostsKey, hostname, userKey})
+	return user, "", err
+}
+
+// gitConfigAccount reads the effective (merged) "github.account" from git config,
+// which includes repo-local config and any matching `includeIf "gitdir:…"` rule.
+// Returns empty string if not set, not in a repo, or git is unavailable.
+func gitConfigAccount() string {
+	return gitConfigAccountScoped()
+}
+
+// gitConfigAccountGlobal reads "github.account" from the global git config only,
+// which excludes repo-local config and gitdir includes — i.e. the plain default.
+// Returns empty string if not set or git is unavailable.
+func gitConfigAccountGlobal() string {
+	return gitConfigAccountScoped("--global")
+}
+
+// gitConfigAccountScoped reads "github.account" from git config. With no scope it
+// returns the merged value; passing "--global" restricts it to the global file so
+// the directory-specific value can be distinguished from the plain default.
+func gitConfigAccountScoped(scope ...string) string {
+	args := append([]string{"config"}, scope...)
+	args = append(args, "github.account")
+	cmd := exec.Command("git", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// remoteOriginOwner extracts the owner/org from the current repo's remote origin URL.
+// Supports both SSH (git@github.com:owner/repo.git) and HTTPS (https://github.com/owner/repo.git).
+// Returns empty string if not in a git repo or origin is not set.
+func remoteOriginOwner() string {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return ownerFromRemoteURL(strings.TrimSpace(string(out)))
+}
+
+// ownerFromRemoteURL parses the owner/org from a git remote URL.
+func ownerFromRemoteURL(rawURL string) string {
+	// SSH: git@github.com:owner/repo.git or ssh://git@github.com/owner/repo.git
+	if strings.Contains(rawURL, ":") && !strings.Contains(rawURL, "://") {
+		// git@github.com:owner/repo.git → owner/repo.git
+		parts := strings.SplitN(rawURL, ":", 2)
+		if len(parts) == 2 {
+			path := strings.TrimSuffix(parts[1], ".git")
+			segments := strings.SplitN(path, "/", 2)
+			if len(segments) >= 1 {
+				return segments[0]
+			}
+		}
+		return ""
+	}
+
+	// HTTPS or ssh:// URL
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	path := strings.TrimPrefix(u.Path, "/")
+	path = strings.TrimSuffix(path, ".git")
+	segments := strings.SplitN(path, "/", 2)
+	if len(segments) >= 1 {
+		return segments[0]
+	}
+	return ""
+}
+
+const accountRulesKey = "account_rules"
+
+// accountRuleMatch looks up the owner in account_rules config and returns the
+// matching account. account_rules is an owner → account map stored as a
+// top-level config key (not under hosts). A map (rather than a list) is used
+// because the gh config library can only traverse mapping nodes by key:
+//
+//	account_rules:
+//	  MyOrg: work-user
+//	  PersonalOrg: personal-user
+//
+// Owner matching is case-insensitive so it tolerates casing differences between
+// the rule and the repo's remote URL.
+func (c *AuthConfig) accountRuleMatch(hostname, owner string) string {
+	owners, err := c.cfg.Keys([]string{accountRulesKey})
+	if err != nil {
+		return ""
+	}
+	for _, ruleOwner := range owners {
+		if strings.EqualFold(ruleOwner, owner) {
+			if account, err := c.cfg.Get([]string{accountRulesKey, ruleOwner}); err == nil {
+				return account
+			}
+		}
+	}
+	return ""
 }
 
 func (c *AuthConfig) Hosts() []string {
