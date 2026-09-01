@@ -41,6 +41,7 @@
 vendor/
 !.github/codeql/tests/**/vendor/
 gh
+/gh
 
 # Test coverage artifacts
 coverage.out
