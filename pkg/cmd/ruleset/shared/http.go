@@ -7,6 +7,7 @@ import (
 
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/ghrepo"
+	"github.com/cli/cli/v2/internal/safeurl"
 )
 
 type RulesetResponse struct {
@@ -82,6 +83,32 @@ func listRulesets(httpClient *http.Client, query string, variables map[string]an
 	}
 
 	return &res, nil
+}
+
+func GetRepoRuleset(httpClient *http.Client, repo ghrepo.Interface, databaseId string) (*RulesetREST, error) {
+	path, err := safeurl.JoinPath("repos", repo.RepoOwner(), repo.RepoName(), "rulesets", databaseId)
+	if err != nil {
+		return nil, err
+	}
+	return getRuleset(httpClient, repo.RepoHost(), path)
+}
+
+func GetOrgRuleset(httpClient *http.Client, orgLogin string, databaseId string, host string) (*RulesetREST, error) {
+	path, err := safeurl.JoinPath("orgs", orgLogin, "rulesets", databaseId)
+	if err != nil {
+		return nil, err
+	}
+	return getRuleset(httpClient, host, path)
+}
+
+func getRuleset(httpClient *http.Client, hostname string, path safeurl.SafeURL) (*RulesetREST, error) {
+	apiClient := api.NewClientFromHTTP(httpClient)
+	result := RulesetREST{}
+	err := apiClient.REST(hostname, "GET", path.String(), nil, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 func rulesetsQuery(org bool) string {
