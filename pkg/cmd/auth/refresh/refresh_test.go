@@ -584,7 +584,7 @@ func Test_refreshRun_userFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, _ := config.NewIsolatedTestConfig(t)
+			cfg, _ := config.NewIsolatedTestConfig(t, "")
 			authCfg := cfg.Authentication()
 			// active-user is logged in last, so it is the stored active account;
 			// inactive-user has its own token to be refreshed.
