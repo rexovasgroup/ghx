@@ -1,15 +1,18 @@
 package login
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/git"
 	"github.com/cli/cli/v2/internal/browser"
 	"github.com/cli/cli/v2/internal/gh"
+	"github.com/cli/cli/v2/internal/ghappauth"
 	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/pkg/cmd/auth/shared"
 	"github.com/cli/cli/v2/pkg/cmd/auth/shared/gitcredentials"
@@ -40,6 +43,12 @@ type LoginOptions struct {
 	InsecureStorage  bool
 	SkipSSHKeyPrompt bool
 	Clipboard        bool
+
+	// GitHubApp logs in via a GitHub App device flow that issues short-lived,
+	// auto-refreshing user tokens instead of gh's long-lived OAuth token.
+	GitHubApp bool
+	// ClientID overrides the built-in GitHub App client ID (bring your own app).
+	ClientID string
 }
 
 func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Command {
@@ -106,6 +115,12 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
 
 			# Authenticate with specific host
 			$ gh auth login --hostname enterprise.internal
+
+			# Log in with short-lived, auto-refreshing GitHub App user tokens (ghx)
+			$ gh auth login --github-app
+
+			# Same, but with your own GitHub App (bring your own app)
+			$ gh auth login --github-app --client-id Iv23xxxxxxxxxxxxxxxx
 		`),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if tokenStdin && opts.Web {
@@ -162,6 +177,10 @@ func NewCmdLogin(f *cmdutil.Factory, runF func(*LoginOptions) error) *cobra.Comm
 	cmd.Flags().BoolVar(&opts.InsecureStorage, "insecure-storage", false, "Save authentication credentials in plain text instead of credential store")
 	cmd.Flags().BoolVar(&opts.SkipSSHKeyPrompt, "skip-ssh-key", false, "Skip generate/upload SSH key prompt")
 
+	// ghx: short-lived GitHub App user tokens.
+	cmd.Flags().BoolVar(&opts.GitHubApp, "github-app", false, "Log in via a GitHub App device flow that issues short-lived, auto-refreshing user tokens")
+	cmd.Flags().StringVar(&opts.ClientID, "client-id", "", "GitHub App client ID to use with --github-app (overrides the built-in default; see GHX_AUTH_CLIENT_ID)")
+
 	return cmd
 }
 
@@ -200,6 +219,10 @@ func loginRun(opts *LoginOptions) error {
 	httpClient, err := opts.HttpClient()
 	if err != nil {
 		return err
+	}
+
+	if opts.GitHubApp {
+		return githubAppLoginRun(opts, authCfg, plainHTTPClient, hostname)
 	}
 
 	if opts.Token != "" {
@@ -242,6 +265,43 @@ func loginRun(opts *LoginOptions) error {
 		SkipSSHKeyPrompt: opts.SkipSSHKeyPrompt,
 		CopyToClipboard:  opts.Clipboard,
 	})
+}
+
+// githubAppLoginRun authenticates via the GitHub App device flow (short-lived
+// user tokens). The access token is stored through gh's normal auth config so
+// every command uses it; the refresh token + expiry are stored in a sidecar
+// keyring entry managed by the ghappauth package.
+func githubAppLoginRun(opts *LoginOptions, authCfg gh.AuthConfig, httpClient *http.Client, hostname string) error {
+	// Client ID precedence: --client-id flag > GHX_AUTH_CLIENT_ID env > default.
+	// Config-file BYO is a follow-up.
+	clientID := ghappauth.ResolveClientID(opts.ClientID, "")
+
+	creds, err := ghappauth.DeviceFlow(context.Background(), httpClient, hostname, clientID, opts.IO.ErrOut)
+	if err != nil {
+		return err
+	}
+
+	username, err := shared.GetCurrentLogin(httpClient, hostname, creds.AccessToken)
+	if err != nil {
+		return fmt.Errorf("error retrieving current user: %w", err)
+	}
+
+	gitProtocol := strings.ToLower(opts.GitProtocol)
+	if gitProtocol == "" {
+		gitProtocol = "https"
+	}
+
+	if _, err := authCfg.Login(hostname, username, creds.AccessToken, gitProtocol, !opts.InsecureStorage); err != nil {
+		return err
+	}
+	if err := ghappauth.StoreCredentials(hostname, username, creds); err != nil {
+		return fmt.Errorf("failed to store refresh credentials: %w", err)
+	}
+
+	cs := opts.IO.ColorScheme()
+	fmt.Fprintf(opts.IO.ErrOut, "%s Logged in as %s via GitHub App (short-lived token, expires %s; auto-refreshes)\n",
+		cs.SuccessIcon(), cs.Bold(username), creds.ExpiresAt.Format(time.Kitchen))
+	return nil
 }
 
 func promptForHostname(opts *LoginOptions) (string, error) {

@@ -1,11 +1,15 @@
 package token
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/internal/gh"
+	"github.com/cli/cli/v2/internal/ghappauth"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/spf13/cobra"
@@ -92,9 +96,55 @@ func tokenRun(opts *TokenOptions) error {
 		return errors.New(errMsg)
 	}
 
+	// ghx: if this account was logged in via the GitHub App flow, its token is
+	// short-lived. Rotate it when expired before printing, so callers (and the
+	// broker/export use case) always get a valid token. Refreshing also
+	// invalidates the previous token server-side. Best-effort: on any failure we
+	// fall back to the stored token rather than erroring.
+	if refreshed, ok := maybeRefreshAppToken(authCfg, hostname, opts.Username); ok {
+		val = refreshed
+	}
+
 	if val != "" {
 		fmt.Fprintf(opts.IO.Out, "%s\n", val)
 	}
 
 	return nil
+}
+
+// maybeRefreshAppToken rotates a short-lived GitHub App token for the target
+// account if one is stored and expired. It only acts on the active account
+// (empty username, or a username matching the active user) to avoid switching
+// the active account as a side effect. Returns the new token and true on a
+// successful rotation.
+func maybeRefreshAppToken(authCfg gh.AuthConfig, hostname, username string) (string, bool) {
+	user := username
+	if user == "" {
+		var err error
+		if user, err = authCfg.ActiveUser(hostname); err != nil || user == "" {
+			return "", false
+		}
+	} else if active, err := authCfg.ActiveUser(hostname); err != nil || active != user {
+		// Non-active account: skip to avoid re-activating a different user.
+		return "", false
+	}
+
+	creds, err := ghappauth.LoadCredentials(hostname, user)
+	if err != nil || !creds.Expired() {
+		return "", false
+	}
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	refreshed, err := ghappauth.Refresh(context.Background(), httpClient, hostname, creds.ClientID, creds.RefreshToken)
+	if err != nil {
+		return "", false
+	}
+
+	if _, err := authCfg.Login(hostname, user, refreshed.AccessToken, "", true); err != nil {
+		return "", false
+	}
+	if err := ghappauth.StoreCredentials(hostname, user, refreshed); err != nil {
+		return "", false
+	}
+	return refreshed.AccessToken, true
 }
