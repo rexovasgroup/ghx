@@ -31,6 +31,7 @@ type RefreshOptions struct {
 	MainExecutable string
 
 	Hostname     string
+	Username     string
 	Scopes       []string
 	RemoveScopes []string
 	ResetScopes  bool
@@ -72,9 +73,10 @@ func NewCmdRefresh(f *cmdutil.Factory, runF func(*RefreshOptions) error) *cobra.
 			The %[1]s--reset-scopes%[1]s flag resets the scopes for your gh credentials to
 			the default set of scopes for your auth flow.
 
-			If you have multiple accounts in %[1]sgh auth status%[1]s and want to refresh the credentials for an
-			inactive account, you will have to use %[1]sgh auth switch%[1]s to that account first before using
-			this command, and then switch back when you are done.
+			If you have multiple accounts in %[1]sgh auth status%[1]s, use the %[1]s--user%[1]s flag to refresh
+			the credentials for a specific account without having to switch to it first. The browser
+			login must be completed as that same account, otherwise the command aborts rather than
+			applying the scopes to the wrong account.
 
 			For more information on OAuth scopes, see
 			<https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps/>.
@@ -94,6 +96,9 @@ func NewCmdRefresh(f *cmdutil.Factory, runF func(*RefreshOptions) error) *cobra.
 
 			# Open a browser to re-authenticate and copy one-time OAuth code to clipboard
 			$ gh auth refresh --clipboard
+
+			# Refresh credentials for a specific account without switching to it
+			$ gh auth refresh --user monalisa --scopes read:project
 		`),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Interactive = opts.IO.CanPrompt()
@@ -111,6 +116,7 @@ func NewCmdRefresh(f *cmdutil.Factory, runF func(*RefreshOptions) error) *cobra.
 	}
 
 	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "h", "", "The GitHub host to use for authentication")
+	cmd.Flags().StringVarP(&opts.Username, "user", "u", "", "The account to refresh authentication for")
 	cmd.Flags().StringSliceVarP(&opts.Scopes, "scopes", "s", nil, "Additional authentication scopes for gh to have")
 	cmd.Flags().StringSliceVarP(&opts.RemoveScopes, "remove-scopes", "r", nil, "Authentication scopes to remove from gh")
 	cmd.Flags().BoolVar(&opts.ResetScopes, "reset-scopes", false, "Reset authentication scopes to the default minimum set of scopes")
@@ -123,6 +129,19 @@ func NewCmdRefresh(f *cmdutil.Factory, runF func(*RefreshOptions) error) *cobra.
 	cmd.Flags().BoolVarP(&opts.InsecureStorage, "insecure-storage", "", false, "Save authentication credentials in plain text instead of credential store")
 
 	return cmd
+}
+
+// targetUserToken returns the stored token used to read the current scopes
+// before refreshing. When a specific user is targeted we read that user's token
+// directly so scopes are preserved for the right account; otherwise we fall back
+// to the active token (original behavior).
+func targetUserToken(authCfg gh.AuthConfig, hostname, user string) string {
+	if user != "" {
+		token, _, _ := authCfg.TokenForUser(hostname, user)
+		return token
+	}
+	token, _ := authCfg.ActiveToken(hostname)
+	return token
 }
 
 func refreshRun(opts *RefreshOptions) error {
@@ -158,6 +177,23 @@ func refreshRun(opts *RefreshOptions) error {
 		return fmt.Errorf("not logged in to %s. use 'gh auth login' to authenticate with this host", hostname)
 	}
 
+	// targetUser is the account whose credentials we're refreshing. When --user
+	// is given we honor it explicitly so the scopes land on that account rather
+	// than on whichever account happens to be active. Otherwise we fall back to
+	// the active account (original behavior).
+	targetUser := opts.Username
+	if targetUser != "" && !slices.Contains(authCfg.UsersForHost(hostname), targetUser) {
+		return fmt.Errorf("not logged in to %s as %s. Use 'gh auth login' to authenticate with this account", hostname, targetUser)
+	}
+
+	// When targeting a specific account, remember which account is currently
+	// active so we can restore it afterward: refreshing an inactive account must
+	// not silently change which account is active.
+	var previousActiveUser string
+	if targetUser != "" {
+		previousActiveUser, _ = authCfg.ActiveUser(hostname)
+	}
+
 	if src, writeable := shared.AuthTokenWriteable(authCfg, hostname); !writeable {
 		fmt.Fprintf(opts.IO.ErrOut, "The value of the %s environment variable is being used for authentication.\n", src)
 		fmt.Fprint(opts.IO.ErrOut, "To refresh credentials stored in GitHub CLI, first clear the value from the environment.\n")
@@ -167,7 +203,8 @@ func refreshRun(opts *RefreshOptions) error {
 	additionalScopes := set.NewStringSet()
 
 	if !opts.ResetScopes {
-		if oldToken, _ := authCfg.ActiveToken(hostname); oldToken != "" {
+		oldToken := targetUserToken(authCfg, hostname, targetUser)
+		if oldToken != "" {
 			if oldScopes, err := shared.GetScopes(plainHTTPClient, hostname, oldToken); err == nil {
 				for s := range strings.SplitSeq(oldScopes, ",") {
 					s = strings.TrimSpace(s)
@@ -205,12 +242,24 @@ func refreshRun(opts *RefreshOptions) error {
 	if err != nil {
 		return err
 	}
-	activeUser, _ := authCfg.ActiveUser(hostname)
-	if activeUser != "" && username(activeUser) != authedUser {
-		return fmt.Errorf("error refreshing credentials for %s, received credentials for %s, did you use the correct account in the browser?", activeUser, authedUser)
+	expectedUser := targetUser
+	if expectedUser == "" {
+		expectedUser, _ = authCfg.ActiveUser(hostname)
+	}
+	if expectedUser != "" && username(expectedUser) != authedUser {
+		return fmt.Errorf("error refreshing credentials for %s, received credentials for %s, did you use the correct account in the browser?", expectedUser, authedUser)
 	}
 	if _, err := authCfg.Login(hostname, string(authedUser), string(authedToken), "", !opts.InsecureStorage); err != nil {
 		return err
+	}
+
+	// Login activates the account it just wrote. If we refreshed an inactive
+	// account via --user, restore the previously active account so the refresh
+	// is non-switching.
+	if previousActiveUser != "" && previousActiveUser != string(authedUser) {
+		if err := authCfg.SwitchUser(hostname, previousActiveUser); err != nil {
+			return fmt.Errorf("refreshed credentials for %s but failed to restore active account %s: %w", authedUser, previousActiveUser, err)
+		}
 	}
 
 	cs := opts.IO.ColorScheme()
