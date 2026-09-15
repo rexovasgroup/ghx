@@ -1,0 +1,37 @@
+# PLANTED FILE — owned by the org policy repository (rexovasgroup/.github), where
+# this template lives. It is byte-identical in every DelegateHub-governed
+# repository and LOCKED by policy: DG-003 fails any pull request whose copy
+# differs from the template, DG-004 seeds it where it is missing and blocks its
+# removal. Do not edit it in this repository — on a same-repo pull request GitHub
+# runs the PR's version of a workflow, so a repo-owned copy would be no gate at
+# all. Change what it does by changing the template in the policy repository; the
+# policy engine replants it everywhere.
+#
+# It carries no repository-specific value: the producer asks the hub which entry
+# belongs to the caller (it presents the GitHub OIDC token it already gets) and
+# learns its roots, its plan role and its lane from the answer.
+name: DelegateHub preview
+
+on:
+  pull_request:
+
+# Concurrency groups are scoped to the repository, so this is one preview at a
+# time per pull request. A superseded preview plan has no value — cancel it.
+concurrency:
+  group: delegatehub-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  preview:
+    name: Preview
+    # Only this job's own permissions: read the tree, present the OIDC token that
+    # identifies the repository to the hub, and comment the plan on the PR.
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: rexovasgroup/delegate-workflows/.github/workflows/delegate-producer.yml@main
+    with:
+      mode: preview
