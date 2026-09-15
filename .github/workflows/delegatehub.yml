@@ -1,0 +1,41 @@
+# PLANTED FILE — owned by the org policy repository (rexovasgroup/.github), where
+# this template lives. It is byte-identical in every DelegateHub-governed
+# repository and LOCKED by policy: DG-003 fails any pull request whose copy
+# differs from the template, DG-004 seeds it where it is missing and blocks its
+# removal. Do not edit it in this repository — no pull request may change what
+# runs under the plan role. Change what it does by changing the template in the
+# policy repository; the policy engine replants it everywhere.
+#
+# It carries no repository-specific value: the producer asks the hub which entry
+# belongs to the caller (it presents the GitHub OIDC token it already gets) and
+# learns its roots, its plan role and its lane from the answer. A merge plans
+# every root changed since that root's own last applied commit and mints one
+# request per non-empty plan. There is no scheduled run and no manual dispatch:
+# recovery from a failed apply is a person re-running the last run, which mints
+# a fresh request.
+name: DelegateHub
+
+on:
+  push:
+    branches: [main]
+
+# Concurrency groups are scoped to the repository, so this is one mint at a time
+# for this repository. Never cancel one: a run in flight may already hold a
+# request the hub has recorded.
+concurrency:
+  group: delegatehub-mint
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  mint:
+    name: Mint
+    # Only this job's own permissions: read the tree and present the OIDC token
+    # that identifies the repository to the hub. Nothing is applied from CI.
+    permissions:
+      contents: read
+      id-token: write
+    uses: rexovasgroup/delegate-workflows/.github/workflows/delegate-producer.yml@main
+    with:
+      mode: mint
