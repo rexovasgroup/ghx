@@ -1,0 +1,200 @@
+name: "ghx: Sync upstream"
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Poll cli/cli hourly so trunk tracks upstream within ~1h. GitHub can't
+    # push a parent repo's commits into a fork, so frequent polling is the
+    # sync mechanism. Runs at :23 rather than :00 — off-peak minutes start far
+    # closer to on time, since the top of the hour is the most congested slot.
+    - cron: "23 * * * *"
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.OSS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OSS_APP_PRIVATE_KEY }}
+          owner: rexovasgroup
+
+      - name: Check out trunk
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: trunk
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git
+        run: |
+          git config user.name "rexovas-open-source[bot]"
+          git config user.email "3902638+rexovas-open-source[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/cli/cli.git || true
+          git fetch upstream trunk
+
+      - name: Rebase trunk onto upstream
+        id: rebase
+        run: |
+          # Skip entirely when upstream is already contained in trunk: a plain
+          # rebase still "succeeds" with nothing to do, which would re-sign and
+          # force-push every ghx commit (new SHAs) on every poll. Only do work
+          # when upstream actually advanced.
+          if git merge-base --is-ancestor upstream/trunk HEAD; then
+            echo "No new upstream commits — nothing to sync."
+            echo "status=nochange" >> "$GITHUB_OUTPUT"
+          elif git rebase upstream/trunk; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue on conflict
+        if: steps.rebase.outputs.status == 'conflict'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'rebase-conflict',
+              state: 'open'
+            });
+            if (existing.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Rebase conflict: trunk needs manual resolution',
+                body: `The automated rebase of \`trunk\` onto upstream failed due to conflicts.\n\nPlease resolve manually:\n\`\`\`bash\ngit fetch upstream trunk\ngit checkout trunk\ngit rebase upstream/trunk\n# resolve conflicts\ngit push --force-with-lease\n\`\`\``,
+                labels: ['rebase-conflict']
+              });
+            }
+
+      - name: Check for upstream changes to patched files
+        if: steps.rebase.outputs.status == 'success'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const patchedFiles = [
+              'internal/config/config.go',
+              'internal/config/config_test.go'
+            ];
+            const upstreamChanges = execSync(
+              'git diff HEAD~1 HEAD --name-only', { encoding: 'utf8' }
+            ).trim().split('\n');
+            const overlapping = patchedFiles.filter(f => upstreamChanges.includes(f));
+            if (overlapping.length > 0) {
+              const existing = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: 'patch-overlap',
+                state: 'open'
+              });
+              if (existing.data.length === 0) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: 'Upstream modified patched files — review needed',
+                  body: `Upstream changed files that contain ghx patches. The rebase succeeded but the changes should be reviewed.\n\n**Overlapping files:**\n${overlapping.map(f => '- \`' + f + '\`').join('\n')}\n\nPlease verify our patches still behave correctly.`,
+                  labels: ['patch-overlap']
+                });
+              }
+            }
+
+      - name: Run tests
+        if: steps.rebase.outputs.status == 'success'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Test patched code
+        if: steps.rebase.outputs.status == 'success'
+        run: go test ./internal/config/...
+
+      - name: Publish signed sync (Git Data API)
+        if: steps.rebase.outputs.status == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          REPO="${{ github.repository }}"
+
+          # Re-create each ghx patch commit entirely through the Git Data API so
+          # GitHub signs it with the app identity, materialising every object
+          # server-side (a local rebase's trees/blobs exist only on the runner,
+          # which is why a naive API commit hits "Tree SHA does not exist (422)").
+          #
+          # NOTE: object creation (blobs/trees/commits) is exempt from the
+          # workflows-permission guard, but the trunk *ref* update below is NOT —
+          # updating a ref whose tip changes .github/workflows/ requires the app
+          # to hold `workflows: write` (X-Accepted-GitHub-Permissions:
+          # contents=write,workflows=write), exactly like `git push`. The
+          # rexovas-open-source app must have Workflows: Read and write granted.
+          COMMITS=$(git rev-list --reverse upstream/trunk..HEAD)
+          PARENT_COMMIT=$(git rev-parse upstream/trunk)
+          PARENT_TREE=$(git rev-parse "upstream/trunk^{tree}")
+
+          for COMMIT in $COMMITS; do
+            MESSAGE=$(git log -1 --pretty=%B "$COMMIT")
+            COMMIT_PARENT=$(git rev-parse "${COMMIT}^")
+
+            # Build this commit's tree from the previous tree plus only the files
+            # this commit changed (raw diff format: ":oldmode newmode oldsha newsha status\tpath").
+            ENTRIES="[]"
+            while IFS=$'\t' read -r META FILE; do
+              [ -z "$META" ] && continue
+              OLDMODE=$(printf '%s' "$META" | awk '{print substr($1,2)}')
+              NEWMODE=$(printf '%s' "$META" | awk '{print $2}')
+              NEWSHA=$(printf '%s' "$META" | awk '{print $4}')
+              STATUS=$(printf '%s' "$META" | awk '{print $5}')
+              if [ "$STATUS" = "D" ]; then
+                ENTRY=$(jq -nc --arg p "$FILE" --arg m "$OLDMODE" \
+                  '{path:$p, mode:$m, type:"blob", sha:null}')
+              else
+                CONTENT=$(git cat-file blob "$NEWSHA" | base64 | tr -d '\n')
+                BLOBSHA=$(gh api "repos/${REPO}/git/blobs" \
+                  -f "content=${CONTENT}" -f "encoding=base64" --jq '.sha')
+                ENTRY=$(jq -nc --arg p "$FILE" --arg m "$NEWMODE" --arg s "$BLOBSHA" \
+                  '{path:$p, mode:$m, type:"blob", sha:$s}')
+              fi
+              ENTRIES=$(jq -c --argjson e "$ENTRY" '. + [$e]' <<<"$ENTRIES")
+            done < <(git diff-tree -r --no-commit-id "$COMMIT_PARENT" "$COMMIT")
+
+            NEW_TREE=$(jq -nc --arg b "$PARENT_TREE" --argjson t "$ENTRIES" \
+              '{base_tree:$b, tree:$t}' \
+              | gh api "repos/${REPO}/git/trees" --method POST --input - --jq '.sha')
+
+            # Create the commit — GitHub auto-signs with the app identity.
+            PARENT_COMMIT=$(gh api "repos/${REPO}/git/commits" --method POST \
+              -f "message=${MESSAGE}" \
+              -f "tree=${NEW_TREE}" \
+              -f "parents[]=${PARENT_COMMIT}" \
+              --jq '.sha')
+            PARENT_TREE="$NEW_TREE"
+            echo "Signed: $(git log -1 --pretty=%s "$COMMIT") -> ${PARENT_COMMIT}"
+          done
+
+          # Point trunk at the final signed commit. Requires the app to hold
+          # `workflows: write` (see NOTE above) — otherwise this 403s with
+          # "Resource not accessible by integration".
+          gh api "repos/${REPO}/git/refs/heads/trunk" --method PATCH \
+            -f "sha=${PARENT_COMMIT}" -F "force=true"
+
+          # Keep a dated snapshot branch (also requires workflows: write since
+          # its tip carries the same workflow changes).
+          SYNC_BRANCH="ghx/$(date +%F)"
+          gh api "repos/${REPO}/git/refs" --method POST \
+            -f "ref=refs/heads/${SYNC_BRANCH}" -f "sha=${PARENT_COMMIT}" 2>/dev/null \
+            || gh api "repos/${REPO}/git/refs/heads/${SYNC_BRANCH}" --method PATCH \
+                 -f "sha=${PARENT_COMMIT}" -F "force=true"
