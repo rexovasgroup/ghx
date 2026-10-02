@@ -49,3 +49,5 @@ lcov.info
 # CodeQL scratch database (regenerated locally)
 codeql-db/
 *.sarif
+# ghx internal docs — keep out of public repo
+GHX_*.md
