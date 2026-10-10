@@ -13,12 +13,12 @@ import (
 // Request body types for POST/PUT endpoints
 
 type RulesetRequest struct {
-	Name         string                 `json:"name"`
-	Target       string                 `json:"target"`
-	Enforcement  string                 `json:"enforcement"`
-	Conditions   map[string]interface{} `json:"conditions,omitempty"`
-	BypassActors []BypassActor          `json:"bypass_actors,omitempty"`
-	Rules        []RuleRequest          `json:"rules"`
+	Name         string         `json:"name"`
+	Target       string         `json:"target"`
+	Enforcement  string         `json:"enforcement"`
+	Conditions   map[string]any `json:"conditions,omitempty"`
+	BypassActors []BypassActor  `json:"bypass_actors,omitempty"`
+	Rules        []RuleRequest  `json:"rules"`
 }
 
 type BypassActor struct {
@@ -28,8 +28,8 @@ type BypassActor struct {
 }
 
 type RuleRequest struct {
-	Type       string                 `json:"type"`
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Type       string         `json:"type"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 var ValidEnforcements = []string{"active", "evaluate", "disabled"}
@@ -58,7 +58,7 @@ func ParseBypassActor(s string) (BypassActor, error) {
 }
 
 func BuildPullRequestRule(approvals int, dismissStale, codeOwner, lastPush, threadResolution bool, allowedMergeMethods []string) RuleRequest {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"required_approving_review_count":   approvals,
 		"dismiss_stale_reviews_on_push":     dismissStale,
 		"require_code_owner_review":         codeOwner,
@@ -79,7 +79,7 @@ func RulesetRESTToRequest(rs *RulesetREST) *RulesetRequest {
 		Name:        rs.Name,
 		Target:      rs.Target,
 		Enforcement: rs.Enforcement,
-		Conditions:  make(map[string]interface{}),
+		Conditions:  make(map[string]any),
 		Rules:       make([]RuleRequest, 0, len(rs.Rules)),
 	}
 

@@ -193,7 +193,7 @@ func buildRequestBody(opts *CreateOptions) (io.Reader, error) {
 
 	// Conditions
 	if len(opts.IncludeRefs) > 0 || len(opts.ExcludeRefs) > 0 {
-		refName := map[string]interface{}{}
+		refName := map[string]any{}
 		if len(opts.IncludeRefs) > 0 {
 			refName["include"] = opts.IncludeRefs
 		} else {
@@ -204,7 +204,7 @@ func buildRequestBody(opts *CreateOptions) (io.Reader, error) {
 		} else {
 			refName["exclude"] = []string{}
 		}
-		req.Conditions = map[string]interface{}{
+		req.Conditions = map[string]any{
 			"ref_name": refName,
 		}
 	}
