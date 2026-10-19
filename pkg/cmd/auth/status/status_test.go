@@ -267,6 +267,31 @@ func Test_statusRun(t *testing.T) {
 			`),
 		},
 		{
+			name: "active account selected by GH_USER is surfaced",
+			opts: StatusOptions{Hostname: "github.com", Active: true},
+			env:  map[string]string{"GH_USER": "monalisa"},
+			cfgStubs: func(t *testing.T, c gh.Config) {
+				// hubot is logged in last, so it is the stored active account, but
+				// GH_USER overrides the selection to monalisa.
+				login(t, c, "github.com", "monalisa", "gho_abc123", "https")
+				login(t, c, "github.com", "hubot", "gho_def456", "https")
+			},
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", ""),
+					httpmock.WithHeader(httpmock.ScopesResponder("repo,read:org"), "X-Oauth-Scopes", "repo, read:org"))
+			},
+			wantOut: heredoc.Doc(`
+				github.com
+				  ✓ Logged in to github.com account monalisa (GH_CONFIG_DIR/hosts.yml)
+				  - Active account: true
+				  - Active account selected by: GH_USER environment variable
+				  - Git operations protocol: https
+				  - Token: gho_******
+				  - Token scopes: 'repo', 'read:org'
+			`),
+		},
+		{
 			name:     "token from env",
 			opts:     StatusOptions{},
 			env:      map[string]string{"GH_TOKEN": "gho_abc123"},
