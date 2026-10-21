@@ -52,3 +52,9 @@ codeql-db/
 *.sarif
 # ghx internal docs — keep out of public repo
 GHX_*.md
+
+# --- rexovas policy SC-003: minimum ignore set (managed) ---
+# Node
+dist/
+.yarn/cache/
+# --- end ---
