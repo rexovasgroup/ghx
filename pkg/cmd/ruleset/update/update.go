@@ -211,23 +211,23 @@ func buildMergedBody(httpClient *http.Client, opts *UpdateOptions) (io.Reader, e
 	}
 
 	if opts.flagsChanged["include-refs"] || opts.flagsChanged["exclude-refs"] {
-		refName := map[string]interface{}{}
+		refName := map[string]any{}
 		if opts.flagsChanged["include-refs"] {
 			refName["include"] = opts.IncludeRefs
 		} else if existing, ok := req.Conditions["ref_name"]; ok {
-			if m, ok := existing.(map[string]interface{}); ok {
+			if m, ok := existing.(map[string]any); ok {
 				refName["include"] = m["include"]
 			}
 		}
 		if opts.flagsChanged["exclude-refs"] {
 			refName["exclude"] = opts.ExcludeRefs
 		} else if existing, ok := req.Conditions["ref_name"]; ok {
-			if m, ok := existing.(map[string]interface{}); ok {
+			if m, ok := existing.(map[string]any); ok {
 				refName["exclude"] = m["exclude"]
 			}
 		}
 		if req.Conditions == nil {
-			req.Conditions = make(map[string]interface{})
+			req.Conditions = make(map[string]any)
 		}
 		req.Conditions["ref_name"] = refName
 	}
